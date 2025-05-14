@@ -1,5 +1,9 @@
 #!/bin/bash
 # test.sh - Run all component tests with improved output
+#
+# Environment variables:
+#   NO_TEST_EMAIL=1   - Set this to disable sending test emails
+#                       Example: NO_TEST_EMAIL=1 ./test.sh
 
 # Color definitions
 GREEN='\033[0;32m'
@@ -33,7 +37,7 @@ source venv/bin/activate
 
 # Install required packages
 echo -e "${BLUE}Checking required packages...${RESET}"
-pip install -q requests >/dev/null 2>&1 || true
+pip install -q requests mysql-connector-python yt-dlp >/dev/null 2>&1 || true
 
 # Clear previous log file
 if [ -f "test.log" ]; then
@@ -127,17 +131,131 @@ run_test() {
   echo "" >> test.log
 }
 
-# Discover and run all test files
-for test_file in tests/test_*.py; do
-  # Skip email tests if this is CI environment without email credentials
-  if [[ "$test_file" == "tests/test_email.py" && -n "$CI" ]]; then
-    echo -e "  ${YELLOW}⚠${RESET} Skipping email tests in CI environment"
-    ((TEST_SKIPPED++))
+# Run all component tests
+echo -e "\n${BOLD}Running All Component Tests${RESET}"
+
+# List of components to test
+COMPONENTS=(
+  "email"
+  "space" 
+  "download_space"
+)
+
+for component in "${COMPONENTS[@]}"; do
+  test_file="tests/test_${component}.py"
+  
+  # Skip if test file doesn't exist
+  if [ ! -f "$test_file" ]; then
+    echo -e "  ${YELLOW}⚠${RESET} Test file not found: $test_file"
     continue
   fi
   
+  # Run the component test
   run_test "$test_file"
 done
+
+# Run practical component tests
+echo -e "\n${BOLD}Running Practical Component Tests${RESET}"
+
+# Test Email send to test address
+echo -e "\n${BLUE}Testing Email Component...${RESET}"
+python3 -c "
+from components.Email import Email
+import sys
+from datetime import datetime
+
+try:
+    email = Email()
+    if not email.email_config:
+        print('Failed to load email configuration')
+        sys.exit(1)
+    
+    print('Email configuration loaded successfully')
+    
+    # Always send test email by default, unless NO_TEST_EMAIL is set
+    if not (len(sys.argv) > 1 and sys.argv[1] == '--no-test-email'):
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        print(f'Sending test email at {now}...')
+        
+        result = email.test()
+        if result:
+            print(f'Test email sent successfully via {email.email_config[\"provider\"]}')
+        else:
+            print('Failed to send test email')
+            sys.exit(2)
+    
+    sys.exit(0)
+except Exception as e:
+    print(f'Error: {e}')
+    sys.exit(1)
+" ${NO_TEST_EMAIL:+--no-test-email} > email_test_output.txt 2>&1
+EMAIL_RESULT=$?
+
+if [ $EMAIL_RESULT -eq 0 ]; then
+  # Check if the output contains the email sent message
+  if grep -q "Test email sent successfully" email_test_output.txt; then
+    echo -e "  ${GREEN}✓${RESET} Email: Configuration loaded and test email sent successfully"
+  else
+    echo -e "  ${GREEN}✓${RESET} Email: Configuration loaded successfully (no test email sent)"
+  fi
+  ((TEST_PASSED++))
+  ((TEST_TOTAL++))
+elif [ $EMAIL_RESULT -eq 2 ]; then
+  echo -e "  ${YELLOW}⚠${RESET} Email: Configuration loaded but sending test email failed"
+  cat email_test_output.txt
+  ((TEST_FAILED++))
+  ((TEST_TOTAL++))
+else
+  echo -e "  ${RED}✗${RESET} Email: Configuration failed"
+  cat email_test_output.txt
+  ((TEST_FAILED++))
+  ((TEST_TOTAL++))
+fi
+
+# Test DownloadSpace component with a sample URL
+echo -e "\n${BLUE}Testing DownloadSpace Component...${RESET}"
+
+# Create downloads directory if it doesn't exist
+mkdir -p downloads
+
+# Define test space URL - we'll use a short clip to save bandwidth 
+TEST_SPACE_URL="https://x.com/i/spaces/1dRJZEpyjlNGB"
+
+# Clean up existing test files to ensure fresh test
+rm -f downloads/*1dRJZEpyjlNGB.mp3
+
+# Run the download.py script with the test URL
+echo -e "  Running download test..."
+./download.py "$TEST_SPACE_URL" > download_test_output.txt 2>&1
+DOWNLOAD_RESULT=$?
+
+# Check the result
+if [ $DOWNLOAD_RESULT -eq 0 ] && [ -f "$(find downloads -name "*1dRJZEpyjlNGB.mp3" | head -1)" ]; then
+  echo -e "  ${GREEN}✓${RESET} DownloadSpace: Download successful"
+  ((TEST_PASSED++))
+  ((TEST_TOTAL++))
+  
+  # Test file existence check (re-download should use existing file)
+  echo -e "  Testing file existence check..."
+  ./download.py "$TEST_SPACE_URL" > download_test_output2.txt 2>&1
+  if grep -q "File already exists" download_test_output2.txt; then
+    echo -e "  ${GREEN}✓${RESET} DownloadSpace: File existence check works"
+    ((TEST_PASSED++))
+    ((TEST_TOTAL++))
+  else
+    echo -e "  ${RED}✗${RESET} DownloadSpace: File existence check failed"
+    ((TEST_FAILED++))
+    ((TEST_TOTAL++))
+  fi
+else
+  echo -e "  ${RED}✗${RESET} DownloadSpace: Download failed"
+  cat download_test_output.txt
+  ((TEST_FAILED++))
+  ((TEST_TOTAL++))
+fi
+
+# Clean up test output files
+rm -f download_test_output.txt download_test_output2.txt email_test_output.txt
 
 # Print summary
 echo -e "\n${BOLD}=== Test Summary ===${RESET}"
