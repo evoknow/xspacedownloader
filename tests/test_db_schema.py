@@ -148,7 +148,8 @@ class TestDBSchema(unittest.TestCase):
                 
                 # Using the columns we know should exist
                 required_columns = ['id', 'provider', 'api_key', 'from_email', 'from_name', 
-                                    'server', 'port', 'username', 'password', 'use_tls']
+                                    'server', 'port', 'username', 'password', 'use_tls',
+                                    'status', 'templates']
                 
                 for col in required_columns:
                     self.assertIn(col, columns, f"Column '{col}' should exist in email_config table")
