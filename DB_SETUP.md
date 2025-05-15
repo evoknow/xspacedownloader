@@ -97,3 +97,14 @@ The schema creates a default admin user:
 1. Make sure you have appropriate MySQL permissions
 2. Check for syntax errors if you've modified the schema file
 3. Try importing tables individually to identify specific issues
+
+### Schema extraction errors
+
+The `dump_sql_schema.sh` script attempts to extract schema using several methods:
+
+1. **Primary method**: Uses `mysqldump` with full options
+2. **Fallback method 1**: Uses `mysqldump` with more restrictive options
+3. **Fallback method 2**: Uses direct SQL queries to extract CREATE TABLE statements
+4. **Last resort**: Uses Python to extract schema via SQL queries
+
+If you see permission errors like "Access denied; you need the PROCESS privilege", don't worry - the script should fall back to a method that works with your permission level.
