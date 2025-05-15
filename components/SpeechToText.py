@@ -5,12 +5,12 @@ import os
 import json
 import logging
 import whisper
+import warnings
 from datetime import datetime
 from pathlib import Path
 
 # Set up logging
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 
 class SpeechToText:
     """
@@ -54,6 +54,9 @@ class SpeechToText:
     
     def transcribe(self, audio_file, language=None, task="transcribe", verbose=False, 
                    output_file=None, output_format='txt'):
+        # Suppress warnings if TQDM_DISABLE is set (quiet mode)
+        if os.environ.get("TQDM_DISABLE"):
+            warnings.filterwarnings("ignore")
         """
         Transcribe an audio file to text.
         
@@ -98,6 +101,11 @@ class SpeechToText:
             detected_language = result.get("language", "unknown")
             logger.info(f"Transcription completed. Audio duration: {duration:.2f}s, "
                          f"Detected language: {detected_language}")
+            
+            # Only print detected language to stdout in verbose mode
+            # And make sure we respect the quiet flag
+            if verbose and not os.environ.get("TQDM_DISABLE"):
+                print(f"Detected language: {detected_language}")
             
             # Save the output if an output file is specified
             if output_file:
@@ -205,7 +213,7 @@ class SpeechToText:
             return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
 
     def batch_transcribe(self, audio_directory, output_directory=None, 
-                         language=None, file_extensions=None, recursive=False):
+                         language=None, file_extensions=None, recursive=False, verbose=False):
         """
         Transcribe multiple audio files in a directory.
         
@@ -217,6 +225,7 @@ class SpeechToText:
             file_extensions (list, optional): List of file extensions to include.
                 Default is None, which includes common audio formats.
             recursive (bool, optional): Whether to search subdirectories. Default is False.
+            verbose (bool, optional): Whether to print progress information. Default is False.
             
         Returns:
             dict: Dictionary mapping audio file paths to their transcription results.
@@ -267,7 +276,8 @@ class SpeechToText:
                 str(audio_file),
                 language=language,
                 output_file=str(output_file),
-                output_format='txt'
+                output_format='txt',
+                verbose=verbose
             )
             
             if result:

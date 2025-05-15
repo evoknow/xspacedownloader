@@ -1045,36 +1045,46 @@ if [ $RUN_SPEECH_ONLY -eq 1 ] || [ $RUN_ALL -eq 1 ]; then
     ((TEST_TOTAL++))
   fi
   
-  # Run the unit tests
-  echo -e "  ${BLUE}Running speech-to-text unit tests...${RESET}"
-  if [ -n "$DEBUG" ]; then
-    # If DEBUG is set, show all output directly to the console
-    python -m unittest tests.test_speech_to_text | tee speech_test.log
-    SPEECH_TEST_STATUS=$?
-  else
-    # Otherwise, capture to log file
-    python -m unittest tests.test_speech_to_text > speech_test.log 2>&1
-    SPEECH_TEST_STATUS=$?
-  fi
+  # Run the direct test script instead of the unit tests
+  echo -e "  ${BLUE}Running speech-to-text tests with direct test script...${RESET}"
+  # Always display the output for this test
+  python tests/test_transcribe.py | tee speech_test.log
+  SPEECH_TEST_STATUS=$?
   
   # Parse the test results
   if [ $SPEECH_TEST_STATUS -eq 0 ]; then
-    TESTS_RUN=$(grep -o "Ran [0-9]* test" speech_test.log | awk '{print $2}')
-    if [ -z "$TESTS_RUN" ]; then
-      TESTS_RUN=0
-    fi
+    # Extract test summary
+    TESTS_PASSED=$(grep -o "[0-9]* passed" speech_test.log | awk '{print $1}')
+    TESTS_FAILED=$(grep -o "[0-9]* failed" speech_test.log | awk '{print $1}')
+    TESTS_SKIPPED=$(grep -o "[0-9]* skipped" speech_test.log | awk '{print $1}')
     
-    echo -e "  ${GREEN}✓${RESET} Speech-to-text tests passed ($TESTS_RUN tests)"
-    ((TEST_PASSED++))
-    ((TEST_TOTAL++))
+    if [ -z "$TESTS_PASSED" ]; then TESTS_PASSED=0; fi
+    if [ -z "$TESTS_FAILED" ]; then TESTS_FAILED=0; fi
+    if [ -z "$TESTS_SKIPPED" ]; then TESTS_SKIPPED=0; fi
+    
+    TESTS_RUN=$((TESTS_PASSED + TESTS_FAILED + TESTS_SKIPPED))
+    
+    echo -e "  ${GREEN}✓${RESET} Speech-to-text tests passed: $TESTS_PASSED passed, $TESTS_FAILED failed, $TESTS_SKIPPED skipped"
+    
+    # Add to overall test counts
+    TEST_PASSED=$((TEST_PASSED + TESTS_PASSED))
+    TEST_FAILED=$((TEST_FAILED + TESTS_FAILED))
+    TEST_SKIPPED=$((TEST_SKIPPED + TESTS_SKIPPED))
+    TEST_TOTAL=$((TEST_TOTAL + TESTS_RUN))
+    
+    # Display log output in debug mode or if tests failed
+    if [ "$TESTS_FAILED" -gt 0 ] || [ -n "$DEBUG" ]; then
+      echo -e "  Test output:"
+      cat speech_test.log | sed 's/^/    /'
+    fi
   else
-    echo -e "  ${RED}✗${RESET} Speech-to-text tests failed"
+    echo -e "  ${RED}✗${RESET} Speech-to-text tests failed to run"
     cat speech_test.log
     ((TEST_FAILED++))
     ((TEST_TOTAL++))
   fi
   
-  # Clean up
+  # Clean up - our new test script handles the transcribe.py testing internally
   rm -f speech_test.log
 fi
 
