@@ -99,10 +99,13 @@ mysqldump --defaults-extra-file="${PASSFILE}" \
                 --skip-tablespaces \
                 --force \
                 "${DB_NAME}" > mysql.schema.tmp 2>/dev/null
+            
+            SECOND_ATTEMPT=$?
+            echo "Simplified mysqldump exit code: $SECOND_ATTEMPT"
                 
             # If that still fails, try using mysql to extract schema
-            if [ $? -ne 0 ]; then
-                echo -e "${YELLOW}Warning: mysqldump failed, trying direct schema extraction...${RESET}"
+            if [ $SECOND_ATTEMPT -ne 0 ]; then
+                echo -e "${YELLOW}Warning: Both mysqldump attempts failed, trying direct SQL schema extraction...${RESET}"
                 
                 # Create the schema file header
                 cat > mysql.schema.tmp << EOF
@@ -114,6 +117,22 @@ USE \`${DB_NAME}\`;
 
 EOF
                 
+                # Test database connection first
+                echo -e "${BLUE}Testing database connection...${RESET}"
+                mysql --defaults-extra-file="${PASSFILE}" \
+                    --host="${DB_HOST}" \
+                    --port="${DB_PORT}" \
+                    --user="${DB_USER}" \
+                    -e "SELECT 1" > /dev/null 2>&1
+                    
+                if [ $? -ne 0 ]; then
+                    echo -e "${RED}Error: Could not connect to database${RESET}"
+                    echo -e "${RED}Please check your credentials and network connectivity${RESET}"
+                    exit 1
+                else
+                    echo -e "${GREEN}Database connection successful${RESET}"
+                fi
+                
                 # Get all tables
                 TABLES=$(mysql --defaults-extra-file="${PASSFILE}" \
                     --host="${DB_HOST}" \
@@ -122,6 +141,55 @@ EOF
                     --silent \
                     --skip-column-names \
                     -e "SHOW TABLES FROM \`${DB_NAME}\`" 2>/dev/null)
+                
+                # Check if we got tables
+                if [ -z "$TABLES" ]; then
+                    echo -e "${RED}Error: Could not get tables from database${RESET}"
+                    echo -e "${YELLOW}Trying basic DESCRIBE method...${RESET}"
+                    
+                    # Try to get tables using a different approach
+                    # This might work with more restricted permissions
+                    mysql --defaults-extra-file="${PASSFILE}" \
+                        --host="${DB_HOST}" \
+                        --port="${DB_PORT}" \
+                        --user="${DB_USER}" \
+                        -e "USE \`${DB_NAME}\`; SELECT table_name FROM information_schema.tables WHERE table_schema = '${DB_NAME}'" | \
+                        grep -v 'table_name' > tables.txt
+                    
+                    if [ -s tables.txt ]; then
+                        TABLES=$(cat tables.txt)
+                        echo -e "${GREEN}Found tables using information_schema: $TABLES${RESET}"
+                        
+                        # For each table, get column definitions
+                        for TABLE in $TABLES; do
+                            echo -e "-- Table structure for table \`$TABLE\`" >> mysql.schema.tmp
+                            echo -e "CREATE TABLE IF NOT EXISTS \`$TABLE\` (" >> mysql.schema.tmp
+                            
+                            # Get column definitions
+                            mysql --defaults-extra-file="${PASSFILE}" \
+                                --host="${DB_HOST}" \
+                                --port="${DB_PORT}" \
+                                --user="${DB_USER}" \
+                                -e "USE \`${DB_NAME}\`; DESCRIBE \`$TABLE\`" | \
+                                tail -n +2 | \
+                                awk '{printf "  \\`%s\\` %s %s %s %s,\n", $1, $2, ($3=="YES"?"NULL":"NOT NULL"), ($4=="PRI"?"PRIMARY KEY":"")}' \
+                                >> mysql.schema.tmp
+                            
+                            # Close the table definition
+                            # Remove the last comma and replace with a closing parenthesis
+                            sed -i'.bak' '$ s/,$//' mysql.schema.tmp
+                            echo -e ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n" >> mysql.schema.tmp
+                        done
+                        
+                        rm -f tables.txt
+                        rm -f mysql.schema.tmp.bak
+                    else
+                        echo -e "${RED}Error: Could not get tables using alternative method${RESET}"
+                        echo -e "${YELLOW}Trying Python method as last resort...${RESET}"
+                        rm -f tables.txt
+                    fi
+                else
+                    echo -e "${GREEN}Found tables: $TABLES${RESET}"
                 
                 # For each table, get CREATE TABLE statement
                 for TABLE in $TABLES; do
@@ -136,6 +204,7 @@ EOF
                         awk '{print $2}' >> mysql.schema.tmp
                     echo "" >> mysql.schema.tmp
                 done
+                fi
             fi
         fi
     }
@@ -191,6 +260,7 @@ rm "${PASSFILE}" mysql.schema.tmp
 
 # Check the file size to make sure we got something
 FILESIZE=$(wc -c < mysql.schema)
+echo -e "${BLUE}Schema file size: ${FILESIZE} bytes${RESET}"
 if [ "$FILESIZE" -lt 100 ]; then
     echo -e "${YELLOW}Warning: Schema dump is too small or empty (${FILESIZE} bytes)${RESET}"
     echo -e "${YELLOW}Trying Python-based schema extraction as last resort...${RESET}"
@@ -298,6 +368,12 @@ EOF
     fi
 fi
 
-echo -e "${GREEN}Successfully created schema file: mysql.schema (${FILESIZE} bytes)${RESET}"
+if grep -q "Generated by direct extraction" mysql.schema; then
+    echo -e "${GREEN}Successfully created schema file: mysql.schema (${FILESIZE} bytes) using direct SQL extraction${RESET}"
+elif grep -q "Generated with Python fallback extractor" mysql.schema; then
+    echo -e "${GREEN}Successfully created schema file: mysql.schema (${FILESIZE} bytes) using Python fallback method${RESET}"
+else
+    echo -e "${GREEN}Successfully created schema file: mysql.schema (${FILESIZE} bytes) using mysqldump${RESET}"
+fi
 echo -e "${BLUE}Use this file to recreate the database structure:${RESET}"
 echo -e "  mysql -u your_username -p < mysql.schema"
