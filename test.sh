@@ -9,6 +9,7 @@
 #   ./test.sh core       - Run only core component tests (Space, User, Tag, etc.)
 #   ./test.sh daemon     - Run only background downloader daemon test
 #   ./test.sh audio      - Run only audio processing tests
+#   ./test.sh speech     - Run only speech-to-text tests
 #
 # Environment variables:
 #   NO_TEST_EMAIL=1   - Set this to disable sending test emails
@@ -50,6 +51,7 @@ RUN_EMAIL_ONLY=0
 RUN_CORE_ONLY=0
 RUN_DAEMON_ONLY=0
 RUN_AUDIO_ONLY=0
+RUN_SPEECH_ONLY=0
 RUN_ALL=1
 
 if [ $# -ge 1 ]; then
@@ -79,13 +81,18 @@ if [ $# -ge 1 ]; then
       RUN_ALL=0
       echo -e "${BLUE}Running audio processing tests...${RESET}"
       ;;
+    "speech")
+      RUN_SPEECH_ONLY=1
+      RUN_ALL=0
+      echo -e "${BLUE}Running speech-to-text tests...${RESET}"
+      ;;
     "all")
       RUN_ALL=1
       echo -e "${BLUE}Running all tests...${RESET}"
       ;;
     *)
       echo -e "${RED}Unknown test mode: $1${RESET}"
-      echo -e "Usage: ./test.sh [all|api|email|core|daemon|audio]"
+      echo -e "Usage: ./test.sh [all|api|email|core|daemon|audio|speech]"
       exit 1
       ;;
   esac
@@ -999,6 +1006,76 @@ if [ $RUN_AUDIO_ONLY -eq 1 ] || [ $RUN_ALL -eq 1 ]; then
   
   # Clean up
   rm -f audio_noise_test.log audio_clip_test.log
+fi
+
+# Run speech-to-text tests if in speech mode or all mode
+if [ $RUN_SPEECH_ONLY -eq 1 ] || [ $RUN_ALL -eq 1 ]; then
+  echo -e "\n${BOLD}Testing Speech-to-Text Component${RESET}"
+  
+  # Make sure the required Python modules are installed in the virtual environment
+  pip install -q whisper openai 2>/dev/null
+  
+  # Check for ffmpeg
+  if command -v ffmpeg &> /dev/null; then
+    echo -e "  ${GREEN}✓${RESET} ffmpeg is installed"
+    ((TEST_PASSED++))
+    ((TEST_TOTAL++))
+  else
+    echo -e "  ${RED}✗${RESET} ffmpeg is not installed - required for speech-to-text"
+    echo -e "  ${YELLOW}⚠${RESET} Please install ffmpeg to run speech-to-text tests"
+    echo -e "  ${YELLOW}⚠${RESET} On macOS: brew install ffmpeg"
+    echo -e "  ${YELLOW}⚠${RESET} On Ubuntu: sudo apt-get install ffmpeg"
+    ((TEST_FAILED++))
+    ((TEST_TOTAL++))
+    # Continue with the tests anyway for unit tests that don't require ffmpeg
+  fi
+  
+  # Check for test audio files
+  echo -e "  ${BLUE}Checking for test audio files...${RESET}"
+  TEST_FILES=$(find downloads -type f -name "*.mp3" 2>/dev/null | wc -l)
+  
+  if [ "$TEST_FILES" -eq 0 ]; then
+    echo -e "  ${YELLOW}⚠${RESET} No test audio files found"
+    echo -e "  ${YELLOW}⚠${RESET} Full integration tests will be skipped"
+    ((TEST_SKIPPED++))
+    ((TEST_TOTAL++))
+  else
+    echo -e "  ${GREEN}✓${RESET} Found $TEST_FILES audio files for testing"
+    ((TEST_PASSED++))
+    ((TEST_TOTAL++))
+  fi
+  
+  # Run the unit tests
+  echo -e "  ${BLUE}Running speech-to-text unit tests...${RESET}"
+  if [ -n "$DEBUG" ]; then
+    # If DEBUG is set, show all output directly to the console
+    python -m unittest tests.test_speech_to_text | tee speech_test.log
+    SPEECH_TEST_STATUS=$?
+  else
+    # Otherwise, capture to log file
+    python -m unittest tests.test_speech_to_text > speech_test.log 2>&1
+    SPEECH_TEST_STATUS=$?
+  fi
+  
+  # Parse the test results
+  if [ $SPEECH_TEST_STATUS -eq 0 ]; then
+    TESTS_RUN=$(grep -o "Ran [0-9]* test" speech_test.log | awk '{print $2}')
+    if [ -z "$TESTS_RUN" ]; then
+      TESTS_RUN=0
+    fi
+    
+    echo -e "  ${GREEN}✓${RESET} Speech-to-text tests passed ($TESTS_RUN tests)"
+    ((TEST_PASSED++))
+    ((TEST_TOTAL++))
+  else
+    echo -e "  ${RED}✗${RESET} Speech-to-text tests failed"
+    cat speech_test.log
+    ((TEST_FAILED++))
+    ((TEST_TOTAL++))
+  fi
+  
+  # Clean up
+  rm -f speech_test.log
 fi
 
 # Print summary
