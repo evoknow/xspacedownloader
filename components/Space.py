@@ -862,17 +862,61 @@ class Space:
         try:
             cursor = self.connection.cursor()
             
-            # Check if this space is already being downloaded
+            # More thorough check if this space is already being downloaded
+            # Check ALL statuses except failed to prevent duplicates
             query = """
-            SELECT id FROM space_download_scheduler 
-            WHERE space_id = %s AND status IN ('pending', 'in_progress')
+            SELECT id, status FROM space_download_scheduler 
+            WHERE space_id = %s AND status != 'failed'
+            ORDER BY FIELD(status, 'in_progress', 'pending', 'downloading', 'completed'), id DESC
+            LIMIT 1
             """
             cursor.execute(query, (space_id,))
             existing_job = cursor.fetchone()
             
             if existing_job:
-                # Job already exists
-                return existing_job[0]
+                # Job already exists - prioritize active jobs over completed ones
+                job_id, job_status = existing_job
+                
+                # For completed jobs, check if we should start a new download
+                if job_status == 'completed':
+                    # Check file existence in downloads directory
+                    download_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'downloads')
+                    
+                    # Check for the file with multiple possible extensions
+                    file_exists = False
+                    for ext in ['mp3', 'm4a', 'wav']:
+                        try_file = os.path.join(download_dir, f"{space_id}.{ext}")
+                        if os.path.exists(try_file) and os.path.getsize(try_file) > 1024*1024:  # > 1MB
+                            file_exists = True
+                            file_size = os.path.getsize(try_file)
+                            print(f"Found existing file for space {space_id}: {try_file} ({file_size} bytes)")
+                            break
+                    
+                    # If file doesn't exist or is very small, allow a new download
+                    if not file_exists:
+                        print(f"File for completed job {job_id} not found or too small. Creating a new job.")
+                        
+                        # Update the existing job to be 'failed' instead of 'completed' since file is missing
+                        try:
+                            update_query = """
+                            UPDATE space_download_scheduler
+                            SET status = 'failed', error_message = 'File not found, marked for re-download',
+                                updated_at = NOW()
+                            WHERE id = %s
+                            """
+                            cursor.execute(update_query, (job_id,))
+                            self.connection.commit()
+                            print(f"Updated job {job_id} to failed status since file is missing")
+                        except Exception as update_err:
+                            print(f"Error updating job to failed status: {update_err}")
+                        
+                        # Continue to create a new job below
+                    else:
+                        # File exists and is valid, return existing job
+                        return job_id
+                else:
+                    # Job is pending, in_progress, or downloading - return it
+                    return job_id
             
             # Create new job
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -1027,7 +1071,28 @@ class Space:
             list: List of job dictionaries
         """
         try:
+            # Ensure we have a connection
+            if not self.connection or not self.connection.is_connected():
+                print("Database connection lost, reconnecting in list_download_jobs...")
+                with open('db_config.json', 'r') as config_file:
+                    config = json.load(config_file)
+                    if config["type"] == "mysql":
+                        db_config = config["mysql"].copy()
+                        # Remove unsupported parameters
+                        if 'use_ssl' in db_config:
+                            del db_config['use_ssl']
+                    else:
+                        raise ValueError(f"Unsupported database type: {config['type']}")
+                self.connection = mysql.connector.connect(**db_config)
+            
+            # Ensure connection is still good
+            self.connection.ping(reconnect=True, attempts=3, delay=1)
+            
             cursor = self.connection.cursor(dictionary=True)
+            
+            # Simple test query to verify connection is working properly
+            cursor.execute("SELECT 1 AS test")
+            cursor.fetchone()
             
             query = "SELECT * FROM space_download_scheduler WHERE 1=1"
             params = []
@@ -1040,15 +1105,42 @@ class Space:
                 query += " AND status = %s"
                 params.append(status)
                 
-            query += " ORDER BY start_time DESC LIMIT %s OFFSET %s"
+            query += " ORDER BY id DESC LIMIT %s OFFSET %s"  # Sort by ID to get newest first
             params.extend([limit, offset])
             
+            print(f"Executing query: {query} with params: {params}")
             cursor.execute(query, params)
-            return cursor.fetchall()
+            results = cursor.fetchall()
+            print(f"Found {len(results)} download jobs with status={status}")
+            return results
             
         except Error as e:
             print(f"Error listing download jobs: {e}")
-            return []
+            # Try to reconnect and retry once
+            try:
+                if self.connection:
+                    self.connection.close()
+                
+                with open('db_config.json', 'r') as config_file:
+                    config = json.load(config_file)
+                    if config["type"] == "mysql":
+                        db_config = config["mysql"].copy()
+                        # Remove unsupported parameters
+                        if 'use_ssl' in db_config:
+                            del db_config['use_ssl']
+                
+                self.connection = mysql.connector.connect(**db_config)
+                
+                cursor = self.connection.cursor(dictionary=True)
+                query = "SELECT * FROM space_download_scheduler WHERE status = %s LIMIT %s OFFSET %s"
+                params = [status, limit, offset]
+                cursor.execute(query, params)
+                return cursor.fetchall()
+                
+            except Error as retry_e:
+                print(f"Error on retry in list_download_jobs: {retry_e}")
+                return []
+            
         finally:
             if cursor:
                 cursor.close()
