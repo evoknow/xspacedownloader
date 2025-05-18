@@ -7,7 +7,16 @@ import sys
 import json
 import logging
 import datetime
-from flask import Flask, request, render_template, redirect, url_for, flash, jsonify, session
+from flask import Flask, request, render_template, redirect, url_for, flash, jsonify, session, send_file
+
+# Import our space record fixer
+try:
+    from fix_direct_spaces import ensure_space_record
+except ImportError:
+    # Define a fallback function if import fails
+    def ensure_space_record(space_id, file_path=None):
+        logger.error("fix_direct_spaces module not available - space records may not be created properly")
+        return False
 
 # Add parent directory to path for importing components
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -80,12 +89,23 @@ def is_valid_space_url(url):
 @app.route('/')
 def index():
     """Home page with form to submit a space URL."""
-    return render_template('index.html')
+    # Get a list of completed downloads to display
+    try:
+        space = get_space_component()
+        completed_spaces = space.list_download_jobs(status='completed', limit=5)
+        return render_template('index.html', completed_spaces=completed_spaces)
+    except Exception as e:
+        logger.error(f"Error loading completed spaces: {e}", exc_info=True)
+        return render_template('index.html')
 
-@app.route('/submit', methods=['POST'])
+@app.route('/submit', methods=['POST', 'GET'])
 def submit_space():
     """Handle submission of a space URL."""
-    space_url = request.form.get('space_url', '').strip()
+    # Handle GET request with space_url parameter
+    if request.method == 'GET' and request.args.get('space_url'):
+        space_url = request.args.get('space_url', '').strip()
+    else:
+        space_url = request.form.get('space_url', '').strip()
     
     # Basic validation
     if not space_url:
@@ -106,8 +126,71 @@ def submit_space():
             flash('Could not extract space ID from URL', 'error')
             return redirect(url_for('index'))
         
-        # Check if this space already exists in the download scheduler
-        # Check for ANY job (including completed ones)
+        # Step 1: First check if the physical file exists
+        download_dir = app.config['DOWNLOAD_DIR']
+        file_exists = False
+        file_path = None
+        file_size = 0
+        file_extension = None
+        
+        for ext in ['mp3', 'm4a', 'wav']:
+            path = os.path.join(download_dir, f"{space_id}.{ext}")
+            if os.path.exists(path) and os.path.getsize(path) > 1024*1024:  # > 1MB
+                file_exists = True
+                file_path = path
+                file_size = os.path.getsize(path)
+                file_extension = ext
+                break
+        
+        # Step 2: If file exists, make sure the database record exists
+        if file_exists:
+            logger.info(f"Found physical file for space {space_id} - checking database record")
+            
+            # Use the specialized function to ensure space record exists
+            result = ensure_space_record(space_id, file_path)
+            
+            if result:
+                logger.info(f"Successfully ensured space record for {space_id} with file {file_path}")
+            else:
+                logger.warning(f"Could not ensure space record for {space_id} - may not appear in searches")
+                
+            # Also update any pending download jobs to completed
+            try:
+                cursor = space.connection.cursor(dictionary=True)
+                
+                # Find all pending/in-progress jobs for this space
+                job_query = """
+                SELECT id FROM space_download_scheduler
+                WHERE space_id = %s AND status IN ('pending', 'in_progress')
+                """
+                cursor.execute(job_query, (space_id,))
+                jobs = cursor.fetchall()
+                
+                # Mark all as completed
+                if jobs:
+                    logger.info(f"Marking {len(jobs)} pending jobs as completed for space {space_id}")
+                    for job in jobs:
+                        update_job_query = """
+                        UPDATE space_download_scheduler
+                        SET status = 'completed', progress_in_percent = 100,
+                            progress_in_size = %s, end_time = NOW(), updated_at = NOW()
+                        WHERE id = %s
+                        """
+                        cursor.execute(update_job_query, (file_size, job['id']))
+                    
+                    space.connection.commit()
+                
+                cursor.close()
+            except Exception as job_err:
+                logger.error(f"Error updating pending jobs: {job_err}")
+            
+            # Take user directly to the space page
+            flash(f'This space has already been downloaded and is available for listening.', 'info')
+            return redirect(url_for('space_page', space_id=space_id))
+        
+        # If no file exists, continue with normal processing to check for pending downloads
+            
+        # If file doesn't exist, check if there's an active download job
         try:
             # Direct SQL query to find all jobs for this space_id (including completed ones)
             cursor = space.connection.cursor(dictionary=True)
@@ -125,18 +208,10 @@ def submit_space():
                     flash(f'This space is already scheduled for download. Current status: {existing_job["status"]}', 'info')
                     return redirect(url_for('status', job_id=existing_job['id']))
                 elif existing_job['status'] == 'completed':
-                    # Check if the file actually exists
-                    download_dir = app.config['DOWNLOAD_DIR']
-                    file_exists = False
-                    for ext in ['mp3', 'm4a', 'wav']:
-                        file_path = os.path.join(download_dir, f"{space_id}.{ext}")
-                        if os.path.exists(file_path) and os.path.getsize(file_path) > 1024*1024:  # > 1MB
-                            file_exists = True
-                            break
-                    
+                    # Double-check if file actually exists (redundant but safe)
                     if file_exists:
-                        flash(f'This space has already been downloaded and is available in the downloads directory.', 'info')
-                        return redirect(url_for('status', job_id=existing_job['id']))
+                        flash(f'This space has already been downloaded and is available for listening.', 'info')
+                        return redirect(url_for('space_page', space_id=space_id))
                     # If file doesn't exist but job is marked completed, we'll create a new job
         except Exception as check_err:
             logger.error(f"Error checking for existing jobs: {check_err}", exc_info=True)
@@ -227,6 +302,161 @@ def api_queue():
     except Exception as e:
         logger.error(f"Error in API queue: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+@app.route('/spaces/<space_id>')
+def space_page(space_id):
+    """Display a space page with audio player and download options."""
+    try:
+        # Get Space component
+        space = get_space_component()
+        
+        # First check if the physical file exists
+        download_dir = app.config['DOWNLOAD_DIR']
+        file_path = None
+        file_size = 0
+        file_extension = None
+        
+        for ext in ['mp3', 'm4a', 'wav']:
+            path = os.path.join(download_dir, f"{space_id}.{ext}")
+            if os.path.exists(path) and os.path.getsize(path) > 1024*1024:  # > 1MB
+                file_path = path
+                file_size = os.path.getsize(path)
+                file_extension = ext
+                break
+        
+        # Create a safe record to display to the user
+        display_details = None
+        
+        # First priority: Use the database record if it exists
+        space_details = space.get_space(space_id)
+        if space_details:
+            display_details = space_details
+            
+            # If we have a record but no file, mark it as missing
+            if not file_path:
+                display_details['_file_missing'] = True
+                logger.warning(f"Space {space_id} has database record but file is missing")
+                
+                # Try to update the status in the database, but don't stop on error
+                try:
+                    cursor = space.connection.cursor()
+                    query = "UPDATE spaces SET status = 'file_missing' WHERE space_id = %s"
+                    cursor.execute(query, (space_id,))
+                    space.connection.commit()
+                    cursor.close()
+                except Exception as db_err:
+                    logger.error(f"Error updating space status to file_missing: {db_err}")
+        
+        # Second priority: If the file exists but no record, create a minimal object
+        elif file_path:
+            # Try to create a record in the database
+            ensure_space_record(space_id, file_path)
+            
+            # Either way, create a minimal object for display
+            display_details = {
+                'space_id': space_id,
+                'space_url': f"https://x.com/i/spaces/{space_id}",
+                'title': f"Space {space_id}",
+                'status': 'completed',
+                'download_cnt': 0
+            }
+            logger.info(f"Created minimal object for display because file exists: {space_id}")
+        
+        # If neither record nor file exists, return error
+        if not display_details:
+            flash('Space not found', 'error')
+            return redirect(url_for('index'))
+            
+        # Use the display details for rendering
+        space_details = display_details
+        
+        # Get the latest job for this space (for status and other details)
+        cursor = space.connection.cursor(dictionary=True)
+        query = """
+        SELECT * FROM space_download_scheduler
+        WHERE space_id = %s 
+        ORDER BY id DESC LIMIT 1
+        """
+        cursor.execute(query, (space_id,))
+        job = cursor.fetchone()
+        cursor.close()
+        
+        return render_template('space.html', 
+                               space=space_details, 
+                               file_path=file_path, 
+                               file_size=file_size, 
+                               file_extension=file_extension,
+                               job=job)
+        
+    except Exception as e:
+        logger.error(f"Error displaying space page: {e}", exc_info=True)
+        flash(f'An error occurred: {str(e)}', 'error')
+        return redirect(url_for('index'))
+
+@app.route('/spaces')
+def all_spaces():
+    """Display all downloaded spaces."""
+    try:
+        # Get Space component
+        space = get_space_component()
+        
+        # Get all completed downloads
+        completed_spaces = space.list_download_jobs(status='completed')
+        
+        # Check which files actually exist
+        download_dir = app.config['DOWNLOAD_DIR']
+        for job in completed_spaces:
+            file_exists = False
+            for ext in ['mp3', 'm4a', 'wav']:
+                file_path = os.path.join(download_dir, f"{job['space_id']}.{ext}")
+                if os.path.exists(file_path) and os.path.getsize(file_path) > 1024*1024:  # > 1MB
+                    file_exists = True
+                    job['file_exists'] = True
+                    job['file_size'] = os.path.getsize(file_path)
+                    job['file_extension'] = ext
+                    break
+            
+            if not file_exists:
+                job['file_exists'] = False
+        
+        return render_template('all_spaces.html', spaces=completed_spaces)
+        
+    except Exception as e:
+        logger.error(f"Error listing all spaces: {e}", exc_info=True)
+        flash(f'An error occurred: {str(e)}', 'error')
+        return redirect(url_for('index'))
+
+@app.route('/download/<space_id>')
+def download_space(space_id):
+    """Serve the space audio file for download or streaming."""
+    try:
+        # Check if the file exists
+        download_dir = app.config['DOWNLOAD_DIR']
+        file_path = None
+        
+        for ext in ['mp3', 'm4a', 'wav']:
+            path = os.path.join(download_dir, f"{space_id}.{ext}")
+            if os.path.exists(path) and os.path.getsize(path) > 1024*1024:  # > 1MB
+                file_path = path
+                break
+        
+        if not file_path:
+            flash('File not found', 'error')
+            return redirect(url_for('space_page', space_id=space_id))
+        
+        # Check if this is a direct download or for streaming
+        as_attachment = request.args.get('attachment', '0') == '1'
+        
+        return send_file(
+            file_path,
+            as_attachment=as_attachment,
+            download_name=f"space_{space_id}.{file_path.split('.')[-1]}"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error downloading space file: {e}", exc_info=True)
+        flash(f'An error occurred: {str(e)}', 'error')
+        return redirect(url_for('space_page', space_id=space_id))
 
 @app.errorhandler(404)
 def page_not_found(e):

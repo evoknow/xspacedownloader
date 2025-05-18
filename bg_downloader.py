@@ -386,16 +386,30 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
         log_dir.mkdir(exist_ok=True)
         download_dir.mkdir(exist_ok=True)
         
-        # Log file for this specific download
-        log_file = log_dir / f"download_{job_id}_{space_id}.log"
+        # Log file named just by space_id for cleaner organization
+        log_file = log_dir / f"{space_id}.log"
+        
+        # Log the start of processing this job
+        with open(log_file, 'a') as f:
+            f.write(f"\n\n{'='*80}\n")
+            f.write(f"Starting job processing at: {datetime.datetime.now()}\n")
+            f.write(f"Job ID: {job_id}, Space ID: {space_id}, File Type: {file_type}\n")
+            f.write(f"{'='*80}\n\n")
+            f.write("Checking if file already exists...\n")
         
         # First check if the file already exists in the downloads directory
         expected_file = download_dir / f"{space_id}.{file_type}"
+        found_valid_file = False
+        file_size = 0
+        file_duration = 0
+        
+        # First check with exact name match
         if expected_file.exists():
             file_size = os.path.getsize(expected_file)
-            
+            with open(log_file, 'a') as f:
+                f.write(f"Found exact file match: {expected_file} (size: {file_size} bytes)\n")
+                
             # Check if file appears to be a complete download by verifying the file integrity
-            is_valid_file = False
             try:
                 # For audio files, we can use ffprobe to check if the file is complete and valid
                 import subprocess
@@ -409,6 +423,9 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                     str(expected_file)
                 ]
                 
+                with open(log_file, 'a') as f:
+                    f.write(f"Validating file with ffprobe: {' '.join(ffprobe_cmd)}\n")
+                
                 result = subprocess.run(ffprobe_cmd, capture_output=True, text=True)
                 
                 # If we can read the duration and it's > 0, the file is likely valid
@@ -416,188 +433,235 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                     try:
                         duration = float(result.stdout.strip())
                         if duration > 0:
-                            is_valid_file = True
+                            found_valid_file = True
+                            file_duration = duration
                             logger.info(f"File for space {space_id} verified as valid with duration: {duration} seconds")
+                            with open(log_file, 'a') as f:
+                                f.write(f"File validation successful: Duration = {duration} seconds\n")
                         else:
                             logger.warning(f"File for space {space_id} has invalid duration: {duration}")
+                            with open(log_file, 'a') as f:
+                                f.write(f"File validation failed: Invalid duration = {duration} seconds\n")
                     except ValueError:
                         logger.warning(f"Could not parse duration from ffprobe output: {result.stdout.strip()}")
+                        with open(log_file, 'a') as f:
+                            f.write(f"File validation failed: Could not parse duration from ffprobe output: {result.stdout.strip()}\n")
                 else:
                     logger.warning(f"ffprobe validation failed for file {expected_file}: {result.stderr}")
+                    with open(log_file, 'a') as f:
+                        f.write(f"File validation failed: ffprobe error: {result.stderr}\n")
             except Exception as validate_err:
                 logger.warning(f"Error validating file {expected_file}: {validate_err}")
-                # If ffprobe is not available, fall back to checking if the file size is reasonable
-                if file_size > 100 * 1024:  # Only a basic sanity check (> 100KB)
-                    logger.info(f"Could not validate file format but size appears reasonable ({file_size} bytes)")
-                    is_valid_file = True
-            
-            if is_valid_file:
-                logger.info(f"File for space {space_id} already exists with size {file_size} bytes. Marking as completed.")
+                with open(log_file, 'a') as f:
+                    f.write(f"Error validating file: {validate_err}\n")
                 
-                # Create a direct database connection to update the job
-                try:
-                    with open('db_config.json', 'r') as config_file:
-                        db_config = json.load(config_file)
-                        if db_config["type"] == "mysql":
-                            mysql_config = db_config["mysql"].copy()
-                            if 'use_ssl' in mysql_config:
-                                del mysql_config['use_ssl']
-                                
-                            conn = mysql.connector.connect(**mysql_config)
-                            cursor = conn.cursor()
+                # If ffprobe is not available, fall back to checking if the file size is reasonable
+                if file_size > 1024 * 1024:  # > 1MB is probably a valid audio file
+                    logger.info(f"Could not validate file format but size appears reasonable ({file_size} bytes)")
+                    with open(log_file, 'a') as f:
+                        f.write(f"File seems valid based on size: {file_size} bytes (> 1MB)\n")
+                    found_valid_file = True
+        else:
+            with open(log_file, 'a') as f:
+                f.write(f"No exact file match found at: {expected_file}\n")
+                f.write("Checking for any file with space ID in name...\n")
+                
+            # If exact match not found, look for any file containing the space_id
+            try:
+                possible_files = []
+                for f in os.listdir(download_dir):
+                    if space_id in f and os.path.isfile(os.path.join(download_dir, f)):
+                        possible_files.append(os.path.join(download_dir, f))
+                
+                if possible_files:
+                    matching_file = possible_files[0]
+                    file_size = os.path.getsize(matching_file)
+                    
+                    with open(log_file, 'a') as f:
+                        f.write(f"Found matching file: {matching_file} (size: {file_size} bytes)\n")
+                    
+                    # Validate the file
+                    try:
+                        import subprocess
+                        
+                        # Check with ffprobe
+                        ffprobe_cmd = [
+                            'ffprobe', 
+                            '-v', 'error', 
+                            '-show_entries', 'format=duration',
+                            '-of', 'default=noprint_wrappers=1:nokey=1',
+                            str(matching_file)
+                        ]
+                        
+                        with open(log_file, 'a') as f:
+                            f.write(f"Validating file with ffprobe: {' '.join(ffprobe_cmd)}\n")
+                        
+                        result = subprocess.run(ffprobe_cmd, capture_output=True, text=True)
+                        
+                        if result.returncode == 0 and result.stdout.strip():
+                            try:
+                                duration = float(result.stdout.strip())
+                                if duration > 0:
+                                    found_valid_file = True
+                                    file_duration = duration
+                                    logger.info(f"File for space {space_id} verified with duration: {duration} seconds")
+                                    with open(log_file, 'a') as f:
+                                        f.write(f"File validation successful: Duration = {duration} seconds\n")
+                                    
+                                    # If valid, rename to standard format
+                                    matching_filename = os.path.basename(matching_file)
+                                    if matching_filename != f"{space_id}.{file_type}":
+                                        try:
+                                            with open(log_file, 'a') as f:
+                                                f.write(f"Renaming file to standard format: {matching_file} -> {expected_file}\n")
+                                                
+                                            # If the standard file already exists, remove it first
+                                            if os.path.exists(expected_file):
+                                                os.remove(expected_file)
+                                            os.rename(matching_file, expected_file)
+                                            logger.info(f"Renamed {matching_file} to {expected_file}")
+                                            matching_file = expected_file
+                                        except Exception as rename_err:
+                                            logger.error(f"Error renaming file: {rename_err}")
+                                            with open(log_file, 'a') as f:
+                                                f.write(f"Error renaming file: {rename_err}\n")
+                                else:
+                                    with open(log_file, 'a') as f:
+                                        f.write(f"File validation failed: Invalid duration = {duration} seconds\n")
+                            except ValueError:
+                                with open(log_file, 'a') as f:
+                                    f.write(f"File validation failed: Could not parse duration\n")
+                        else:
+                            with open(log_file, 'a') as f:
+                                f.write(f"File validation failed: ffprobe error\n")
+                    except Exception as validate_err:
+                        with open(log_file, 'a') as f:
+                            f.write(f"Error validating file: {validate_err}\n")
+                        
+                        # Fall back to size check
+                        if file_size > 1024 * 1024:  # > 1MB
+                            found_valid_file = True
+                            with open(log_file, 'a') as f:
+                                f.write(f"File seems valid based on size: {file_size} bytes (> 1MB)\n")
+                else:
+                    with open(log_file, 'a') as f:
+                        f.write("No matching files found\n")
+            except Exception as file_err:
+                logger.error(f"Error checking for existing files: {file_err}")
+                with open(log_file, 'a') as f:
+                    f.write(f"Error checking for existing files: {file_err}\n")
+        
+        # If we found a valid file, mark job as completed without downloading
+        if found_valid_file:
+            with open(log_file, 'a') as f:
+                f.write(f"Valid file found for space {space_id}. Marking job as completed without downloading.\n")
+                f.write(f"File size: {file_size} bytes, Duration: {file_duration} seconds\n")
+                f.write("Updating database...\n")
+            
+            # Create connection to database
+            try:
+                with open('db_config.json', 'r') as config_file:
+                    db_config = json.load(config_file)
+                    if db_config["type"] == "mysql":
+                        mysql_config = db_config["mysql"].copy()
+                        if 'use_ssl' in mysql_config:
+                            del mysql_config['use_ssl']
                             
-                            # Update the job status
-                            update_query = """
-                            UPDATE space_download_scheduler 
-                            SET status = 'completed', progress_in_size = %s, 
-                                progress_in_percent = 100, end_time = NOW(), updated_at = NOW()
-                            WHERE id = %s
-                            """
-                            cursor.execute(update_query, (file_size, job_id))
+                        conn = mysql.connector.connect(**mysql_config)
+                        cursor = conn.cursor()
+                        
+                        # 1. First check if there's already a space record
+                        cursor.execute("SELECT COUNT(*) FROM spaces WHERE space_id = %s", (space_id,))
+                        space_exists = cursor.fetchone()[0] > 0
+                        
+                        # 2. Update or insert space record
+                        if space_exists:
+                            with open(log_file, 'a') as f:
+                                f.write(f"Updating existing space record for {space_id}\n")
                             
-                            # Also update the space record
+                            # Update existing space record - don't update download_cnt 
                             update_space_query = """
                             UPDATE spaces
-                            SET status = 'completed', download_cnt = 100, format = %s
+                            SET status = 'completed', format = %s, 
+                                updated_at = NOW(), downloaded_at = NOW()
                             WHERE space_id = %s
                             """
                             cursor.execute(update_space_query, (str(file_size), space_id))
+                        else:
+                            with open(log_file, 'a') as f:
+                                f.write(f"Creating new space record for {space_id}\n")
                             
-                            conn.commit()
-                            cursor.close()
-                            conn.close()
+                            # Insert new space record - initialize download_cnt to 0
+                            insert_space_query = """
+                            INSERT INTO spaces
+                            (space_id, space_url, filename, status, download_cnt, format, created_at, updated_at, downloaded_at)
+                            VALUES (%s, %s, %s, 'completed', 0, %s, NOW(), NOW(), NOW())
+                            """
+                            space_url = f"https://x.com/i/spaces/{space_id}"
+                            filename = f"{space_id}.{file_type}"
+                            cursor.execute(insert_space_query, (space_id, space_url, filename, str(file_size)))
+                        
+                        # 3. Update job status to completed
+                        with open(log_file, 'a') as f:
+                            f.write(f"Setting job {job_id} status to completed\n")
                             
-                            logger.info(f"Job {job_id} for space {space_id} marked as completed.")
-                            return None  # No need to start a new process
-                            
-                except Exception as db_err:
-                    logger.error(f"Error updating existing job: {db_err}")
-                    # Continue with normal download process
-            else:
-                logger.warning(f"File for space {space_id} exists but appears to be invalid or incomplete. Will re-download properly.")
-                # Delete the partial file so we can download it fresh
-                try:
-                    os.remove(expected_file)
-                    logger.info(f"Removed invalid file {expected_file}")
-                except Exception as del_err:
-                    logger.error(f"Error removing invalid file: {del_err}")
-                    
-        # Check all possible file locations - some files might be named differently
-        try:
-            possible_files = [os.path.join(download_dir, f) for f in os.listdir(download_dir) if space_id in f]
-            if possible_files:
-                matching_file = possible_files[0]
-                file_size = os.path.getsize(matching_file)
-                
-                # Check if file appears to be a complete download by verifying file integrity
-                is_valid_file = False
-                try:
-                    # For audio files, we can use ffprobe to check if the file is complete and valid
-                    import subprocess
-                    
-                    # Check if the file is a valid audio file using ffprobe
-                    ffprobe_cmd = [
-                        'ffprobe', 
-                        '-v', 'error', 
-                        '-show_entries', 'format=duration',
-                        '-of', 'default=noprint_wrappers=1:nokey=1',
-                        str(matching_file)
-                    ]
-                    
-                    result = subprocess.run(ffprobe_cmd, capture_output=True, text=True)
-                    
-                    # If we can read the duration and it's > 0, the file is likely valid
-                    if result.returncode == 0 and result.stdout.strip():
-                        try:
-                            duration = float(result.stdout.strip())
-                            if duration > 0:
-                                is_valid_file = True
-                                logger.info(f"File for space {space_id} verified as valid with duration: {duration} seconds")
-                            else:
-                                logger.warning(f"File for space {space_id} has invalid duration: {duration}")
-                        except ValueError:
-                            logger.warning(f"Could not parse duration from ffprobe output: {result.stdout.strip()}")
-                    else:
-                        logger.warning(f"ffprobe validation failed for file {matching_file}: {result.stderr}")
-                except Exception as validate_err:
-                    logger.warning(f"Error validating file {matching_file}: {validate_err}")
-                    # If ffprobe is not available, fall back to checking if the file size is reasonable
-                    if file_size > 100 * 1024:  # Only a basic sanity check (> 100KB)
-                        logger.info(f"Could not validate file format but size appears reasonable ({file_size} bytes)")
-                        is_valid_file = True
-                
-                if is_valid_file:
-                    logger.info(f"Found file for space {space_id} at {matching_file} with size {file_size} bytes. Marking as completed.")
-                    
-                    # Rename the file to the standardized name if it doesn't match
-                    matching_filename = os.path.basename(matching_file)
-                    if matching_filename != f"{space_id}.{file_type}":
-                        try:
-                            # If the standard file already exists, remove it first
-                            if os.path.exists(expected_file):
-                                os.remove(expected_file)
-                            os.rename(matching_file, expected_file)
-                            logger.info(f"Renamed {matching_file} to {expected_file}")
-                            matching_file = expected_file
-                        except Exception as rename_err:
-                            logger.error(f"Error renaming file: {rename_err}")
-                    
-                    # Update the database to mark the job as completed
-                    try:
-                        with open('db_config.json', 'r') as config_file:
-                            db_config = json.load(config_file)
-                            if db_config["type"] == "mysql":
-                                mysql_config = db_config["mysql"].copy()
-                                if 'use_ssl' in mysql_config:
-                                    del mysql_config['use_ssl']
-                                    
-                                conn = mysql.connector.connect(**mysql_config)
-                                cursor = conn.cursor()
-                                
-                                # Update the job status
-                                update_query = """
-                                UPDATE space_download_scheduler 
-                                SET status = 'completed', progress_in_size = %s, 
-                                    progress_in_percent = 100, end_time = NOW(), updated_at = NOW()
-                                WHERE id = %s
-                                """
-                                cursor.execute(update_query, (file_size, job_id))
-                                
-                                # Also update the space record
-                                update_space_query = """
-                                UPDATE spaces
-                                SET status = 'completed', download_cnt = 100, format = %s
-                                WHERE space_id = %s
-                                """
-                                cursor.execute(update_space_query, (str(file_size), space_id))
-                                
-                                conn.commit()
-                                cursor.close()
-                                conn.close()
-                                
-                                logger.info(f"Job {job_id} for space {space_id} marked as completed.")
-                                return None  # No need to start a new process
-                                
-                    except Exception as db_err:
-                        logger.error(f"Error updating existing job: {db_err}")
-                else:
-                    logger.warning(f"Found file for space {space_id} at {matching_file} but file appears to be invalid or incomplete. Will re-download properly.")
-                    # Delete the invalid file so we can download it fresh
-                    try:
-                        os.remove(matching_file)
-                        logger.info(f"Removed invalid file {matching_file}")
-                    except Exception as del_err:
-                        logger.error(f"Error removing invalid file: {del_err}")
-        except Exception as file_err:
-            logger.error(f"Error checking for existing files: {file_err}")
+                        update_job_query = """
+                        UPDATE space_download_scheduler 
+                        SET status = 'completed', progress_in_size = %s, progress_in_percent = 100,
+                            end_time = NOW(), updated_at = NOW()
+                        WHERE id = %s
+                        """
+                        cursor.execute(update_job_query, (file_size, job_id))
+                        
+                        conn.commit()
+                        cursor.close()
+                        conn.close()
+                        
+                        with open(log_file, 'a') as f:
+                            f.write(f"Database updated successfully. Job marked as completed.\n")
+                            f.write(f"{'='*80}\n")
+                        
+                        logger.info(f"Job {job_id} for space {space_id} marked as completed (file already exists)")
+                        return None  # No need to start a download process
+                        
+            except Exception as db_err:
+                logger.error(f"Error updating database for existing file: {db_err}")
+                with open(log_file, 'a') as f:
+                    f.write(f"Error updating database: {db_err}\n")
+                    f.write("Will attempt to download the file again to ensure proper completion\n")
+        
+        # If we get here, we either didn't find a valid file or had database errors
+        # Log that we're proceeding with download
+        with open(log_file, 'a') as f:
+            f.write(f"No valid file found or database errors occurred. Proceeding with download...\n")
+            
+        # If we found an invalid file, delete it
+        if expected_file.exists() and not found_valid_file:
+            with open(log_file, 'a') as f:
+                f.write(f"Removing invalid file {expected_file} before downloading\n")
+            try:
+                os.remove(expected_file)
+                logger.info(f"Removed invalid file {expected_file}")
+            except Exception as del_err:
+                logger.error(f"Error removing invalid file: {del_err}")
+                with open(log_file, 'a') as f:
+                    f.write(f"Error removing invalid file: {del_err}\n")
         
         # Fork a child process
         pid = os.fork()
         
         if pid == 0:
             # This is the child process
-            # Redirect stdout and stderr to the log file
-            with open(log_file, 'w') as f:
+            # Redirect stdout and stderr to the log file (append mode to preserve history)
+            with open(log_file, 'a') as f:
+                # Add a separator for this new download attempt
+                f.write("\n\n" + "="*80 + "\n")
+                f.write(f"Download attempt started at: {datetime.datetime.now()}\n")
+                f.write(f"Job ID: {job_id}, Space ID: {space_id}\n")
+                f.write("="*80 + "\n\n")
+                f.flush()
+                
+                # Redirect stdout and stderr to the log file
                 os.dup2(f.fileno(), sys.stdout.fileno())
                 os.dup2(f.fileno(), sys.stderr.fileno())
                 
@@ -990,6 +1054,51 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                         progress=100,
                         file_size=file_size
                     )
+                    
+                    # Also make sure there's a record in the spaces table with status 1 for search
+                    try:
+                        # Create direct database connection
+                        with open('db_config.json', 'r') as config_file:
+                            db_config = json.load(config_file)
+                            if db_config["type"] == "mysql":
+                                mysql_config = db_config["mysql"].copy()
+                                if 'use_ssl' in mysql_config:
+                                    del mysql_config['use_ssl']
+                                    
+                                conn = mysql.connector.connect(**mysql_config)
+                                cursor = conn.cursor()
+                                
+                                # Check if space exists
+                                cursor.execute("SELECT COUNT(*) FROM spaces WHERE space_id = %s", (space_id,))
+                                exists = cursor.fetchone()[0] > 0
+                                
+                                if exists:
+                                    # Update existing space - don't modify download_cnt counter
+                                    update_query = """
+                                    UPDATE spaces 
+                                    SET status = 'completed', format = %s, 
+                                        updated_at = NOW(), downloaded_at = NOW()
+                                    WHERE space_id = %s
+                                    """
+                                    cursor.execute(update_query, (str(file_size), space_id))
+                                else:
+                                    # Insert new space record with status 'completed' and download_cnt 0
+                                    insert_query = """
+                                    INSERT INTO spaces 
+                                    (space_id, space_url, filename, status, download_cnt, format, created_at, updated_at, downloaded_at)
+                                    VALUES (%s, %s, %s, 'completed', 0, %s, NOW(), NOW(), NOW())
+                                    """
+                                    # Use space details URL if available or construct one
+                                    space_url = space_details.get('space_url') if space_details else f"https://x.com/i/spaces/{space_id}"
+                                    filename = f"{space_id}.{file_type}"
+                                    cursor.execute(insert_query, (space_id, space_url, filename, str(file_size)))
+                                
+                                conn.commit()
+                                cursor.close()
+                                conn.close()
+                                print(f"Added/updated space record in spaces table with status 'completed'")
+                    except Exception as spaces_err:
+                        print(f"Error updating spaces table: {spaces_err}")
                     
                     print(f"Download completed for space {space_id}")
                     sys.exit(0)  # Exit successfully
