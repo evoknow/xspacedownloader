@@ -831,8 +831,19 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                     "--no-progress",  # Don't show progress bar (cleaner logs)
                     "--no-warnings",  # Reduce log spam
                     "--no-playlist",  # Don't download playlists
-                    space_url
                 ]
+                
+                # Add XSpace extractor if the URL is from XSpace
+                if "xspace.com" in space_url:
+                    # Get the absolute path to the extractor
+                    extractor_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'space_x_extractor.py')
+                    yt_dlp_cmd.extend([
+                        "--extractor-args", f"xspace:{extractor_path}",
+                    ])
+                    print(f"Using XSpace extractor for: {space_url}")
+                    
+                # Add URL at the end
+                yt_dlp_cmd.append(space_url)
                 
                 print(f"Download command: {' '.join(yt_dlp_cmd)}")
                 
@@ -1024,25 +1035,47 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                                         conn = mysql.connector.connect(**mysql_config)
                                         cursor = conn.cursor()
                                         
-                                        # Update the job status with current progress
-                                        job_update_query = """
-                                        UPDATE space_download_scheduler 
-                                        SET status = 'in_progress', process_id = %s, 
-                                            progress_in_percent = %s, progress_in_size = %s,
-                                            updated_at = NOW()
-                                        WHERE id = %s
-                                        """
-                                        cursor.execute(job_update_query, (
-                                            os.getpid(), progress, int(size_mb), job_id
-                                        ))
+                                        # First check if job exists
+                                        check_query = "SELECT id, status FROM space_download_scheduler WHERE id = %s"
+                                        cursor.execute(check_query, (job_id,))
+                                        result = cursor.fetchone()
                                         
-                                        # Also update the space record
-                                        space_update_query = """
-                                        UPDATE spaces
-                                        SET status = 'downloading', download_cnt = %s
-                                        WHERE space_id = %s
-                                        """
-                                        cursor.execute(space_update_query, (progress, space_id))
+                                        if result:
+                                            # Update the job status with current progress
+                                            job_update_query = """
+                                            UPDATE space_download_scheduler 
+                                            SET status = 'in_progress', process_id = %s, 
+                                                progress_in_percent = %s, progress_in_size = %s,
+                                                updated_at = NOW()
+                                            WHERE id = %s
+                                            """
+                                            cursor.execute(job_update_query, (
+                                                os.getpid(), progress, int(size_mb), job_id
+                                            ))
+                                            
+                                            update_count = cursor.rowcount
+                                            print(f"Job {job_id} update affected {update_count} rows")
+                                        else:
+                                            print(f"WARNING: Job {job_id} not found in database")
+                                        
+                                        # Check if space exists before updating
+                                        check_space_query = "SELECT id FROM spaces WHERE space_id = %s"
+                                        cursor.execute(check_space_query, (space_id,))
+                                        space_result = cursor.fetchone()
+                                        
+                                        if space_result:
+                                            # Also update the space record
+                                            space_update_query = """
+                                            UPDATE spaces
+                                            SET status = 'downloading', download_cnt = %s
+                                            WHERE space_id = %s
+                                            """
+                                            cursor.execute(space_update_query, (progress, space_id))
+                                            
+                                            space_update_count = cursor.rowcount
+                                            print(f"Space {space_id} update affected {space_update_count} rows")
+                                        else:
+                                            print(f"WARNING: Space {space_id} not found in database")
                                         
                                         conn.commit()
                                         cursor.close()
@@ -1123,39 +1156,61 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                                                 current_percent = estimated_percent
                                                 print(f"Estimating progress as {estimated_percent}% based on file size")
                                             
-                                            # Provide size updates more frequently than percent updates
-                                            job_update_query = """
-                                            UPDATE space_download_scheduler 
-                                            SET status = 'in_progress', process_id = %s, 
-                                                progress_in_size = %s, 
-                                                progress_in_percent = %s,
-                                                updated_at = NOW()
-                                            WHERE id = %s
-                                            """
+                                            # First check if job exists in database
+                                            check_query = "SELECT id, status FROM space_download_scheduler WHERE id = %s"
+                                            cursor.execute(check_query, (job_id,))
+                                            result = cursor.fetchone()
                                             
-                                            # Use either current part size or estimated total size
-                                            # For beginning of downloads, just show current size
-                                            # For further along downloads, show estimated total
-                                            size_to_update = file_size
-                                            
-                                            # Every third check, update the estimate if progress > 5%
-                                            if part_check_counter % 3 == 0 and progress > 5 and total_size_estimate > file_size:
-                                                size_to_update = total_size_estimate
-                                                print(f"Updating with estimated total size: {size_to_update}")
+                                            if result:
+                                                # Provide size updates more frequently than percent updates
+                                                job_update_query = """
+                                                UPDATE space_download_scheduler 
+                                                SET status = 'in_progress', process_id = %s, 
+                                                    progress_in_size = %s, 
+                                                    progress_in_percent = %s,
+                                                    updated_at = NOW()
+                                                WHERE id = %s
+                                                """
+                                                
+                                                # Use either current part size or estimated total size
+                                                # For beginning of downloads, just show current size
+                                                # For further along downloads, show estimated total
+                                                size_to_update = file_size
+                                                
+                                                # Every third check, update the estimate if progress > 5%
+                                                if part_check_counter % 3 == 0 and progress > 5 and total_size_estimate > file_size:
+                                                    size_to_update = total_size_estimate
+                                                    print(f"Updating with estimated total size: {size_to_update}")
+                                                else:
+                                                    print(f"Updating with current part size: {size_to_update}")
+                                                
+                                                cursor.execute(job_update_query, (
+                                                    os.getpid(), size_to_update, current_percent, job_id
+                                                ))
+                                                
+                                                update_count = cursor.rowcount
+                                                print(f"Part check: Job {job_id} update affected {update_count} rows")
                                             else:
-                                                print(f"Updating with current part size: {size_to_update}")
+                                                print(f"WARNING: Job {job_id} not found in database during part check")
                                             
-                                            cursor.execute(job_update_query, (
-                                                os.getpid(), size_to_update, current_percent, job_id
-                                            ))
+                                            # Check if space exists before updating
+                                            check_space_query = "SELECT id FROM spaces WHERE space_id = %s"
+                                            cursor.execute(check_space_query, (space_id,))
+                                            space_result = cursor.fetchone()
                                             
-                                            # Also update the space record status
-                                            space_update_query = """
-                                            UPDATE spaces
-                                            SET status = 'downloading' 
-                                            WHERE space_id = %s
-                                            """
-                                            cursor.execute(space_update_query, (space_id,))
+                                            if space_result:
+                                                # Also update the space record with download_cnt to show progress
+                                                space_update_query = """
+                                                UPDATE spaces
+                                                SET status = 'downloading', download_cnt = %s
+                                                WHERE space_id = %s
+                                                """
+                                                cursor.execute(space_update_query, (current_percent, space_id))
+                                                
+                                                space_update_count = cursor.rowcount
+                                                print(f"Part check: Space {space_id} update affected {space_update_count} rows")
+                                            else:
+                                                print(f"WARNING: Space {space_id} not found in database during part check")
                                             
                                             conn.commit()
                                             cursor.close()
