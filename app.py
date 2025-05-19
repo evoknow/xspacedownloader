@@ -265,19 +265,77 @@ def api_status(job_id):
         # Get job details directly from database for more reliability
         try:
             cursor = space.connection.cursor(dictionary=True)
+            
+            # Use a more detailed query to include all fields and join spaces table 
+            # to get additional information for completed downloads
             query = """
-            SELECT id, space_id, status, progress_in_percent, progress_in_size, error_message,
-                   created_at, updated_at, process_id
-            FROM space_download_scheduler
-            WHERE id = %s
+            SELECT 
+                sds.id, sds.space_id, sds.status, sds.progress_in_percent, 
+                sds.progress_in_size, sds.error_message, sds.created_at, 
+                sds.updated_at, sds.process_id, sds.end_time,
+                s.status as space_status, s.format as space_format
+            FROM space_download_scheduler sds
+            LEFT JOIN spaces s ON sds.space_id = s.space_id
+            WHERE sds.id = %s
             """
             cursor.execute(query, (job_id,))
             direct_job = cursor.fetchone()
+            
+            # If we found the job, also check directly for the file
+            if direct_job and direct_job['space_id']:
+                # Check if file exists on disk, regardless of database status
+                space_id = direct_job['space_id']
+                download_dir = app.config['DOWNLOAD_DIR']
+                file_path = None
+                file_size = 0
+                
+                for ext in ['mp3', 'm4a', 'wav']:
+                    path = os.path.join(download_dir, f"{space_id}.{ext}")
+                    if os.path.exists(path) and os.path.getsize(path) > 1024*1024:  # > 1MB
+                        file_path = path
+                        file_size = os.path.getsize(path)
+                        logger.info(f"Found file for job {job_id}, space {space_id}: {file_path}, size: {file_size}")
+                        break
+                
+                # If file exists but job doesn't show completed, it should be considered completed
+                if file_path and direct_job['status'] != 'completed':
+                    logger.info(f"Job {job_id} shows status '{direct_job['status']}' but file exists, treating as completed")
+                    direct_job['status'] = 'completed'
+                    direct_job['progress_in_percent'] = 100
+                    direct_job['progress_in_size'] = file_size
+                    
+                    # Try to update the database to reflect the completed status
+                    try:
+                        update_query = """
+                        UPDATE space_download_scheduler
+                        SET status = 'completed', progress_in_percent = 100, 
+                            progress_in_size = %s, end_time = NOW(), updated_at = NOW()
+                        WHERE id = %s AND status != 'completed'
+                        """
+                        cursor.execute(update_query, (file_size, job_id))
+                        space.connection.commit()
+                        logger.info(f"Updated job {job_id} to completed status with size {file_size}")
+                    except Exception as update_err:
+                        logger.error(f"Error updating job status: {update_err}")
+            
             cursor.close()
             
             # If we found the job directly, use that data
             if direct_job:
                 logger.info(f"Retrieved job {job_id} directly from database: {direct_job['status']}, progress: {direct_job['progress_in_percent']}%, size: {direct_job['progress_in_size']} bytes")
+                
+                # For completed jobs, make sure progress is 100% and size is set
+                if direct_job['status'] == 'completed':
+                    if direct_job['progress_in_percent'] != 100:
+                        direct_job['progress_in_percent'] = 100
+                    
+                    # If space has format info (file size), use that as progress_in_size
+                    # if it's bigger than the current value
+                    if direct_job.get('space_format') and direct_job['space_format'].isdigit():
+                        format_size = int(direct_job['space_format'])
+                        if format_size > (direct_job['progress_in_size'] or 0):
+                            direct_job['progress_in_size'] = format_size
+                
                 # Process the database result
                 response = {
                     'job_id': direct_job['id'],
@@ -287,6 +345,8 @@ def api_status(job_id):
                     'progress_in_size': direct_job['progress_in_size'] or 0,
                     'error_message': direct_job['error_message'] or '',
                     'direct_query': True,
+                    'space_status': direct_job.get('space_status'),
+                    'space_format': direct_job.get('space_format')
                 }
                 
                 # Add process status (running or not)
@@ -319,6 +379,20 @@ def api_status(job_id):
         # Convert any None values to defaults
         progress_percent = job.get('progress_in_percent', 0) or 0
         progress_size = job.get('progress_in_size', 0) or 0
+        
+        # If job is completed, ensure progress is 100%
+        if job.get('status') == 'completed':
+            progress_percent = 100
+            
+            # Check for a completed file on disk
+            space_id = job.get('space_id')
+            if space_id:
+                download_dir = app.config['DOWNLOAD_DIR']
+                for ext in ['mp3', 'm4a', 'wav']:
+                    path = os.path.join(download_dir, f"{space_id}.{ext}")
+                    if os.path.exists(path) and os.path.getsize(path) > 1024*1024:  # > 1MB
+                        progress_size = max(progress_size, os.path.getsize(path))
+                        break
         
         # Return job data
         return jsonify({
@@ -371,24 +445,57 @@ def api_space_status(space_id):
         try:
             cursor = space.connection.cursor(dictionary=True)
             
-            # First check for active jobs
-            active_query = """
+            # Check for any job for this space, prioritize active ones
+            query = """
             SELECT * FROM space_download_scheduler
-            WHERE space_id = %s AND status IN ('pending', 'in_progress', 'downloading')
-            ORDER BY updated_at DESC, id DESC LIMIT 1
+            WHERE space_id = %s
+            ORDER BY 
+                CASE 
+                    WHEN status IN ('in_progress', 'downloading') THEN 1
+                    WHEN status = 'pending' THEN 2
+                    WHEN status = 'completed' THEN 3
+                    ELSE 4
+                END,
+                updated_at DESC, 
+                id DESC 
+            LIMIT 1
             """
-            cursor.execute(active_query, (space_id,))
+            cursor.execute(query, (space_id,))
             job = cursor.fetchone()
             
-            # If no active jobs, check for the most recent completed or failed job
-            if not job:
-                other_query = """
-                SELECT * FROM space_download_scheduler
-                WHERE space_id = %s
-                ORDER BY updated_at DESC, id DESC LIMIT 1
+            # If we found a job, ensure that completed jobs have progress_in_percent = 100
+            if job and job['status'] == 'completed' and job['progress_in_percent'] != 100:
+                # Update the job to have 100% progress
+                update_query = """
+                UPDATE space_download_scheduler
+                SET progress_in_percent = 100
+                WHERE id = %s AND status = 'completed' AND progress_in_percent != 100
                 """
-                cursor.execute(other_query, (space_id,))
-                job = cursor.fetchone()
+                cursor.execute(update_query, (job['id'],))
+                space.connection.commit()
+                job['progress_in_percent'] = 100
+                logger.info(f"Updated job {job['id']} to have 100% progress")
+                
+            # If there's a completed job but progress_in_size is 0, try to get size from the spaces table
+            if job and job['status'] == 'completed' and (job['progress_in_size'] is None or job['progress_in_size'] == 0):
+                # Check if we have a format value in the spaces table
+                space_query = "SELECT format FROM spaces WHERE space_id = %s"
+                cursor.execute(space_query, (space_id,))
+                space_data = cursor.fetchone()
+                
+                if space_data and space_data['format'] and space_data['format'].isdigit():
+                    format_size = int(space_data['format'])
+                    if format_size > 0:
+                        # Update the job with the size from spaces table
+                        update_query = """
+                        UPDATE space_download_scheduler
+                        SET progress_in_size = %s
+                        WHERE id = %s AND (progress_in_size IS NULL OR progress_in_size = 0)
+                        """
+                        cursor.execute(update_query, (format_size, job['id']))
+                        space.connection.commit()
+                        job['progress_in_size'] = format_size
+                        logger.info(f"Updated job {job['id']} size to {format_size} from spaces table")
                 
             cursor.close()
         except Exception as job_err:
@@ -407,10 +514,53 @@ def api_space_status(space_id):
                     logger.info(f"Found partial file: {part_path}, size: {part_file_size} bytes")
                     break
         
+        # Ensure space status is consistent with file existence
+        space_status = space_details.get('status', 'unknown')
+        
+        # If file exists but status doesn't show completed, update it
+        if file_path and space_status != 'completed':
+            try:
+                # Update the space record
+                cursor = space.connection.cursor()
+                update_query = """
+                UPDATE spaces
+                SET status = 'completed', format = %s, downloaded_at = NOW()
+                WHERE space_id = %s AND status != 'completed'
+                """
+                cursor.execute(update_query, (str(file_size), space_id))
+                space.connection.commit()
+                cursor.close()
+                
+                # Update local status
+                space_status = 'completed'
+                logger.info(f"Updated space {space_id} status to completed based on file existence")
+            except Exception as space_update_err:
+                logger.error(f"Error updating space status: {space_update_err}")
+        
+        # If we have a job that's completed but space status isn't, update space status
+        if job and job['status'] == 'completed' and space_status != 'completed':
+            try:
+                # Update the space record
+                cursor = space.connection.cursor()
+                update_query = """
+                UPDATE spaces
+                SET status = 'completed'
+                WHERE space_id = %s AND status != 'completed'
+                """
+                cursor.execute(update_query, (space_id,))
+                space.connection.commit()
+                cursor.close()
+                
+                # Update local status
+                space_status = 'completed'
+                logger.info(f"Updated space {space_id} status to completed based on job status")
+            except Exception as space_job_err:
+                logger.error(f"Error updating space status from job: {space_job_err}")
+                
         # Return status data
         response = {
             'space_id': space_id,
-            'status': space_details.get('status', 'unknown'),
+            'status': space_status,
             'file_exists': file_path is not None,
             'file_size': file_size if file_path else 0,
             'part_file_exists': part_file_exists,
