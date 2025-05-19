@@ -51,13 +51,14 @@
                     </ul>
                 </div>
                 
-                {% if file_path and space.status == 'completed' %}
+                {# Check if file exists, regardless of status #}
+                {% if file_path is defined and file_path %}
                 <div class="audio-player mb-4">
                     <h5>Audio Player</h5>
                     <div class="card">
                         <div class="card-body">
                             <audio id="audio-player" controls class="w-100">
-                                <source src="/download/{{ space.space_id }}" type="audio/{{ file_extension }}">
+                                <source src="/download/{{ space.space_id }}" type="{{ content_type|default('audio/mpeg') }}">
                                 Your browser does not support the audio element.
                             </audio>
                             
@@ -91,13 +92,14 @@
                         </div>
                     </div>
                 </div>
-                {% elif space._file_missing or (file_path is none and space.status == 'completed') %}
+                {% elif space._file_missing or ((file_path is not defined or not file_path) and space.status == 'completed') %}
                 <div class="alert alert-warning">
                     <h5>File Missing</h5>
                     <p>The audio file for this space is not available. It might have been deleted or moved.</p>
-                    <a href="{{ url_for('submit_space') }}?space_url={{ space.space_url|urlencode }}" class="btn btn-primary">
-                        Download Again
-                    </a>
+                    <form action="{{ url_for('submit_space') }}" method="POST">
+                        <input type="hidden" name="space_url" value="{{ space.space_url }}">
+                        <button type="submit" class="btn btn-primary">Download Again</button>
+                    </form>
                 </div>
                 {% elif space.status != 'completed' %}
                 <div id="download-status-container" class="alert alert-info">
@@ -140,14 +142,16 @@
                     </div>
                     {% elif space.status == 'failed' %}
                     <p id="download-message">The download for this space failed. You can try downloading it again.</p>
-                    <a href="{{ url_for('submit_space') }}?space_url={{ space.space_url|urlencode }}" class="btn btn-primary">
-                        Try Downloading Again
-                    </a>
+                    <form action="{{ url_for('submit_space') }}" method="POST">
+                        <input type="hidden" name="space_url" value="{{ space.space_url }}">
+                        <button type="submit" class="btn btn-primary">Try Downloading Again</button>
+                    </form>
                     {% else %}
                     <p id="download-message">This space has status: {{ space.status }}</p>
-                    <a href="{{ url_for('submit_space') }}?space_url={{ space.space_url|urlencode }}" class="btn btn-primary">
-                        Try Downloading
-                    </a>
+                    <form action="{{ url_for('submit_space') }}" method="POST">
+                        <input type="hidden" name="space_url" value="{{ space.space_url }}">
+                        <button type="submit" class="btn btn-primary">Try Downloading</button>
+                    </form>
                     {% endif %}
                 </div>
                 {% else %}

@@ -759,6 +759,26 @@ def space_page(space_id):
         # Use the display details for rendering
         space_details = display_details
         
+        # If file exists, always ensure status is 'completed' for UI logic
+        if file_path:
+            # Update the in-memory space_details to show completed
+            space_details['status'] = 'completed'
+            
+            # Also ensure the database is updated
+            try:
+                cursor = space.connection.cursor()
+                update_space_query = """
+                UPDATE spaces
+                SET status = 'completed', format = %s, downloaded_at = NOW()
+                WHERE space_id = %s AND status != 'completed'
+                """
+                cursor.execute(update_space_query, (str(file_size), space_id))
+                space.connection.commit()
+                cursor.close()
+                logger.info(f"Updated space {space_id} status to completed")
+            except Exception as update_err:
+                logger.error(f"Error updating space status: {update_err}")
+        
         # Get the latest job for this space (for status and other details)
         cursor = space.connection.cursor(dictionary=True)
         query = """
@@ -770,11 +790,48 @@ def space_page(space_id):
         job = cursor.fetchone()
         cursor.close()
         
+        # Add debug logging to trace values being sent to template
+        logger.info(f"Rendering template for space {space_id}:")
+        logger.info(f"  file_path = {file_path}")
+        logger.info(f"  space.status = {space_details.get('status')}")
+        logger.info(f"  file_extension = {file_extension}")
+        logger.info(f"  file_size = {file_size}")
+        
+        # Ensure we always have the right content type for the audio player
+        if file_extension:
+            # Map file extensions to MIME types
+            mime_types = {
+                'mp3': 'audio/mpeg',
+                'm4a': 'audio/mp4',
+                'wav': 'audio/wav',
+                'ogg': 'audio/ogg',
+                'flac': 'audio/flac'
+            }
+            content_type = mime_types.get(file_extension, f'audio/{file_extension}')
+        else:
+            # Default to MP3 if no extension is found
+            content_type = 'audio/mpeg'
+            
+        # For debugging - create a special endpoint for debug info
+        if 'debug' in request.args:
+            debug_info = {
+                'space_id': space_id,
+                'file_path': str(file_path) if file_path else None,
+                'file_exists': file_path is not None,
+                'file_size': file_size,
+                'file_extension': file_extension,
+                'content_type': content_type,
+                'space_status': space_details.get('status'),
+                'space_details': space_details
+            }
+            return jsonify(debug_info)
+        
         return render_template('space.html', 
                                space=space_details, 
                                file_path=file_path, 
                                file_size=file_size, 
                                file_extension=file_extension,
+                               content_type=content_type,
                                job=job)
         
     except Exception as e:
