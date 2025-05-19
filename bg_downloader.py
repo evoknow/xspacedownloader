@@ -875,169 +875,306 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                 
                 # Process output line by line to track progress
                 progress = 0
+                last_size_update_time = time.time()
+                last_part_check_time = time.time()
+                force_update_needed = True  # Start with a forced update to show immediate progress
+                
                 for line in iter(process.stdout.readline, ''):
                     print(line, end='')
                     
-                    # Try to extract progress from the output
-                    if ('download' in line.lower() and '%' in line) or ('progress' in line.lower() and '%' in line):
+                    # Always check part file size at regular intervals
+                    current_time = time.time()
+                    if current_time - last_part_check_time >= 5:  # Check part file every 5 seconds
                         try:
-                            # Extract percentage from lines like 
-                            # "[download] 25.0% of 123.45MiB at 1.23MiB/s" or 
-                            # "ffmpeg] progress: 45%"
+                            part_file = str(output_file) + ".part"
+                            if os.path.exists(part_file):
+                                file_size = os.path.getsize(part_file)
+                                # Record that we have a part file and its size
+                                force_update_needed = True  # Force an update when we detect file size change
+                                print(f"Part file detected: {part_file}, Size: {file_size} bytes")
+                        except Exception as part_err:
+                            print(f"Error checking part file: {part_err}")
+                        last_part_check_time = current_time
+                    
+                    # Try to extract progress from the output
+                    percent_found = False
+                    percentage_match = None
+                    
+                    # Look for common yt-dlp progress indicators
+                    if '%' in line:
+                        try:
+                            # Find different possible patterns of percentage reporting
                             
-                            # Find percentage value
-                            percentage_part = None
-                            if '%' in line:
+                            # Pattern 1: [download] 25.0% of 123.45MiB at 1.23MiB/s
+                            if '[download]' in line and 'of' in line and '%' in line:
+                                parts = line.split('%', 1)[0].split()
+                                for part in parts:
+                                    if part.replace('.', '', 1).isdigit():
+                                        percentage_match = float(part)
+                                        percent_found = True
+                                        print(f"Detected download percentage: {percentage_match}%")
+                                        break
+                            
+                            # Pattern 2: [ffmpeg] progress: 45%
+                            elif 'progress' in line.lower() and '%' in line:
+                                parts = line.split('%', 1)[0].split(':')
+                                if len(parts) > 1:
+                                    percentage_str = parts[-1].strip()
+                                    if percentage_str.replace('.', '', 1).isdigit():
+                                        percentage_match = float(percentage_str)
+                                        percent_found = True
+                                        print(f"Detected ffmpeg progress: {percentage_match}%")
+                            
+                            # Pattern 3: Any line with percentage and numbers
+                            else:
                                 percentage_part = line.split('%')[0]
-                                # Get the last number before the % sign
                                 nums = [s for s in percentage_part.split() if s.replace('.', '', 1).isdigit()]
                                 if nums:
-                                    pct_str = nums[-1]  # Take the last number before %
-                                    current_progress = float(pct_str)
+                                    percentage_match = float(nums[-1])  # Take the last number before %
+                                    percent_found = True
+                                    print(f"Detected generic progress percentage: {percentage_match}%")
+                        except Exception as extract_err:
+                            print(f"Error extracting percentage: {extract_err}")
+                    
+                    # If we found a percentage, update progress
+                    if percent_found and percentage_match is not None:
+                        current_progress = max(0, min(100, percentage_match))  # Ensure 0-100 range
+                        
+                        # Only update if progress has changed significantly or at important milestones
+                        should_update = (
+                            force_update_needed or
+                            int(current_progress) > progress + 4 or  # Update on 5% change
+                            (progress < 10 and current_progress >= 10) or  # Update at 10%
+                            (progress < 25 and current_progress >= 25) or  # Update at 25% 
+                            (progress < 50 and current_progress >= 50) or  # Update at 50%
+                            (progress < 75 and current_progress >= 75) or  # Update at 75%
+                            (progress < 95 and current_progress >= 95) or  # Update at 95%
+                            (current_time - last_size_update_time >= 15)   # Force update every 15 seconds
+                        )
+                        
+                        if should_update:
+                            progress = int(current_progress)
+                            last_size_update_time = current_time
+                            force_update_needed = False
+                            
+                            # Estimate file size based on partial file if possible
+                            size_mb = 0
+                            download_size_found = False
+                            
+                            # Method 1: Extract from yt-dlp output line
+                            if 'of ' in line and ' at ' in line:
+                                try:
+                                    # Extract from yt-dlp output
+                                    size_str = line.split('of ')[1].split(' at ')[0].strip()
+                                    if 'MiB' in size_str:
+                                        size_mb = float(size_str.replace('MiB', '').strip()) * 1024 * 1024
+                                        download_size_found = True
+                                        print(f"Extracted file size from output: {size_mb} bytes (MiB)")
+                                    elif 'KiB' in size_str:
+                                        size_mb = float(size_str.replace('KiB', '').strip()) * 1024
+                                        download_size_found = True
+                                        print(f"Extracted file size from output: {size_mb} bytes (KiB)")
+                                    elif 'GiB' in size_str:
+                                        size_mb = float(size_str.replace('GiB', '').strip()) * 1024 * 1024 * 1024
+                                        download_size_found = True
+                                        print(f"Extracted file size from output: {size_mb} bytes (GiB)")
+                                except Exception as size_err:
+                                    print(f"Error extracting size from line: {size_err}")
+                            
+                            # Method 2: Check part file size (more reliable)
+                            if not download_size_found:
+                                part_file = str(output_file) + ".part"
+                                if os.path.exists(part_file):
+                                    file_size = os.path.getsize(part_file)
+                                    print(f"Using part file size: {file_size} bytes")
                                     
-                                    # Ensure progress is between 0-100
-                                    current_progress = max(0, min(100, current_progress))
-                                    
-                                    # Only update if progress has changed significantly or at important milestones
-                                    should_update = (
-                                        int(current_progress) > progress + 4 or  # Update on 5% change
-                                        (progress < 10 and current_progress >= 10) or  # Update at 10%
-                                        (progress < 25 and current_progress >= 25) or  # Update at 25% 
-                                        (progress < 50 and current_progress >= 50) or  # Update at 50%
-                                        (progress < 75 and current_progress >= 75) or  # Update at 75%
-                                        (progress < 95 and current_progress >= 95)     # Update at 95%
-                                    )
-                                    
-                                    if should_update:
-                                        progress = int(current_progress)
-                                        
-                                        # Estimate file size based on partial file if possible
-                                        size_mb = 0
-                                        if 'of ' in line and 'at' in line.split('of ')[1]:
-                                            # Extract from yt-dlp output
-                                            size_str = line.split('of ')[1].split('at')[0].strip()
-                                            if 'MiB' in size_str:
-                                                size_mb = float(size_str.replace('MiB', '').strip()) * 1024 * 1024
-                                            elif 'KiB' in size_str:
-                                                size_mb = float(size_str.replace('KiB', '').strip()) * 1024
+                                    # If we have progress percentage and file size, estimate total size
+                                    if progress > 0:
+                                        # Prevent division by zero and unreasonable estimates
+                                        if progress >= 1:  # At least 1%
+                                            total_size_estimate = file_size * 100 / progress
+                                            size_mb = int(total_size_estimate)
+                                            download_size_found = True
+                                            print(f"Estimated total size: {size_mb} bytes (from {progress}%)")
                                         else:
-                                            # Try to get it from partial file
-                                            part_file = str(output_file) + ".part"
-                                            if os.path.exists(part_file):
-                                                file_size = os.path.getsize(part_file)
-                                                # If we have progress percentage and file size, estimate total size
-                                                if progress > 0:
-                                                    total_size_estimate = file_size * 100 / progress
-                                                    size_mb = int(total_size_estimate)
-                                            elif os.path.exists(output_file):
-                                                size_mb = os.path.getsize(output_file)
+                                            # Just use current size if progress is too low for reasonable estimate
+                                            size_mb = file_size
+                                            download_size_found = True
+                                            print(f"Using current part file size: {size_mb} bytes")
+                                elif os.path.exists(output_file):
+                                    size_mb = os.path.getsize(output_file)
+                                    download_size_found = True
+                                    print(f"Using final file size: {size_mb} bytes")
+                            
+                            # Use a minimum reasonable file size to show progress
+                            if not download_size_found or size_mb < 1024:
+                                size_mb = max(1024 * 1024, size_mb)  # At least 1MB
+                                print(f"Using minimum file size: {size_mb} bytes")
+                            
+                            # Make direct SQL update to ensure database reflects progress
+                            try:
+                                # Create direct database connection
+                                with open('db_config.json', 'r') as config_file:
+                                    db_config = json.load(config_file)
+                                    if db_config["type"] == "mysql":
+                                        mysql_config = db_config["mysql"].copy()
+                                        if 'use_ssl' in mysql_config:
+                                            del mysql_config['use_ssl']
+                                            
+                                        conn = mysql.connector.connect(**mysql_config)
+                                        cursor = conn.cursor()
                                         
-                                        # Make direct SQL update to ensure database reflects progress
-                                        try:
-                                            # Create direct database connection
-                                            with open('db_config.json', 'r') as config_file:
-                                                db_config = json.load(config_file)
-                                                if db_config["type"] == "mysql":
-                                                    mysql_config = db_config["mysql"].copy()
-                                                    if 'use_ssl' in mysql_config:
-                                                        del mysql_config['use_ssl']
-                                                        
-                                                    conn = mysql.connector.connect(**mysql_config)
-                                                    cursor = conn.cursor()
-                                                    
-                                                    # Update the job status with current progress
-                                                    job_update_query = """
-                                                    UPDATE space_download_scheduler 
-                                                    SET status = 'in_progress', process_id = %s, 
-                                                        progress_in_percent = %s, progress_in_size = %s,
-                                                        updated_at = NOW()
-                                                    WHERE id = %s
-                                                    """
-                                                    cursor.execute(job_update_query, (
-                                                        os.getpid(), progress, int(size_mb), job_id
-                                                    ))
-                                                    
-                                                    # Also update the space record
-                                                    space_update_query = """
-                                                    UPDATE spaces
-                                                    SET status = 'downloading', download_cnt = %s
-                                                    WHERE space_id = %s
-                                                    """
-                                                    cursor.execute(space_update_query, (progress, space_id))
-                                                    
-                                                    conn.commit()
-                                                    cursor.close()
-                                                    conn.close()
-                                                    
-                                                    print(f"Database updated - Progress: {progress}%, Size: {size_mb} bytes")
-                                        except Exception as db_err:
-                                            print(f"Error updating progress in database: {db_err}")
-                                            # Fall back to using Space component methods
-                                            try:
-                                                space.update_download_progress_by_space(
-                                                    space_id, 
-                                                    progress_size=int(size_mb),
-                                                    progress_percent=progress,
-                                                    status='downloading'
-                                                )
-                                                space.update_download_job(
-                                                    job_id,
-                                                    status='in_progress',
-                                                    progress_in_size=int(size_mb),
-                                                    progress_in_percent=progress,
-                                                    process_id=os.getpid()
-                                                )
-                                                print(f"Updated progress using Space component methods")
-                                            except Exception as space_err:
-                                                print(f"Error updating progress via Space component: {space_err}")
-                        except Exception as e:
-                            print(f"Error parsing progress: {e}")
+                                        # Update the job status with current progress
+                                        job_update_query = """
+                                        UPDATE space_download_scheduler 
+                                        SET status = 'in_progress', process_id = %s, 
+                                            progress_in_percent = %s, progress_in_size = %s,
+                                            updated_at = NOW()
+                                        WHERE id = %s
+                                        """
+                                        cursor.execute(job_update_query, (
+                                            os.getpid(), progress, int(size_mb), job_id
+                                        ))
+                                        
+                                        # Also update the space record
+                                        space_update_query = """
+                                        UPDATE spaces
+                                        SET status = 'downloading', download_cnt = %s
+                                        WHERE space_id = %s
+                                        """
+                                        cursor.execute(space_update_query, (progress, space_id))
+                                        
+                                        conn.commit()
+                                        cursor.close()
+                                        conn.close()
+                                        
+                                        print(f"Database updated - Progress: {progress}%, Size: {size_mb} bytes")
+                            except Exception as db_err:
+                                print(f"Error updating progress in database: {db_err}")
+                                # Fall back to using Space component methods
+                                try:
+                                    space.update_download_progress_by_space(
+                                        space_id, 
+                                        progress_size=int(size_mb),
+                                        progress_percent=progress,
+                                        status='downloading'
+                                    )
+                                    space.update_download_job(
+                                        job_id,
+                                        status='in_progress',
+                                        progress_in_size=int(size_mb),
+                                        progress_in_percent=progress,
+                                        process_id=os.getpid()
+                                    )
+                                    print(f"Updated progress using Space component methods")
+                                except Exception as space_err:
+                                    print(f"Error updating progress via Space component: {space_err}")
                 
-                # Check part file size every 10 seconds regardless of output
+                # Check part file size every 5 seconds regardless of output to ensure progress updates
                 last_update_time = time.time()
+                part_check_counter = 0
+                
                 while process.poll() is None:  # While process is still running
                     current_time = time.time()
-                    # Check every 10 seconds
-                    if current_time - last_update_time >= 10:
+                    # Check every 5 seconds
+                    if current_time - last_update_time >= 5:
+                        part_check_counter += 1
                         try:
                             # Check part file size
                             part_file = str(output_file) + ".part"
                             if os.path.exists(part_file):
                                 file_size = os.path.getsize(part_file)
-                                print(f"Checking part file: {part_file}, Size: {file_size} bytes")
+                                print(f"Periodic check: part file size = {file_size} bytes")
                                 
-                                # Update progress based on file size if we can
-                                if progress > 0:
-                                    # Update database
+                                # Get a size estimate for total file
+                                total_size_estimate = file_size
+                                
+                                # If we have a progress percent, create a total size estimate
+                                if progress > 0 and progress < 100:
+                                    # Only estimate if we have a reasonable progress %
+                                    if progress >= 1:  # at least 1%
+                                        total_size_estimate = int(file_size * 100 / progress)
+                                        print(f"Estimated total size: {total_size_estimate} bytes (from {progress}%)")
+                                
+                                # Even if progress is 0, we should update the database with current part file size
+                                try:
+                                    # Create direct database connection
+                                    with open('db_config.json', 'r') as config_file:
+                                        db_config = json.load(config_file)
+                                        if db_config["type"] == "mysql":
+                                            mysql_config = db_config["mysql"].copy()
+                                            if 'use_ssl' in mysql_config:
+                                                del mysql_config['use_ssl']
+                                                
+                                            conn = mysql.connector.connect(**mysql_config)
+                                            cursor = conn.cursor()
+                                            
+                                            # For new downloads with no progress yet, set progress to at least 1%
+                                            # This helps show some progress on the frontend
+                                            current_percent = progress
+                                            if progress == 0 and file_size > 1024*1024:  # If size > 1MB
+                                                current_percent = 1  # Show at least 1% progress
+                                            
+                                            # If we see actual progress is 0% but we have a significant file part, estimate progress
+                                            if progress == 0 and file_size > 10*1024*1024:  # > 10MB
+                                                # Estimate progress based on typical file sizes
+                                                # Audio files are typically 30-100MB
+                                                estimated_percent = max(1, min(10, int(file_size / (1024*1024) / 5)))
+                                                current_percent = estimated_percent
+                                                print(f"Estimating progress as {estimated_percent}% based on file size")
+                                            
+                                            # Provide size updates more frequently than percent updates
+                                            job_update_query = """
+                                            UPDATE space_download_scheduler 
+                                            SET status = 'in_progress', process_id = %s, 
+                                                progress_in_size = %s, 
+                                                progress_in_percent = %s,
+                                                updated_at = NOW()
+                                            WHERE id = %s
+                                            """
+                                            
+                                            # Use either current part size or estimated total size
+                                            # For beginning of downloads, just show current size
+                                            # For further along downloads, show estimated total
+                                            size_to_update = file_size
+                                            
+                                            # Every third check, update the estimate if progress > 5%
+                                            if part_check_counter % 3 == 0 and progress > 5 and total_size_estimate > file_size:
+                                                size_to_update = total_size_estimate
+                                                print(f"Updating with estimated total size: {size_to_update}")
+                                            else:
+                                                print(f"Updating with current part size: {size_to_update}")
+                                            
+                                            cursor.execute(job_update_query, (
+                                                os.getpid(), size_to_update, current_percent, job_id
+                                            ))
+                                            
+                                            # Also update the space record status
+                                            space_update_query = """
+                                            UPDATE spaces
+                                            SET status = 'downloading' 
+                                            WHERE space_id = %s
+                                            """
+                                            cursor.execute(space_update_query, (space_id,))
+                                            
+                                            conn.commit()
+                                            cursor.close()
+                                            conn.close()
+                                            
+                                            print(f"Database updated with size={size_to_update}, percent={current_percent}%")
+                                except Exception as db_err:
+                                    print(f"Error updating progress from part file: {db_err}")
+                                    # Try to use Space component as fallback
                                     try:
-                                        # Create direct database connection
-                                        with open('db_config.json', 'r') as config_file:
-                                            db_config = json.load(config_file)
-                                            if db_config["type"] == "mysql":
-                                                mysql_config = db_config["mysql"].copy()
-                                                if 'use_ssl' in mysql_config:
-                                                    del mysql_config['use_ssl']
-                                                    
-                                                conn = mysql.connector.connect(**mysql_config)
-                                                cursor = conn.cursor()
-                                                
-                                                # Update the job with current file size and progress
-                                                job_update_query = """
-                                                UPDATE space_download_scheduler 
-                                                SET status = 'in_progress', process_id = %s, 
-                                                    progress_in_size = %s, updated_at = NOW()
-                                                WHERE id = %s
-                                                """
-                                                cursor.execute(job_update_query, (
-                                                    os.getpid(), file_size, job_id
-                                                ))
-                                                
-                                                conn.commit()
-                                                cursor.close()
-                                                conn.close()
-                                                print(f"Updated progress based on part file size: {file_size} bytes")
-                                    except Exception as part_err:
-                                        print(f"Error updating progress from part file: {part_err}")
+                                        space.update_download_job(
+                                            job_id,
+                                            status='in_progress',
+                                            progress_in_size=file_size,
+                                            process_id=os.getpid()
+                                        )
+                                        print("Updated progress using Space component")
+                                    except Exception as space_err:
+                                        print(f"Error using Space component: {space_err}")
                         except Exception as check_err:
                             print(f"Error checking part file: {check_err}")
                             

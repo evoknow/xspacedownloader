@@ -262,17 +262,73 @@ def api_status(job_id):
         # Get Space component
         space = get_space_component()
         
-        # Get job details
+        # Get job details directly from database for more reliability
+        try:
+            cursor = space.connection.cursor(dictionary=True)
+            query = """
+            SELECT id, space_id, status, progress_in_percent, progress_in_size, error_message,
+                   created_at, updated_at, process_id
+            FROM space_download_scheduler
+            WHERE id = %s
+            """
+            cursor.execute(query, (job_id,))
+            direct_job = cursor.fetchone()
+            cursor.close()
+            
+            # If we found the job directly, use that data
+            if direct_job:
+                logger.info(f"Retrieved job {job_id} directly from database: {direct_job['status']}, progress: {direct_job['progress_in_percent']}%, size: {direct_job['progress_in_size']} bytes")
+                # Process the database result
+                response = {
+                    'job_id': direct_job['id'],
+                    'space_id': direct_job['space_id'],
+                    'status': direct_job['status'],
+                    'progress_in_percent': direct_job['progress_in_percent'] or 0,
+                    'progress_in_size': direct_job['progress_in_size'] or 0,
+                    'error_message': direct_job['error_message'] or '',
+                    'direct_query': True,
+                }
+                
+                # Add process status (running or not)
+                if direct_job['process_id']:
+                    try:
+                        # On Unix systems, can check if process is running
+                        import os
+                        process_running = False
+                        try:
+                            # This will raise an error if process is not running
+                            os.kill(direct_job['process_id'], 0)
+                            process_running = True
+                        except OSError:
+                            process_running = False
+                        
+                        response['process_running'] = process_running
+                    except Exception as proc_err:
+                        logger.error(f"Error checking process: {proc_err}")
+                
+                return jsonify(response)
+        except Exception as db_err:
+            logger.error(f"Error with direct database query: {db_err}")
+            # Fall back to Space component method
+        
+        # Fallback: Get job via Space component method
         job = space.get_download_job(job_id=job_id)
         if not job:
             return jsonify({'error': 'Job not found'}), 404
         
+        # Convert any None values to defaults
+        progress_percent = job.get('progress_in_percent', 0) or 0
+        progress_size = job.get('progress_in_size', 0) or 0
+        
         # Return job data
         return jsonify({
+            'job_id': job.get('id'),
+            'space_id': job.get('space_id'),
             'status': job.get('status', 'unknown'),
-            'progress_in_percent': job.get('progress_in_percent', 0),
-            'progress_in_size': job.get('progress_in_size', 0),
-            'error_message': job.get('error_message', '')
+            'progress_in_percent': progress_percent,
+            'progress_in_size': progress_size,
+            'error_message': job.get('error_message', ''),
+            'direct_query': False
         })
         
     except Exception as e:
@@ -319,49 +375,138 @@ def api_space_status(space_id):
             active_query = """
             SELECT * FROM space_download_scheduler
             WHERE space_id = %s AND status IN ('pending', 'in_progress', 'downloading')
-            ORDER BY id DESC LIMIT 1
+            ORDER BY updated_at DESC, id DESC LIMIT 1
             """
             cursor.execute(active_query, (space_id,))
             job = cursor.fetchone()
             
-            # If no active jobs, check for the most recent failed job
+            # If no active jobs, check for the most recent completed or failed job
             if not job:
-                failed_query = """
+                other_query = """
                 SELECT * FROM space_download_scheduler
-                WHERE space_id = %s AND status = 'failed'
-                ORDER BY id DESC LIMIT 1
+                WHERE space_id = %s
+                ORDER BY updated_at DESC, id DESC LIMIT 1
                 """
-                cursor.execute(failed_query, (space_id,))
+                cursor.execute(other_query, (space_id,))
                 job = cursor.fetchone()
                 
             cursor.close()
         except Exception as job_err:
             logger.error(f"Error getting job: {job_err}")
         
+        # Check for partial file progress even if job is not active
+        part_file_exists = False
+        part_file_size = 0
+        if not file_path:  # Only check if the final file doesn't exist
+            # Check for partial file
+            for ext in ['mp3', 'm4a', 'wav']:
+                part_path = os.path.join(download_dir, f"{space_id}.{ext}.part")
+                if os.path.exists(part_path):
+                    part_file_exists = True
+                    part_file_size = os.path.getsize(part_path)
+                    logger.info(f"Found partial file: {part_path}, size: {part_file_size} bytes")
+                    break
+        
         # Return status data
         response = {
             'space_id': space_id,
             'status': space_details.get('status', 'unknown'),
             'file_exists': file_path is not None,
-            'file_size': file_size if file_path else 0
+            'file_size': file_size if file_path else 0,
+            'part_file_exists': part_file_exists,
+            'part_file_size': part_file_size
         }
         
         # Add job data if available
         if job:
-            job_status = job.get('status')
-            progress_percent = job.get('progress_in_percent', 0)
-            progress_size = job.get('progress_in_size', 0)
+            # Make sure values are not None
+            job_status = job.get('status') or 'unknown'
+            progress_percent = job.get('progress_in_percent') or 0
+            progress_size = job.get('progress_in_size') or 0
+            
+            # Log for debugging
+            logger.info(f"Job data for space {space_id}: status={job_status}, progress={progress_percent}%, size={progress_size} bytes")
+            
+            # If we have a part file but progress_size is very small, use part file size
+            if part_file_exists and part_file_size > 0 and progress_size < part_file_size:
+                logger.info(f"Using part file size ({part_file_size}) instead of progress_size ({progress_size})")
+                progress_size = part_file_size
+                
+                # If we have a part file with substantial size but progress is 0, estimate progress
+                if progress_percent == 0 and part_file_size > 10*1024*1024:  # > 10MB
+                    # Estimate progress based on typical audio file size (30-100MB)
+                    estimated_percent = max(1, min(10, int(part_file_size / (1024*1024) / 5)))
+                    progress_percent = estimated_percent
+                    logger.info(f"Estimated progress as {estimated_percent}% based on part file size")
             
             response.update({
                 'job_id': job.get('id'),
                 'job_status': job_status,
                 'progress_in_percent': progress_percent,
-                'progress_in_size': progress_size
+                'progress_in_size': progress_size,
+                'job_updated_at': job.get('updated_at'),
+                'job_process_id': job.get('process_id')
             })
+            
+            # Check if process is still running
+            if job.get('process_id'):
+                try:
+                    import os
+                    process_running = False
+                    try:
+                        # This will raise an error if process is not running
+                        os.kill(job.get('process_id'), 0)
+                        process_running = True
+                    except (OSError, TypeError):
+                        process_running = False
+                    
+                    response['process_running'] = process_running
+                except Exception as proc_err:
+                    logger.error(f"Error checking process: {proc_err}")
             
             # Include error message for failed jobs
             if job_status == 'failed' and job.get('error_message'):
                 response['error_message'] = job.get('error_message')
+                
+            # If job status is 'in_progress' but part file exists and is growing,
+            # provide an estimate even if the bg_downloader isn't reporting progress
+            if (job_status == 'in_progress' or job_status == 'downloading') and part_file_exists:
+                # Get a timestamp from when job was last updated
+                last_updated = job.get('updated_at')
+                
+                # If last update was more than 30 seconds ago but we have a part file,
+                # the background process might not be reporting progress correctly
+                if last_updated:
+                    now = datetime.datetime.now()
+                    try:
+                        # Calculate time difference
+                        if isinstance(last_updated, str):
+                            from dateutil import parser
+                            last_updated = parser.parse(last_updated)
+                        
+                        time_diff = now - last_updated
+                        
+                        # If we haven't had an update in a while but part file exists
+                        if time_diff.total_seconds() > 30 and part_file_size > 1024*1024:
+                            response['part_file_detected'] = True
+                            
+                            # Show at least 1% progress if file is substantial
+                            if progress_percent == 0 and part_file_size > 1024*1024:
+                                response['progress_in_percent'] = 1
+                    except Exception as time_err:
+                        logger.error(f"Error calculating time difference: {time_err}")
+        
+        # Even if no job was found, if we have a part file, report some progress
+        elif part_file_exists and part_file_size > 0:
+            # Estimate progress based on typical audio file size (30-100MB)
+            estimated_percent = max(1, min(10, int(part_file_size / (1024*1024) / 5)))
+            
+            response.update({
+                'part_file_detected': True,
+                'job_status': 'in_progress',  # Assume download is in progress
+                'progress_in_percent': estimated_percent,
+                'progress_in_size': part_file_size
+            })
         
         return jsonify(response)
         
