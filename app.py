@@ -278,6 +278,100 @@ def api_status(job_id):
     except Exception as e:
         logger.error(f"Error in API status: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+        
+@app.route('/api/space_status/<space_id>', methods=['GET'])
+def api_space_status(space_id):
+    """API endpoint to get space status for AJAX updates."""
+    try:
+        # Get Space component
+        space = get_space_component()
+        
+        # Get space details
+        space_details = space.get_space(space_id)
+        if not space_details:
+            # Don't return 404 - create a minimal response that indicates an issue
+            # but allows the frontend to continue processing
+            return jsonify({
+                'space_id': space_id,
+                'status': 'unknown',
+                'file_exists': False,
+                'error': 'Space not found in database'
+            })
+        
+        # Check if the physical file exists
+        download_dir = app.config['DOWNLOAD_DIR']
+        file_path = None
+        file_size = 0
+        
+        for ext in ['mp3', 'm4a', 'wav']:
+            path = os.path.join(download_dir, f"{space_id}.{ext}")
+            if os.path.exists(path) and os.path.getsize(path) > 1024*1024:  # > 1MB
+                file_path = path
+                file_size = os.path.getsize(path)
+                break
+        
+        # Get the latest job for this space (any status to include errors)
+        job = None
+        try:
+            cursor = space.connection.cursor(dictionary=True)
+            
+            # First check for active jobs
+            active_query = """
+            SELECT * FROM space_download_scheduler
+            WHERE space_id = %s AND status IN ('pending', 'in_progress', 'downloading')
+            ORDER BY id DESC LIMIT 1
+            """
+            cursor.execute(active_query, (space_id,))
+            job = cursor.fetchone()
+            
+            # If no active jobs, check for the most recent failed job
+            if not job:
+                failed_query = """
+                SELECT * FROM space_download_scheduler
+                WHERE space_id = %s AND status = 'failed'
+                ORDER BY id DESC LIMIT 1
+                """
+                cursor.execute(failed_query, (space_id,))
+                job = cursor.fetchone()
+                
+            cursor.close()
+        except Exception as job_err:
+            logger.error(f"Error getting job: {job_err}")
+        
+        # Return status data
+        response = {
+            'space_id': space_id,
+            'status': space_details.get('status', 'unknown'),
+            'file_exists': file_path is not None,
+            'file_size': file_size if file_path else 0
+        }
+        
+        # Add job data if available
+        if job:
+            job_status = job.get('status')
+            progress_percent = job.get('progress_in_percent', 0)
+            progress_size = job.get('progress_in_size', 0)
+            
+            response.update({
+                'job_id': job.get('id'),
+                'job_status': job_status,
+                'progress_in_percent': progress_percent,
+                'progress_in_size': progress_size
+            })
+            
+            # Include error message for failed jobs
+            if job_status == 'failed' and job.get('error_message'):
+                response['error_message'] = job.get('error_message')
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        logger.error(f"Error in API space status: {e}", exc_info=True)
+        return jsonify({
+            'space_id': space_id,
+            'status': 'error',
+            'error': f"Error retrieving space status: {str(e)}"
+        })
 
 @app.route('/api/queue', methods=['GET'])
 def api_queue():

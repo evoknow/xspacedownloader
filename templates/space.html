@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+
+{% block title %}{{ space.title if space.title else space.space_id }} - XSpace Downloader{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4>{{ space.title if space.title else "Space " + space.space_id }}</h4>
+                <a href="{{ url_for('index') }}" class="btn btn-outline-primary btn-sm">Back to Home</a>
+            </div>
+            <div class="card-body">
+                <div class="space-details mb-4">
+                    <h5>Space Details</h5>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>Space ID:</span>
+                            <span class="badge bg-secondary rounded-pill">{{ space.space_id }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>Space URL:</span>
+                            <a href="{{ space.space_url }}" target="_blank" rel="noopener" class="text-truncate ms-2" 
+                               style="max-width: 400px; display: inline-block;">{{ space.space_url }}</a>
+                        </li>
+                        {% if space.created_at %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>Added on:</span>
+                            <span>{{ space.created_at }}</span>
+                        </li>
+                        {% endif %}
+                        {% if space.status %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>Status:</span>
+                            <span class="badge 
+                                {% if space.status == 'completed' %}bg-success
+                                {% elif space.status == 'downloading' %}bg-info
+                                {% elif space.status == 'pending' %}bg-warning
+                                {% elif space.status == 'failed' %}bg-danger
+                                {% else %}bg-secondary{% endif %}">
+                                {{ space.status|title }}
+                            </span>
+                        </li>
+                        {% endif %}
+                        {% if file_path %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>File Size:</span>
+                            <span>{{ file_size|filesizeformat }}</span>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </div>
+                
+                {% if file_path and space.status == 'completed' %}
+                <div class="audio-player mb-4">
+                    <h5>Audio Player</h5>
+                    <div class="card">
+                        <div class="card-body">
+                            <audio id="audio-player" controls class="w-100">
+                                <source src="/download/{{ space.space_id }}" type="audio/{{ file_extension }}">
+                                Your browser does not support the audio element.
+                            </audio>
+                            
+                            <div class="mt-3 d-flex justify-content-between">
+                                <div>
+                                    <label for="playback-speed" class="form-label">Playback Speed</label>
+                                    <select id="playback-speed" class="form-select form-select-sm" style="width: auto;">
+                                        <option value="0.50">0.50x</option>
+                                        <option value="0.75">0.75x</option>
+                                        <option value="1.00" selected>1.00x</option>
+                                        <option value="1.25">1.25x</option>
+                                        <option value="1.50">1.50x</option>
+                                        <option value="1.75">1.75x</option>
+                                        <option value="2.00">2.00x</option>
+                                        <option value="2.50">2.50x</option>
+                                        <option value="3.00">3.00x</option>
+                                    </select>
+                                </div>
+                                
+                                <div>
+                                    <label for="volume" class="form-label">Volume</label>
+                                    <input type="range" class="form-range" min="0" max="1" step="0.05" id="volume" value="1">
+                                </div>
+                                
+                                <div>
+                                    <a href="/download/{{ space.space_id }}?attachment=1" class="btn btn-primary">
+                                        <i class="bi bi-download"></i> Download File
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% elif space._file_missing or (file_path is none and space.status == 'completed') %}
+                <div class="alert alert-warning">
+                    <h5>File Missing</h5>
+                    <p>The audio file for this space is not available. It might have been deleted or moved.</p>
+                    <a href="{{ url_for('submit_space') }}?space_url={{ space.space_url|urlencode }}" class="btn btn-primary">
+                        Download Again
+                    </a>
+                </div>
+                {% elif space.status != 'completed' %}
+                <div id="download-status-container" class="alert alert-info">
+                    <h5>Download Status</h5>
+                    {% if space.status == 'downloading' or space.status == 'in_progress' %}
+                    <p id="download-message">This space is currently being downloaded. You'll be able to listen to it once the download is complete.</p>
+                    <p id="download-progress">Current progress: <span id="progress-percent">{{ space.download_cnt }}</span>%</p>
+                    <div class="progress" style="height: 20px;">
+                        <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" 
+                             style="width: {{ space.download_cnt }}%;"
+                             aria-valuenow="{{ space.download_cnt }}" 
+                             aria-valuemin="0" 
+                             aria-valuemax="100">
+                            {{ space.download_cnt }}%
+                        </div>
+                    </div>
+                    <div id="progress-size" class="mt-2">
+                        {% if job and job.progress_in_size %}
+                            Downloaded {{ job.progress_in_size|filesizeformat }}
+                        {% else %}
+                            Waiting for download to start...
+                        {% endif %}
+                    </div>
+                    {% elif space.status == 'pending' %}
+                    <p id="download-message">This space is in the download queue. The download will start automatically.</p>
+                    <div id="progress-container" class="d-none">
+                        <p id="download-progress">Current progress: <span id="progress-percent">0</span>%</p>
+                        <div class="progress" style="height: 20px;">
+                            <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" 
+                                 style="width: 0%;"
+                                 aria-valuenow="0" 
+                                 aria-valuemin="0" 
+                                 aria-valuemax="100">
+                                0%
+                            </div>
+                        </div>
+                        <div id="progress-size" class="mt-2">Waiting for download to start...</div>
+                    </div>
+                    {% elif space.status == 'failed' %}
+                    <p id="download-message">The download for this space failed. You can try downloading it again.</p>
+                    <a href="{{ url_for('submit_space') }}?space_url={{ space.space_url|urlencode }}" class="btn btn-primary">
+                        Try Downloading Again
+                    </a>
+                    {% else %}
+                    <p id="download-message">This space has status: {{ space.status }}</p>
+                    <a href="{{ url_for('submit_space') }}?space_url={{ space.space_url|urlencode }}" class="btn btn-primary">
+                        Try Downloading
+                    </a>
+                    {% endif %}
+                </div>
+                {% else %}
+                <div class="alert alert-warning">
+                    <p>The audio file for this space is not available. It might have been deleted or moved.</p>
+                    <a href="{{ url_for('submit_space') }}?space_url={{ space.space_url|urlencode }}" class="btn btn-primary">
+                        Download Again
+                    </a>
+                </div>
+                {% endif %}
+                
+                {% if job %}
+                <div class="job-details mt-4">
+                    <h5>Download Job Details</h5>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>Job ID:</span>
+                            <span class="badge bg-secondary rounded-pill">{{ job.id }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>Started:</span>
+                            <span>{{ job.start_time }}</span>
+                        </li>
+                        {% if job.end_time %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>Completed:</span>
+                            <span>{{ job.end_time }}</span>
+                        </li>
+                        {% endif %}
+                        {% if job.progress_in_size %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>Download Size:</span>
+                            <span>{{ job.progress_in_size|filesizeformat }}</span>
+                        </li>
+                        {% endif %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>File Type:</span>
+                            <span>{{ job.file_type }}</span>
+                        </li>
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const audioPlayer = document.getElementById('audio-player');
+        const spaceId = '{{ space.space_id }}';
+        const spaceStatus = '{{ space.status }}';
+        
+        // Audio player setup
+        if (audioPlayer) {
+            // Playback speed control
+            const playbackSpeed = document.getElementById('playback-speed');
+            playbackSpeed.addEventListener('change', function() {
+                audioPlayer.playbackRate = parseFloat(this.value);
+            });
+            
+            // Volume control
+            const volume = document.getElementById('volume');
+            volume.addEventListener('input', function() {
+                audioPlayer.volume = this.value;
+            });
+            
+            // Remember playback position
+            const storageKey = 'xspace_position_' + spaceId;
+            
+            // Load saved position
+            const savedPosition = localStorage.getItem(storageKey);
+            if (savedPosition) {
+                audioPlayer.currentTime = parseFloat(savedPosition);
+            }
+            
+            // Save position every 5 seconds
+            setInterval(() => {
+                if (!audioPlayer.paused) {
+                    localStorage.setItem(storageKey, audioPlayer.currentTime.toString());
+                }
+            }, 5000);
+            
+            // Save position on pause/stop
+            audioPlayer.addEventListener('pause', () => {
+                localStorage.setItem(storageKey, audioPlayer.currentTime.toString());
+            });
+            
+            // Save speed preference
+            const speedKey = 'xspace_speed';
+            const savedSpeed = localStorage.getItem(speedKey);
+            if (savedSpeed) {
+                audioPlayer.playbackRate = parseFloat(savedSpeed);
+                playbackSpeed.value = savedSpeed;
+            }
+            
+            playbackSpeed.addEventListener('change', function() {
+                localStorage.setItem(speedKey, this.value);
+            });
+        }
+        
+        // Download status tracking
+        if (spaceStatus === 'pending' || spaceStatus === 'downloading' || spaceStatus === 'in_progress') {
+            // Function to format file size
+            function formatBytes(bytes, decimals = 2) {
+                if (bytes === 0) return '0 Bytes';
+                
+                const k = 1024;
+                const dm = decimals < 0 ? 0 : decimals;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+                
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+            }
+            
+            // Function to update download status
+            function updateDownloadStatus() {
+                $.ajax({
+                    url: '/api/space_status/' + spaceId,
+                    type: 'GET',
+                    dataType: 'json',
+                    success: function(data) {
+                        // If file exists and status is completed, reload the page
+                        if (data.file_exists && data.status === 'completed') {
+                            window.location.reload();
+                            return;
+                        }
+                        
+                        // Update status based on job data
+                        if (data.job_status === 'in_progress' || data.job_status === 'downloading') {
+                            // Show progress container if it's hidden
+                            $('#progress-container').removeClass('d-none');
+                            
+                            // Update progress bar
+                            const percent = data.progress_in_percent || 0;
+                            $('#progress-bar').css('width', percent + '%');
+                            $('#progress-bar').attr('aria-valuenow', percent);
+                            $('#progress-bar').text(percent + '%');
+                            $('#progress-percent').text(percent);
+                            
+                            // Update download size
+                            if (data.progress_in_size) {
+                                $('#progress-size').text('Downloaded ' + formatBytes(data.progress_in_size));
+                            }
+                            
+                            // Update message
+                            $('#download-message').text('This space is currently being downloaded. You\'ll be able to listen to it once the download is complete.');
+                        } 
+                        else if (data.job_status === 'pending') {
+                            $('#download-message').text('This space is in the download queue. The download will start automatically.');
+                        }
+                        else if (data.job_status === 'failed') {
+                            // Update container class
+                            $('#download-status-container').removeClass('alert-info').addClass('alert-danger');
+                            
+                            // Basic message
+                            let errorMessage = 'The download for this space failed.';
+                            
+                            // Add specific error details if available
+                            if (data.error_message) {
+                                // Extract the most relevant part - remove technical details
+                                let userFriendlyError = data.error_message;
+                                
+                                // For "not found" errors, give more specific message
+                                if (data.error_message.includes('not found') || 
+                                    data.error_message.includes('404') ||
+                                    data.error_message.includes('unavailable')) {
+                                    userFriendlyError = 'This space seems to be unavailable or may no longer exist.';
+                                }
+                                // For network errors, simplify the message
+                                else if (data.error_message.includes('network error') || 
+                                         data.error_message.includes('connection')) {
+                                    userFriendlyError = 'There was a network issue while trying to download this space.';
+                                }
+                                
+                                errorMessage += ' Error: ' + userFriendlyError;
+                            }
+                            
+                            // Update the message
+                            $('#download-message').html(errorMessage + '<br><br>You can try downloading it again later.');
+                            
+                            // Show a try again button
+                            if (!$('#try-again-btn').length) {
+                                const tryAgainBtn = $('<a>', {
+                                    href: "{{ url_for('submit_space') }}?space_url={{ space.space_url|urlencode }}",
+                                    class: 'btn btn-primary mt-3',
+                                    id: 'try-again-btn',
+                                    text: 'Try Downloading Again'
+                                });
+                                $('#download-message').after(tryAgainBtn);
+                            }
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error fetching space status:', error);
+                    }
+                });
+            }
+            
+            // Update status when page loads
+            updateDownloadStatus();
+            
+            // Set interval for updates (every 5 seconds)
+            setInterval(updateDownloadStatus, 5000);
+        }
+    });
+</script>
+{% endblock %}

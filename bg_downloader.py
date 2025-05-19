@@ -678,17 +678,63 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                 # Create a new database connection for this process
                 space = Space()
                 
-                # Get the full space details
+                # Get the full space details - handle missing spaces more gracefully
                 space_details = space.get_space(space_id)
-                if not space_details:
-                    print(f"Error: Space {space_id} not found")
-                    sys.exit(1)
                 
-                # Get space URL
-                space_url = space_details.get('space_url')
+                # If space not found in database, create a minimal record with the space_id
+                if not space_details:
+                    print(f"Warning: Space {space_id} not found in database, creating minimal space record")
+                    # Create a minimal space record with default URL
+                    space_url = f"https://x.com/i/spaces/{space_id}"
+                    space_details = {
+                        'space_id': space_id,
+                        'space_url': space_url,
+                        'title': f"Space {space_id}",
+                        'status': 'pending',
+                        'download_cnt': 0
+                    }
+                    
+                    # Try to add this minimal record to the database for future reference
+                    try:
+                        # Use direct database connection for more reliability
+                        with open('db_config.json', 'r') as config_file:
+                            db_config = json.load(config_file)
+                            if db_config["type"] == "mysql":
+                                mysql_config = db_config["mysql"].copy()
+                                if 'use_ssl' in mysql_config:
+                                    del mysql_config['use_ssl']
+                                
+                                conn = mysql.connector.connect(**mysql_config)
+                                cursor = conn.cursor()
+                                
+                                # Check if space exists first
+                                cursor.execute("SELECT COUNT(*) FROM spaces WHERE space_id = %s", (space_id,))
+                                exists = cursor.fetchone()[0] > 0
+                                
+                                if not exists:
+                                    # Try to insert the minimal record
+                                    insert_query = """
+                                    INSERT INTO spaces 
+                                    (space_id, space_url, filename, status, download_cnt, created_at, updated_at)
+                                    VALUES (%s, %s, %s, 'pending', 0, NOW(), NOW())
+                                    """
+                                    filename = f"{space_id}.{file_type}"
+                                    cursor.execute(insert_query, (space_id, space_url, filename))
+                                    conn.commit()
+                                    print(f"Added minimal space record to database for {space_id}")
+                                
+                                cursor.close()
+                                conn.close()
+                    except Exception as db_err:
+                        print(f"Warning: Could not create space record in database: {db_err}")
+                else:
+                    # Space found in database, use its URL
+                    space_url = space_details.get('space_url')
+                
+                # If we still don't have a URL, construct a default one
                 if not space_url:
-                    print(f"Error: No URL found for space {space_id}")
-                    sys.exit(1)
+                    print(f"Warning: No URL found for space {space_id}, using default URL format")
+                    space_url = f"https://x.com/i/spaces/{space_id}"
                 
                 print(f"Space URL: {space_url}")
                 
@@ -791,6 +837,32 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                 print(f"Download command: {' '.join(yt_dlp_cmd)}")
                 
                 print(f"Starting download for space {space_id}...")
+                
+                # Add specific error checking for common space issues
+                space_availability_check = None
+                try:
+                    # First check if the space is publicly available by making a simple request
+                    import requests
+                    # Set a short timeout to avoid hanging
+                    response = requests.head(space_url, timeout=5, allow_redirects=True)
+                    
+                    if response.status_code != 200:
+                        print(f"Warning: Space URL returned status code {response.status_code}")
+                        if response.status_code == 404:
+                            space_availability_check = "Space not found (404 error)"
+                        elif response.status_code >= 400 and response.status_code < 500:
+                            space_availability_check = f"Client error accessing space (HTTP {response.status_code})"
+                        elif response.status_code >= 500:
+                            space_availability_check = f"Server error accessing space (HTTP {response.status_code})"
+                    else:
+                        print(f"Space URL check succeeded with status code {response.status_code}")
+                except Exception as check_err:
+                    print(f"Warning: Could not verify space URL availability: {check_err}")
+                
+                # Log any availability issues but still try to download
+                if space_availability_check:
+                    print(f"WARNING: {space_availability_check}")
+                    print("Will still attempt download but may fail")
                 
                 # Run yt-dlp as a subprocess and capture output
                 process = subprocess.Popen(
@@ -1105,25 +1177,78 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                 else:
                     print(f"yt-dlp failed with return code {process_returncode}")
                     
-                    # Update job as failed
+                    # Determine the detailed error message to store
+                    error_message = f"yt-dlp failed with return code {process_returncode}"
+                    
+                    # Add more specific error information if we have it
+                    if space_availability_check:
+                        error_message = f"{space_availability_check}. {error_message}"
+                    
+                    # Try to extract any error details from the output
+                    error_details = []
+                    try:
+                        # Create a log file path for this space
+                        log_dir = Path(os.path.join(base_dir, config.get("log_dir", "logs")))
+                        log_file = log_dir / f"{space_id}.log"
+                        
+                        # Read the log file to find error details
+                        if os.path.exists(log_file):
+                            with open(log_file, 'r') as f:
+                                # Read the last 50 lines to find errors
+                                lines = f.readlines()[-50:]
+                                for line in lines:
+                                    line = line.strip()
+                                    if any(err in line.lower() for err in ['error', 'exception', 'failed', 'not found', 'unavailable']):
+                                        error_details.append(line)
+                    except Exception as log_err:
+                        print(f"Error reading log for detailed error message: {log_err}")
+                    
+                    # Add any additional details to the error message
+                    if error_details:
+                        error_message += f". Details: {'; '.join(error_details[-3:])}"  # Include last 3 error messages
+                    
+                    print(f"Final error message: {error_message}")
+                    
+                    # Update job as failed with the detailed message
                     space.update_download_job(
                         job_id,
                         status='failed',
-                        error_message=f"yt-dlp failed with return code {process_returncode}"
+                        error_message=error_message
                     )
                     sys.exit(1)  # Exit with error
                 
             except Exception as e:
                 print(f"Error in download process for space {space_id}: {e}")
                 
-                # Update job as failed
+                # Create a more detailed error message
+                import traceback
+                error_message = str(e)
+                
+                # Add traceback for detailed debugging
+                tb = traceback.format_exc()
+                print(f"Traceback:\n{tb}")
+                
+                # Try to extract the most relevant part of the traceback
+                tb_lines = tb.split('\n')
+                if len(tb_lines) > 5:
+                    # Get the last few lines which usually contain the most relevant error info
+                    error_details = '; '.join(line.strip() for line in tb_lines[-5:] if line.strip())
+                    if error_details and len(error_details) > 10:  # Ensure we have meaningful content
+                        error_message += f". Details: {error_details}"
+                
+                # Include any additional context about the space availability
+                if 'space_availability_check' in locals() and space_availability_check:
+                    error_message = f"{space_availability_check}. {error_message}"
+                
+                # Update job as failed with the enhanced error message
                 try:
                     space = Space()
                     space.update_download_job(
                         job_id,
                         status='failed',
-                        error_message=str(e)
+                        error_message=error_message
                     )
+                    print(f"Updated job status to failed with message: {error_message}")
                 except Exception as update_error:
                     print(f"Failed to update job status: {update_error}")
                     
