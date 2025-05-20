@@ -24,8 +24,95 @@ class Space:
     def __init__(self, db_connection=None):
         """Initialize the Space component with a database connection."""
         self.connection = db_connection
+        
         if not self.connection:
+            # Set a reasonable connection timeout to prevent hanging
+            connect_timeout = 10  # 10 seconds timeout
+            
             try:
+                # Load database configuration
+                try:
+                    with open('db_config.json', 'r') as config_file:
+                        config = json.load(config_file)
+                        if config["type"] == "mysql":
+                            db_config = config["mysql"].copy()
+                            # Remove unsupported parameters
+                            if 'use_ssl' in db_config:
+                                del db_config['use_ssl']
+                            
+                            # Add connection timeout
+                            db_config['connect_timeout'] = connect_timeout
+                            
+                            # Add connection pool settings for better stability
+                            db_config['pool_name'] = 'xspace_pool'
+                            db_config['pool_size'] = 5
+                            db_config['pool_reset_session'] = True
+                        else:
+                            raise ValueError(f"Unsupported database type: {config['type']}")
+                except Exception as config_err:
+                    print(f"Error loading database configuration: {config_err}")
+                    raise
+                
+                # Create database connection
+                try:
+                    print("Creating new database connection")
+                    self.connection = mysql.connector.connect(**db_config)
+                    
+                    # Configure connection for better stability
+                    if self.connection:
+                        # Auto-reconnect
+                        self.connection.autocommit = True
+                        
+                        # Test connection with a simple query
+                        cursor = self.connection.cursor()
+                        cursor.execute("SELECT 1")
+                        cursor.fetchone()
+                        cursor.close()
+                        
+                        print("Database connection established successfully")
+                except Error as e:
+                    print(f"Error connecting to MySQL Database: {e}")
+                    raise
+                except Exception as general_err:
+                    print(f"Unexpected error establishing database connection: {general_err}")
+                    raise
+            except Exception as e:
+                print(f"Failed to initialize database connection: {e}")
+                # Create a null connection object instead of raising
+                # This allows the component to be created even if DB is temporarily unavailable
+                self.connection = None
+    
+    def __del__(self):
+        """Close the database connection when the object is destroyed."""
+        try:
+            if hasattr(self, 'connection') and self.connection:
+                try:
+                    # Check if connection is still valid before closing
+                    if self.connection.is_connected():
+                        self.connection.close()
+                        print("Database connection closed properly in __del__")
+                    else:
+                        print("Connection already closed in __del__")
+                except Exception as e:
+                    print(f"Error closing connection in __del__: {e}")
+                # Set to None to help garbage collector
+                self.connection = None
+        except Exception as general_err:
+            print(f"Unexpected error in __del__: {general_err}")
+            # Continue without raising to avoid crashing during cleanup
+    
+    def ensure_connection(self):
+        """
+        Ensure that we have a valid database connection.
+        
+        Returns:
+            bool: True if connection is valid, False otherwise
+        """
+        # Don't waste time if no connection object exists
+        if not self.connection:
+            print("No connection object exists, creating new connection")
+            try:
+                # Load database configuration
                 with open('db_config.json', 'r') as config_file:
                     config = json.load(config_file)
                     if config["type"] == "mysql":
@@ -33,17 +120,53 @@ class Space:
                         # Remove unsupported parameters
                         if 'use_ssl' in db_config:
                             del db_config['use_ssl']
+                        
+                        # Add connection timeout and pool settings
+                        db_config['connect_timeout'] = 10
+                        db_config['pool_name'] = 'xspace_pool'
+                        db_config['pool_size'] = 5
+                        db_config['pool_reset_session'] = True
                     else:
                         raise ValueError(f"Unsupported database type: {config['type']}")
+                
+                # Create new connection
                 self.connection = mysql.connector.connect(**db_config)
-            except Error as e:
-                print(f"Error connecting to MySQL Database: {e}")
-                raise
-    
-    def __del__(self):
-        """Close the database connection when the object is destroyed."""
-        if hasattr(self, 'connection') and self.connection and self.connection.is_connected():
-            self.connection.close()
+                self.connection.autocommit = True
+                return True
+            except Exception as e:
+                print(f"Error creating new connection in ensure_connection: {e}")
+                return False
+                
+        # Check if the connection is valid and reconnect if needed
+        try:
+            if not self.connection.is_connected():
+                print("Connection is not connected, attempting to reconnect")
+                try:
+                    self.connection.reconnect(attempts=3, delay=1)
+                    return self.connection.is_connected()
+                except Exception as reconnect_err:
+                    print(f"Error reconnecting: {reconnect_err}")
+                    
+                    # If reconnect fails, create a fresh connection
+                    try:
+                        self.connection.close()
+                    except:
+                        pass
+                        
+                    # Create fresh connection
+                    return self.ensure_connection()
+            
+            # Connection is valid
+            return True
+        except Exception as e:
+            print(f"Error checking connection: {e}")
+            
+            # Reset connection and try again
+            try:
+                self.connection = None
+                return self.ensure_connection()
+            except:
+                return False
     
     def extract_space_id(self, url):
         """Extract space_id from X space URL."""
@@ -76,7 +199,13 @@ class Space:
         Returns:
             str: space_id if successful, None otherwise
         """
+        cursor = None
         try:
+            # Make sure we have a valid connection
+            if not self.ensure_connection():
+                print("Failed to ensure database connection in create_space")
+                return None
+            
             cursor = self.connection.cursor(dictionary=True)
             
             space_id = self.extract_space_id(url)
@@ -124,16 +253,41 @@ class Space:
                 "pending"       # status
             ))
             
-            self.connection.commit()
+            # Make sure to commit the transaction
+            try:
+                self.connection.commit()
+                print(f"Successfully created space record for space_id: {space_id}")
+            except Exception as commit_err:
+                print(f"Error committing transaction: {commit_err}")
+                try:
+                    self.connection.rollback()
+                except:
+                    pass
+                return None
+                
             return space_id
             
         except Error as e:
             print(f"Error creating space: {e}")
-            self.connection.rollback()
+            try:
+                self.connection.rollback()
+            except Exception as rollback_err:
+                print(f"Error rolling back transaction: {rollback_err}")
+            return None
+        except Exception as general_err:
+            print(f"Unexpected error in create_space: {general_err}")
+            try:
+                self.connection.rollback()
+            except:
+                pass
             return None
         finally:
-            if cursor:
-                cursor.close()
+            try:
+                if cursor:
+                    cursor.close()
+            except Exception as close_err:
+                print(f"Error closing cursor: {close_err}")
+                # Continue execution
     
     def get_space(self, space_id):
         """
@@ -145,14 +299,37 @@ class Space:
         Returns:
             dict: Space details or None if not found
         """
+        cursor = None
         try:
+            # Make sure we have a valid connection
+            if not self.ensure_connection():
+                print(f"Failed to ensure database connection in get_space for space_id: {space_id}")
+                return None
+                
             cursor = self.connection.cursor(dictionary=True)
             
-            query = """
-            SELECT * FROM spaces WHERE space_id = %s
-            """
-            cursor.execute(query, (space_id,))
-            space = cursor.fetchone()
+            # Use a more robust query that handles connection issues
+            try:
+                query = """
+                SELECT * FROM spaces WHERE space_id = %s
+                """
+                cursor.execute(query, (space_id,))
+                space = cursor.fetchone()
+            except Exception as query_err:
+                print(f"Error executing query in get_space: {query_err}")
+                # Try to reconnect and retry once
+                if self.ensure_connection():
+                    try:
+                        # Recreate cursor and retry query
+                        cursor.close()
+                        cursor = self.connection.cursor(dictionary=True)
+                        cursor.execute(query, (space_id,))
+                        space = cursor.fetchone()
+                    except Exception as retry_err:
+                        print(f"Error on retry in get_space: {retry_err}")
+                        return None
+                else:
+                    return None
             
             # For backwards compatibility with tests, add title field based on filename
             if space and 'filename' in space and 'title' not in space:
@@ -207,7 +384,7 @@ class Space:
                         space['status'] = 'downloading'
                 
                 # File size mapping from format field if it's numeric
-                if 'format' in space and space['format'] and space['format'].isdigit():
+                if 'format' in space and space['format'] and space['format'] and str(space['format']).isdigit():
                     space['file_size'] = int(space['format'])
                 
             return space
@@ -215,9 +392,16 @@ class Space:
         except Error as e:
             print(f"Error getting space: {e}")
             return None
+        except Exception as general_err:
+            print(f"Unexpected error in get_space: {general_err}")
+            return None
         finally:
-            if cursor:
-                cursor.close()
+            try:
+                if cursor:
+                    cursor.close()
+            except Exception as close_err:
+                print(f"Error closing cursor in get_space: {close_err}")
+                # Continue execution
     
     def update_space(self, space_id, **kwargs):
         """
@@ -1045,7 +1229,26 @@ class Space:
         Returns:
             dict: Job details or None if not found
         """
+        cursor = None
         try:
+            # Check if connection is valid before proceeding
+            if not self.connection or not self.connection.is_connected():
+                print("Database connection lost, attempting to reconnect")
+                # Attempt to reconnect
+                try:
+                    with open('db_config.json', 'r') as config_file:
+                        config = json.load(config_file)
+                        if config["type"] == "mysql":
+                            db_config = config["mysql"].copy()
+                            if 'use_ssl' in db_config:
+                                del db_config['use_ssl']
+                        else:
+                            raise ValueError(f"Unsupported database type: {config['type']}")
+                    self.connection = mysql.connector.connect(**db_config)
+                except Exception as reconnect_err:
+                    print(f"Error reconnecting to database: {reconnect_err}")
+                    return None
+            
             cursor = self.connection.cursor(dictionary=True)
             
             if job_id:
@@ -1057,14 +1260,22 @@ class Space:
             else:
                 return None
                 
-            return cursor.fetchone()
+            result = cursor.fetchone()
+            return result
             
         except Error as e:
             print(f"Error getting download job: {e}")
             return None
+        except Exception as general_err:
+            print(f"Unexpected error in get_download_job: {general_err}")
+            return None
         finally:
-            if cursor:
-                cursor.close()
+            try:
+                if cursor:
+                    cursor.close()
+            except Exception as close_err:
+                print(f"Error closing cursor: {close_err}")
+                # Continue without raising to avoid further issues
                 
     def list_download_jobs(self, user_id=None, status=None, limit=10, offset=0):
         """
@@ -1079,30 +1290,78 @@ class Space:
         Returns:
             list: List of job dictionaries
         """
+        cursor = None
         try:
-            # Ensure we have a connection
+            # Ensure we have a valid connection
             if not self.connection or not self.connection.is_connected():
                 print("Database connection lost, reconnecting in list_download_jobs...")
-                with open('db_config.json', 'r') as config_file:
-                    config = json.load(config_file)
-                    if config["type"] == "mysql":
-                        db_config = config["mysql"].copy()
-                        # Remove unsupported parameters
-                        if 'use_ssl' in db_config:
-                            del db_config['use_ssl']
-                    else:
-                        raise ValueError(f"Unsupported database type: {config['type']}")
-                self.connection = mysql.connector.connect(**db_config)
+                try:
+                    # Safely close connection if it exists but is invalid
+                    if self.connection:
+                        try:
+                            self.connection.close()
+                        except Exception as close_err:
+                            print(f"Error closing existing connection: {close_err}")
+                    
+                    # Create a new connection
+                    with open('db_config.json', 'r') as config_file:
+                        config = json.load(config_file)
+                        if config["type"] == "mysql":
+                            db_config = config["mysql"].copy()
+                            # Remove unsupported parameters
+                            if 'use_ssl' in db_config:
+                                del db_config['use_ssl']
+                        else:
+                            raise ValueError(f"Unsupported database type: {config['type']}")
+                    
+                    self.connection = mysql.connector.connect(**db_config)
+                    print("Successfully reconnected to database")
+                except Exception as reconnect_err:
+                    print(f"Error reconnecting to database: {reconnect_err}")
+                    return []
             
-            # Ensure connection is still good
-            self.connection.ping(reconnect=True, attempts=3, delay=1)
+            # Safely ensure connection is still good with proper error handling
+            try:
+                self.connection.ping(reconnect=True, attempts=3, delay=1)
+            except Exception as ping_err:
+                print(f"Error pinging database: {ping_err}")
+                # Try to establish a fresh connection
+                try:
+                    if self.connection:
+                        try:
+                            self.connection.close()
+                        except:
+                            pass
+                    
+                    with open('db_config.json', 'r') as config_file:
+                        config = json.load(config_file)
+                        if config["type"] == "mysql":
+                            db_config = config["mysql"].copy()
+                            if 'use_ssl' in db_config:
+                                del db_config['use_ssl']
+                    
+                    self.connection = mysql.connector.connect(**db_config)
+                    print("Successfully created new connection after ping failure")
+                except Exception as new_conn_err:
+                    print(f"Failed to create new connection after ping failure: {new_conn_err}")
+                    return []
             
-            cursor = self.connection.cursor(dictionary=True)
+            # Create cursor safely
+            try:
+                cursor = self.connection.cursor(dictionary=True)
+            except Exception as cursor_err:
+                print(f"Error creating cursor: {cursor_err}")
+                return []
             
             # Simple test query to verify connection is working properly
-            cursor.execute("SELECT 1 AS test")
-            cursor.fetchone()
+            try:
+                cursor.execute("SELECT 1 AS test")
+                cursor.fetchone()
+            except Exception as test_err:
+                print(f"Test query failed: {test_err}")
+                return []
             
+            # Build and execute main query
             query = "SELECT * FROM space_download_scheduler WHERE 1=1"
             params = []
             
@@ -1125,34 +1384,59 @@ class Space:
             
         except Error as e:
             print(f"Error listing download jobs: {e}")
-            # Try to reconnect and retry once
+            # Try to reconnect and retry once with simplified query
             try:
+                if cursor:
+                    try:
+                        cursor.close()
+                    except:
+                        pass
+                
                 if self.connection:
-                    self.connection.close()
+                    try:
+                        self.connection.close()
+                    except:
+                        pass
                 
                 with open('db_config.json', 'r') as config_file:
                     config = json.load(config_file)
                     if config["type"] == "mysql":
                         db_config = config["mysql"].copy()
-                        # Remove unsupported parameters
                         if 'use_ssl' in db_config:
                             del db_config['use_ssl']
                 
                 self.connection = mysql.connector.connect(**db_config)
-                
                 cursor = self.connection.cursor(dictionary=True)
-                query = "SELECT * FROM space_download_scheduler WHERE status = %s LIMIT %s OFFSET %s"
-                params = [status, limit, offset]
+                
+                # Simpler query for retry attempt
+                query = "SELECT * FROM space_download_scheduler"
+                params = []
+                
+                if status is not None:
+                    query += " WHERE status = %s"
+                    params.append(status)
+                
+                query += " LIMIT %s OFFSET %s"
+                params.extend([limit, offset])
+                
                 cursor.execute(query, params)
                 return cursor.fetchall()
                 
-            except Error as retry_e:
-                print(f"Error on retry in list_download_jobs: {retry_e}")
+            except Exception as retry_err:
+                print(f"Error on retry in list_download_jobs: {retry_err}")
                 return []
             
+        except Exception as general_err:
+            print(f"Unexpected error in list_download_jobs: {general_err}")
+            return []
+            
         finally:
-            if cursor:
-                cursor.close()
+            try:
+                if cursor:
+                    cursor.close()
+            except Exception as close_err:
+                print(f"Error closing cursor: {close_err}")
+                # Continue execution to avoid additional errors
                 
     def update_download_progress_by_space(self, space_id, progress_size, progress_percent, status=None):
         """
