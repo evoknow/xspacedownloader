@@ -1,38 +1,144 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}XSpace Downloader{% endblock %}</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <style>
+        :root {
+            --border-color-light: #e5e5e5;
+            --border-color-dark: #444;
+            --text-muted-light: #777;
+            --text-muted-dark: #aaa;
+        }
+        
         body {
             padding-top: 20px;
             padding-bottom: 20px;
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
+        
         .container {
             max-width: 800px;
         }
+        
         .header {
             padding-bottom: 20px;
             margin-bottom: 30px;
-            border-bottom: 1px solid #e5e5e5;
+            border-bottom: 1px solid var(--border-color-light);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
+        
         .footer {
             margin-top: 40px;
             padding-top: 20px;
-            border-top: 1px solid #e5e5e5;
-            color: #777;
+            border-top: 1px solid var(--border-color-light);
+            color: var(--text-muted-light);
         }
+        
         .progress-container {
             margin: 20px 0;
         }
+        
         .status-badge {
             font-size: 1rem;
             padding: 8px 12px;
         }
+        
         .flash-messages {
             margin-top: 20px;
+        }
+        
+        .theme-toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .theme-toggle {
+            cursor: pointer;
+            font-size: 1.5rem;
+        }
+        
+        /* Dark mode specific styles */
+        html[data-bs-theme="dark"] .header {
+            border-bottom-color: var(--border-color-dark);
+        }
+        
+        html[data-bs-theme="dark"] .footer {
+            border-top-color: var(--border-color-dark);
+            color: var(--text-muted-dark);
+        }
+        
+        html[data-bs-theme="dark"] .card {
+            background-color: #2b2b2b;
+        }
+        
+        /* Card tweaks for dark mode */
+        html[data-bs-theme="dark"] .card-header {
+            background-color: #333;
+            border-bottom-color: #444;
+        }
+        
+        html[data-bs-theme="dark"] .list-group-item {
+            background-color: #2b2b2b;
+            border-color: #444;
+        }
+        
+        html[data-bs-theme="dark"] .text-muted {
+            color: #aaa !important;
+        }
+        
+        /* Audio player dark mode customizations */
+        html[data-bs-theme="dark"] audio {
+            background-color: #333;
+            border-radius: 5px;
+        }
+        
+        /* Dark mode form elements */
+        html[data-bs-theme="dark"] .form-select,
+        html[data-bs-theme="dark"] .form-control {
+            background-color: #333;
+            color: #eee;
+            border-color: #555;
+        }
+        
+        html[data-bs-theme="dark"] .form-select:focus,
+        html[data-bs-theme="dark"] .form-control:focus {
+            background-color: #3a3a3a;
+            color: #fff;
+        }
+        
+        /* Progress bar in dark mode */
+        html[data-bs-theme="dark"] .progress {
+            background-color: #333;
+        }
+        
+        /* Audio player styles */
+        audio {
+            border-radius: 8px;
+        }
+        
+        #time-display {
+            text-align: center;
+            font-family: monospace;
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+        
+        /* Audio controls dark mode */
+        html[data-bs-theme="dark"] .btn-outline-secondary {
+            color: #aaa;
+            border-color: #555;
+        }
+        
+        html[data-bs-theme="dark"] .btn-outline-secondary:hover {
+            background-color: #444;
+            color: #fff;
         }
     </style>
     {% block head %}{% endblock %}
@@ -41,6 +147,10 @@
     <div class="container">
         <div class="header">
             <h3 class="text-muted">XSpace Downloader</h3>
+            <div class="theme-toggle-container">
+                <i class="bi bi-sun-fill theme-toggle" id="light-mode-toggle"></i>
+                <i class="bi bi-moon-fill theme-toggle" id="dark-mode-toggle"></i>
+            </div>
         </div>
         
         <!-- Flash messages -->
@@ -70,6 +180,52 @@
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+    
+    <!-- Theme toggle script -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Get the theme toggle buttons
+            const lightModeToggle = document.getElementById('light-mode-toggle');
+            const darkModeToggle = document.getElementById('dark-mode-toggle');
+            
+            // Function to set theme
+            function setTheme(theme) {
+                document.documentElement.setAttribute('data-bs-theme', theme);
+                localStorage.setItem('theme', theme);
+                
+                // Show/hide appropriate toggle buttons
+                if (theme === 'dark') {
+                    lightModeToggle.style.display = 'block';
+                    darkModeToggle.style.display = 'none';
+                } else {
+                    lightModeToggle.style.display = 'none';
+                    darkModeToggle.style.display = 'block';
+                }
+            }
+            
+            // Check if user has a saved preference
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme) {
+                setTheme(savedTheme);
+            } else {
+                // Try to detect system preference
+                const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                setTheme(prefersDark ? 'dark' : 'light');
+            }
+            
+            // Add event listeners for toggle buttons
+            lightModeToggle.addEventListener('click', () => setTheme('light'));
+            darkModeToggle.addEventListener('click', () => setTheme('dark'));
+            
+            // Listen for changes in system preference
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+                if (!localStorage.getItem('theme')) {
+                    setTheme(e.matches ? 'dark' : 'light');
+                }
+            });
+        });
+    </script>
+    
     {% block scripts %}{% endblock %}
 </body>
 </html>
