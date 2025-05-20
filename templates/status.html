@@ -94,7 +94,7 @@
                     </div>
                     <div id="progress-text" class="text-center mt-2">
                         {% if job.progress_in_size %}
-                            Downloaded {{ job.progress_in_size|filesizeformat }}
+                            Downloaded {{ job.progress_in_size|filesizeformat }} ({{ (job.progress_in_size / 1048576)|round(2) }} MB)
                         {% else %}
                             Waiting to start...
                         {% endif %}
@@ -224,7 +224,8 @@
                         return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
                     }
                     
-                    progressText.textContent = `Downloaded ${formatBytes(data.progress_in_size)}`;
+                    const sizeMB = (data.progress_in_size / (1024*1024)).toFixed(2);
+                    progressText.textContent = `Downloaded ${formatBytes(data.progress_in_size)} (${sizeMB} MB)`;
                 } else {
                     progressText.textContent = 'Waiting to start...';
                 }

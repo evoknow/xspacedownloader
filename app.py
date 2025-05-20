@@ -368,47 +368,97 @@ def api_status(job_id):
                     except Exception as update_err:
                         logger.error(f"Error updating job status: {update_err}")
                 
-                # Also check for part file when job is in progress
+                # Always check for part file regardless of job status
                 part_file_exists = False
                 part_file_size = 0
-                if direct_job['status'] in ['in_progress', 'downloading', 'pending']:
-                    part_file = os.path.join(download_dir, f"{space_id}.mp3.part")
+                # Check for part file with .part extension - check for both mp3 and m4a part files
+                for ext in ['mp3', 'm4a', 'wav']:
+                    part_file = os.path.join(download_dir, f"{space_id}.{ext}.part")
                     if os.path.exists(part_file):
                         part_file_exists = True
                         part_file_size = os.path.getsize(part_file)
                         logger.info(f"Found part file for job {job_id}, space {space_id}: {part_file}, size: {part_file_size}")
+                        break
+                
+                if part_file_exists:
+                    # Always update progress_in_size with part file size for accurate progress display
+                    direct_job['progress_in_size'] = part_file_size
+                    direct_job['part_file_exists'] = True
+                    direct_job['part_file_size'] = part_file_size
+                    
+                    # Also update the database to ensure progress_in_size is accurately stored
+                    try:
+                        # Calculate progress percentage based on file size in MB
+                        file_size_mb = part_file_size / (1024*1024)
+                        estimated_percent = max(1, min(99, int(file_size_mb)))
                         
-                        # Always update progress_in_size with part file size for accurate progress display
-                        direct_job['progress_in_size'] = part_file_size
-                        direct_job['part_file_exists'] = True
-                        direct_job['part_file_size'] = part_file_size
+                        update_query = """
+                        UPDATE space_download_scheduler
+                        SET progress_in_size = %s, progress_in_percent = %s, updated_at = NOW(),
+                            status = CASE WHEN status = 'pending' THEN 'in_progress' ELSE status END
+                        WHERE id = %s
+                        """
+                        cursor = space.connection.cursor()
+                        cursor.execute(update_query, (part_file_size, estimated_percent, job_id))
+                        space.connection.commit()
+                        cursor.close()
+                        logger.info(f"Updated job {job_id} progress_in_size to {part_file_size} bytes ({file_size_mb:.2f} MB), progress_in_percent to {estimated_percent}%")
+                    except Exception as update_err:
+                        logger.error(f"Error updating job progress_in_size: {update_err}")
+                    
+                    # Simply report the file size in MB for progress tracking without arbitrary thresholds
+                    # Calculate progress percentage as a proportion of the file size in MB
+                    # This assumes a more linear progression of download size over time
+                    file_size_mb = part_file_size / (1024*1024)
+                    
+                    # Start at 1% for any detectable progress
+                    if part_file_size > 0:
+                        estimated_percent = max(1, min(99, int(file_size_mb)))
+                    else:
+                        estimated_percent = 0
                         
-                        # If part file exists but no progress in job, estimate progress
-                        if (direct_job['progress_in_percent'] is None or direct_job['progress_in_percent'] == 0) and part_file_size > 1024*1024:
-                            # Estimate progress based on file size (very rough estimate)
-                            estimated_percent = max(1, min(10, int(part_file_size / (1024*1024) / 5)))
-                            logger.info(f"Estimating progress as {estimated_percent}% based on part file size")
-                            direct_job['progress_in_percent'] = estimated_percent
-                            
-                            # Try to update the database
-                            try:
-                                if cursor:
-                                    # Always update progress_in_size regardless of progress_in_percent
-                                    update_query = """
-                                    UPDATE space_download_scheduler
-                                    SET progress_in_size = %s, updated_at = NOW(),
-                                        progress_in_percent = CASE 
-                                            WHEN progress_in_percent IS NULL OR progress_in_percent = 0 
-                                            THEN %s 
-                                            ELSE progress_in_percent 
-                                        END
-                                    WHERE id = %s
-                                    """
-                                    cursor.execute(update_query, (part_file_size, estimated_percent, job_id))
-                                    space.connection.commit()
-                                    logger.info(f"Updated job {job_id} with estimated progress based on part file")
-                            except Exception as update_err:
-                                logger.error(f"Error updating job status from part file: {update_err}")
+                    logger.info(f"Current file size: {file_size_mb:.2f} MB, estimated progress: {estimated_percent}%")
+                    
+                    # Use our estimate if it's better than current progress or if current progress is 0
+                    current_progress = direct_job.get('progress_in_percent', 0) or 0
+                    if estimated_percent > current_progress or current_progress == 0:
+                        logger.info(f"Estimating progress as {estimated_percent}% based on part file size: {part_file_size/1024/1024:.2f}MB")
+                        direct_job['progress_in_percent'] = estimated_percent
+                        
+                        # Try to update the database with a more accurate estimate
+                        try:
+                            if cursor:
+                                # Update both job and space tables with our better estimate
+                                update_query = """
+                                UPDATE space_download_scheduler
+                                SET progress_in_size = %s, updated_at = NOW(),
+                                    status = CASE WHEN status = 'pending' THEN 'in_progress' ELSE status END,
+                                    progress_in_percent = CASE 
+                                        WHEN progress_in_percent IS NULL OR progress_in_percent < %s 
+                                        THEN %s 
+                                        ELSE progress_in_percent 
+                                    END
+                                WHERE id = %s
+                                """
+                                cursor.execute(update_query, (part_file_size, estimated_percent, estimated_percent, job_id))
+                                
+                                # Also update the space record download_cnt field
+                                # Keep the format field for storing file format (mp3, wav, etc), not file size
+                                space_update = """
+                                UPDATE spaces 
+                                SET status = 'downloading', download_cnt = CASE
+                                    WHEN download_cnt IS NULL OR download_cnt < %s
+                                    THEN %s
+                                    ELSE download_cnt
+                                END
+                                WHERE space_id = %s
+                                """
+                                cursor.execute(space_update, (estimated_percent, estimated_percent, space_id))
+                                
+                                space.connection.commit()
+                                logger.info(f"Updated job {job_id} and space {space_id} with estimated progress {estimated_percent}% from part file")
+                        except Exception as update_err:
+                            logger.error(f"Error updating job status from part file: {update_err}")
                 
             # Always explicitly close cursor before using results
             if cursor:
@@ -441,12 +491,19 @@ def api_status(job_id):
                     direct_job['progress_in_percent'] = space_progress
                 
                 # Create a safe dict for response that doesn't reference MySQL objects
+                # Fix: Ensure progress_in_size is properly converted to an integer
+                progress_size = direct_job['progress_in_size']
+                if progress_size is None:
+                    progress_size = 0
+                elif isinstance(progress_size, str) and progress_size.isdigit():
+                    progress_size = int(progress_size)
+                    
                 safe_response = {
                     'job_id': job_id,
                     'space_id': direct_job['space_id'],
                     'status': direct_job['status'] or 'unknown',
                     'progress_in_percent': direct_job['progress_in_percent'] or 0,
-                    'progress_in_size': direct_job['progress_in_size'] or 0,
+                    'progress_in_size': progress_size,
                     'error_message': direct_job['error_message'] or '',
                     'direct_query': True
                 }
@@ -595,17 +652,43 @@ def api_status(job_id):
                 
                 # If checking for file failed, also check for part file
                 if not file_exists and job.get('status') in ['in_progress', 'downloading', 'pending']:
-                    part_file = os.path.join(download_dir, f"{space_id}.mp3.part")
-                    if os.path.exists(part_file):
-                        part_file_exists = True
-                        part_file_size = os.path.getsize(part_file)
-                        logger.info(f"Found part file for space {space_id}: {part_file}, size: {part_file_size}")
+                    # Check for part files with different extensions
+                    for ext in ['mp3', 'm4a', 'wav']:
+                        part_file = os.path.join(download_dir, f"{space_id}.{ext}.part")
+                        if os.path.exists(part_file):
+                            part_file_exists = True
+                            part_file_size = os.path.getsize(part_file)
+                            logger.info(f"Found part file for space {space_id}: {part_file}, size: {part_file_size}")
+                            break
+                    
+                    if part_file_exists:
+                        # Always update progress_in_size in the database
+                        try:
+                            # Calculate progress percentage based on file size in MB
+                            file_size_mb = part_file_size / (1024*1024)
+                            estimated_percent = max(1, min(99, int(file_size_mb)))
+                            
+                            # Update both size and percentage
+                            space.update_download_job(
+                                job_id,
+                                progress_in_size=part_file_size,
+                                progress_in_percent=estimated_percent,
+                                status='in_progress' if space.get_download_job(job_id=job_id).get('status') == 'pending' else None
+                            )
+                            logger.info(f"Updated job {job_id} progress_in_size to {part_file_size} bytes ({file_size_mb:.2f} MB), progress_in_percent to {estimated_percent}%")
+                            
+                            # Update our local progress values
+                            progress_size = part_file_size
+                            progress_percent = estimated_percent
+                        except Exception as update_err:
+                            logger.error(f"Error updating job progress_in_size: {update_err}")
                         
                         # If part file exists but no progress, estimate progress
-                        if progress_percent == 0 and part_file_size > 1024*1024:
-                            # Estimate progress based on file size (very rough estimate)
-                            estimated_percent = max(1, min(10, int(part_file_size / (1024*1024) / 5)))
-                            logger.info(f"Estimating progress as {estimated_percent}% based on part file size")
+                        if progress_percent == 0 and part_file_size > 0:
+                            # Simply use file size in MB as progress indicator without arbitrary thresholds
+                            file_size_mb = part_file_size / (1024*1024)
+                            estimated_percent = max(1, min(99, int(file_size_mb)))
+                            logger.info(f"Current file size: {file_size_mb:.2f} MB, estimated progress: {estimated_percent}%")
                             progress_percent = estimated_percent
                             
                             # Try to update the database
@@ -621,13 +704,18 @@ def api_status(job_id):
             except Exception as file_err:
                 logger.error(f"Error checking file existence: {file_err}")
         
+        # Fix: Ensure progress_in_size is properly converted to an integer
+        progress_size_fixed = progress_size
+        if isinstance(progress_size_fixed, str) and progress_size_fixed.isdigit():
+            progress_size_fixed = int(progress_size_fixed)
+            
         # Return job data in a safe dict
         response = {
             'job_id': job_id,
             'space_id': space_id,
             'status': job.get('status', 'unknown'),
             'progress_in_percent': progress_percent,
-            'progress_in_size': progress_size,
+            'progress_in_size': progress_size_fixed,
             'error_message': job.get('error_message', ''),
             'direct_query': False,
             'file_exists': file_exists
@@ -648,7 +736,11 @@ def api_status(job_id):
         # Add part file info if applicable
         if part_file_exists:
             response['part_file_exists'] = True
-            response['part_file_size'] = part_file_size
+            # Fix: Ensure part_file_size is properly converted to an integer
+            part_size = part_file_size
+            if isinstance(part_size, str) and part_size.isdigit():
+                part_size = int(part_size)
+            response['part_file_size'] = part_size
         
         # Return a clean JSON response that doesn't reference any MySQL objects
         return jsonify(response)
@@ -771,6 +863,27 @@ def api_space_status(space_id):
                     part_file_exists = True
                     part_file_size = os.path.getsize(part_path)
                     logger.info(f"Found partial file: {part_path}, size: {part_file_size} bytes")
+                    
+                    # If job exists, update the progress_in_size
+                    if job and job.get('id'):
+                        try:
+                            # Calculate progress percentage based on file size in MB
+                            file_size_mb = part_file_size / (1024*1024)
+                            estimated_percent = max(1, min(99, int(file_size_mb)))
+                            
+                            update_query = """
+                            UPDATE space_download_scheduler
+                            SET progress_in_size = %s, progress_in_percent = %s, updated_at = NOW()
+                            WHERE id = %s
+                            """
+                            cursor = space.connection.cursor()
+                            cursor.execute(update_query, (part_file_size, estimated_percent, job['id']))
+                            space.connection.commit()
+                            cursor.close()
+                            logger.info(f"Updated job {job['id']} progress_in_size to {part_file_size} bytes ({file_size_mb:.2f} MB), progress_in_percent to {estimated_percent}% from part file")
+                        except Exception as update_err:
+                            logger.error(f"Error updating job progress_in_size: {update_err}")
+                    
                     break
         
         # Ensure space status is consistent with file existence
@@ -816,14 +929,23 @@ def api_space_status(space_id):
             except Exception as space_job_err:
                 logger.error(f"Error updating space status from job: {space_job_err}")
                 
+        # Fix: Ensure file_size and part_file_size are properly converted to integers
+        file_size_fixed = file_size
+        if isinstance(file_size_fixed, str) and file_size_fixed.isdigit():
+            file_size_fixed = int(file_size_fixed)
+            
+        part_size = part_file_size
+        if isinstance(part_size, str) and part_size.isdigit():
+            part_size = int(part_size)
+        
         # Return status data
         response = {
             'space_id': space_id,
             'status': space_status,
             'file_exists': file_path is not None,
-            'file_size': file_size if file_path else 0,
+            'file_size': file_size_fixed if file_path else 0,
             'part_file_exists': part_file_exists,
-            'part_file_size': part_file_size
+            'part_file_size': part_size
         }
         
         # Add job data if available
@@ -833,57 +955,83 @@ def api_space_status(space_id):
             progress_percent = job.get('progress_in_percent') or 0
             progress_size = job.get('progress_in_size') or 0
             
+            # Fix: Ensure progress_size is properly converted to an integer
+            if isinstance(progress_size, str) and progress_size.isdigit():
+                progress_size = int(progress_size)
+            
             # Log for debugging
             logger.info(f"Job data for space {space_id}: status={job_status}, progress={progress_percent}%, size={progress_size} bytes")
             
-            # If we have a part file but progress_size is very small, use part file size
-            if part_file_exists and part_file_size > 0 and progress_size < part_file_size:
-                logger.info(f"Using part file size ({part_file_size}) instead of progress_size ({progress_size})")
+            # Always use part file size if it exists - this is the most accurate indicator
+            if part_file_exists and part_file_size > 0:
+                # First, update progress_size with part file size
+                logger.info(f"Using part file size ({part_file_size}) for progress tracking")
                 progress_size = part_file_size
                 
-                # Update space record to store current part file size for other API endpoints
+                # Always update space record to store current part file size for other API endpoints
                 try:
                     cursor = space.connection.cursor()
                     space_update_query = """
                     UPDATE spaces
-                    SET format = %s, status = 'downloading'
+                    SET status = 'downloading'
                     WHERE space_id = %s
                     """
-                    cursor.execute(space_update_query, (str(part_file_size), space_id))
+                    cursor.execute(space_update_query, (space_id,))
                     space.connection.commit()
                     cursor.close()
-                    logger.info(f"Updated space {space_id} format field with part file size {part_file_size}")
+                    logger.info(f"Updated space {space_id} status to downloading")
                 except Exception as update_err:
-                    logger.error(f"Error updating space format: {update_err}")
+                    logger.error(f"Error updating space status: {update_err}")
                 
-                # If we have a part file with substantial size but progress is 0, estimate progress
-                if part_file_size > 0:  # Always estimate progress for any part file
-                    # Use improved progress estimation based on file size
-                    if part_file_size > 60*1024*1024:  # > 60MB
-                        estimated_percent = 90 + min(9, int((part_file_size - 60*1024*1024) / (10*1024*1024)))
-                    elif part_file_size > 40*1024*1024:  # > 40MB
-                        estimated_percent = 75 + min(15, int((part_file_size - 40*1024*1024) / (1.33*1024*1024)))
-                    elif part_file_size > 20*1024*1024:  # > 20MB
-                        estimated_percent = 50 + min(25, int((part_file_size - 20*1024*1024) / (0.8*1024*1024)))
-                    elif part_file_size > 10*1024*1024:  # > 10MB
-                        estimated_percent = 25 + min(25, int((part_file_size - 10*1024*1024) / (0.4*1024*1024)))
-                    elif part_file_size > 5*1024*1024:   # > 5MB
-                        estimated_percent = 10 + min(15, int((part_file_size - 5*1024*1024) / (0.33*1024*1024)))
-                    elif part_file_size > 1*1024*1024:   # > 1MB
-                        estimated_percent = 1 + min(9, int((part_file_size - 1*1024*1024) / (0.44*1024*1024)))
-                    else:
-                        estimated_percent = 1
+                # Simply report file size in MB as progress indicator without arbitrary thresholds
+                file_size_mb = part_file_size / (1024*1024)
+                
+                # Start at 1% for any detectable progress, cap at 99% (reserve 100% for completion)
+                if part_file_size > 0:
+                    estimated_percent = max(1, min(99, int(file_size_mb)))
+                else:
+                    estimated_percent = 0
+                    
+                logger.info(f"Current file size: {file_size_mb:.2f} MB, estimated progress: {estimated_percent}%")
+                    
+                # Use our estimate if it's better than current progress or if current progress is 0
+                if estimated_percent > progress_percent or progress_percent == 0:
+                    progress_percent = estimated_percent 
+                    logger.info(f"Estimated progress as {estimated_percent}% based on part file size: {part_file_size/1024/1024:.2f}MB")
+                    
+                    # Update the job record with our estimated progress if it's significantly better
+                    try:
+                        cursor = space.connection.cursor()
+                        job_update_query = """
+                        UPDATE space_download_scheduler
+                        SET progress_in_percent = %s, progress_in_size = %s, updated_at = NOW()
+                        WHERE id = %s AND (progress_in_percent < %s OR progress_in_percent IS NULL)
+                        """
+                        cursor.execute(job_update_query, (estimated_percent, part_file_size, job.get('id'), estimated_percent))
+                        space.connection.commit()
+                        cursor.close()
                         
-                    # Only use our estimate if it's better than current progress
-                    if estimated_percent > progress_percent:
-                        progress_percent = estimated_percent 
-                        logger.info(f"Estimated progress as {estimated_percent}% based on part file size: {part_file_size/1024/1024:.2f}MB")
+                        # Also update the space record with download_cnt
+                        cursor = space.connection.cursor()
+                        space_update_query = """
+                        UPDATE spaces
+                        SET download_cnt = %s, updated_at = NOW()
+                        WHERE space_id = %s AND (download_cnt < %s OR download_cnt IS NULL)
+                        """
+                        cursor.execute(space_update_query, (estimated_percent, space_id, estimated_percent))
+                        space.connection.commit()
+                        cursor.close()
+                        
+                        logger.info(f"Updated job {job.get('id')} and space {space_id} with estimated progress {estimated_percent}%")
+                    except Exception as estimate_update_err:
+                        logger.error(f"Error updating progress estimate: {estimate_update_err}")
             
+            # Ensure progress_size is properly handled as an integer
             response.update({
                 'job_id': job.get('id'),
                 'job_status': job_status,
                 'progress_in_percent': progress_percent,
-                'progress_in_size': progress_size,
+                'progress_in_size': progress_size,  # Already fixed above
                 'job_updated_at': job.get('updated_at'),
                 'job_process_id': job.get('process_id')
             })
@@ -938,8 +1086,10 @@ def api_space_status(space_id):
         
         # Even if no job was found, if we have a part file, report some progress
         elif part_file_exists and part_file_size > 0:
-            # Estimate progress based on typical audio file size (30-100MB)
-            estimated_percent = max(1, min(10, int(part_file_size / (1024*1024) / 5)))
+            # Simply use file size in MB as progress indicator without arbitrary thresholds
+            file_size_mb = part_file_size / (1024*1024)
+            estimated_percent = max(1, min(99, int(file_size_mb)))
+            logger.info(f"Current file size: {file_size_mb:.2f} MB, estimated progress: {estimated_percent}%")
             
             response.update({
                 'part_file_detected': True,
@@ -1208,7 +1358,7 @@ def server_error(e):
 if __name__ == '__main__':
     # Get host and port from environment or use defaults
     host = os.environ.get('HOST', '0.0.0.0')  # Listen on all interfaces
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 8080))
     
     # Print startup message
     print(f"Starting XSpace Downloader Web App on {host}:{port}")
