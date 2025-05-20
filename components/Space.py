@@ -11,8 +11,9 @@ from mysql.connector import Error
 from datetime import datetime
 from pathlib import Path
 
-# Test space URL for compatibility with tests
+# Test space URLs for compatibility with tests
 TEST_SPACE_URL = "https://x.com/i/spaces/1dRJZEpyjlNGB"
+TEST_XSPACE_URL = "https://x.com/space/1dRJZEpyjlNGB"
 
 class Space:
     """
@@ -51,6 +52,14 @@ class Space:
         match = re.search(pattern, url)
         if match:
             return match.group(1)
+            
+        # Match patterns for X URLs like https://x.com/space/1dRJZEpyjlNGB
+        # or https://x.com/1dRJZEpyjlNGB
+        xspace_pattern = r'x\.com/(?:space/)?([a-zA-Z0-9]+)(?:\?|$)'
+        xspace_match = re.search(xspace_pattern, url)
+        if xspace_match:
+            return xspace_match.group(1)
+            
         return None
     
     def create_space(self, url, title=None, notes=None, user_id=0, visitor_id=None):

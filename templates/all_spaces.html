@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}All Downloaded Spaces - XSpace Downloader{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4>All Downloaded Spaces</h4>
+                <a href="{{ url_for('index') }}" class="btn btn-outline-primary btn-sm">Back to Home</a>
+            </div>
+            <div class="card-body">
+                {% if spaces %}
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>Space ID</th>
+                                <th>Downloaded</th>
+                                <th>Size</th>
+                                <th>Format</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for space in spaces %}
+                            <tr>
+                                <td>{{ space.space_id }}</td>
+                                <td>{{ space.updated_at }}</td>
+                                <td>{% if space.file_exists %}{{ space.file_size|filesizeformat }}{% else %}N/A{% endif %}</td>
+                                <td>{% if space.file_exists %}{{ space.file_extension }}{% else %}N/A{% endif %}</td>
+                                <td>
+                                    {% if space.file_exists %}
+                                    <a href="{{ url_for('space_page', space_id=space.space_id) }}" class="btn btn-primary btn-sm">
+                                        <i class="bi bi-play-fill"></i> Listen
+                                    </a>
+                                    <a href="{{ url_for('download_space', space_id=space.space_id, attachment=1) }}" class="btn btn-outline-secondary btn-sm">
+                                        <i class="bi bi-download"></i> Download
+                                    </a>
+                                    {% else %}
+                                    <span class="badge bg-danger">File Missing</span>
+                                    <a href="{{ url_for('submit_space') }}?space_url={{ space.space_url|urlencode if space.space_url else '' }}" class="btn btn-outline-primary btn-sm">
+                                        Re-download
+                                    </a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info">
+                    <p>No downloaded spaces found. <a href="{{ url_for('index') }}">Submit a space for download</a>.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

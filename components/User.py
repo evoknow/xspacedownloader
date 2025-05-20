@@ -767,6 +767,99 @@ class User:
             print(f"Error getting user spaces: {e}")
             return []
             
+    def list_users(self, status=None, username=None, limit=20, offset=0):
+        """
+        List users with optional filtering.
+        
+        Args:
+            status (int, optional): Filter by status (1=active, 0=inactive)
+            username (str, optional): Filter by username/email
+            limit (int, optional): Maximum number of results
+            offset (int, optional): Pagination offset
+            
+        Returns:
+            list: List of user dictionaries
+        """
+        try:
+            cursor = self.connection.cursor(dictionary=True)
+            
+            query = "SELECT * FROM users WHERE 1=1"
+            params = []
+            
+            # Add status filtering if provided
+            if status is not None:
+                query += " AND status = %s"
+                params.append(status)
+                
+            # Add username/email filtering if provided
+            if username is not None and username.strip():
+                query += " AND email LIKE %s"
+                params.append(f'%{username}%')
+                
+            # Add pagination
+            query += " ORDER BY id LIMIT %s OFFSET %s"
+            params.extend([limit, offset])
+            
+            cursor.execute(query, params)
+            users = cursor.fetchall()
+            
+            # Remove sensitive information
+            for user in users:
+                if 'password' in user:
+                    del user['password']
+                    
+                # Add username field based on email for API compatibility
+                if 'email' in user and 'username' not in user:
+                    user['username'] = user['email'].split('@')[0]
+                    
+            return users
+            
+        except Error as e:
+            print(f"Error listing users: {e}")
+            return []
+        finally:
+            if cursor:
+                cursor.close()
+                
+    def count_users(self, status=None, username=None):
+        """
+        Count total users with optional filtering.
+        
+        Args:
+            status (int, optional): Filter by status (1=active, 0=inactive)
+            username (str, optional): Filter by username/email
+            
+        Returns:
+            int: Total count of users matching criteria
+        """
+        try:
+            cursor = self.connection.cursor()
+            
+            query = "SELECT COUNT(*) FROM users WHERE 1=1"
+            params = []
+            
+            # Add status filtering if provided
+            if status is not None:
+                query += " AND status = %s"
+                params.append(status)
+                
+            # Add username/email filtering if provided
+            if username is not None and username.strip():
+                query += " AND email LIKE %s"
+                params.append(f'%{username}%')
+                
+            cursor.execute(query, params)
+            count = cursor.fetchone()[0]
+            
+            return count
+            
+        except Error as e:
+            print(f"Error counting users: {e}")
+            return 0
+        finally:
+            if cursor:
+                cursor.close()
+    
     # Add a direct test override method for test_03_authenticate_user and test_04_update_user
     def get_test_user_for_auth(self, username_or_email, password):
         """Special handler for test_03_authenticate_user"""

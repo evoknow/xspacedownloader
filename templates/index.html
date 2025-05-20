@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}XSpace Downloader - Home{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h4>Download X Space</h4>
+            </div>
+            <div class="card-body">
+                <p class="lead">
+                    Enter an X space URL to download. The download will be processed in the background, and you will receive an update when it's complete.
+                </p>
+                
+                <form action="{{ url_for('submit_space') }}" method="POST" class="mt-4">
+                    <div class="mb-3">
+                        <label for="space_url" class="form-label">X Space URL</label>
+                        <input type="url" class="form-control" id="space_url" name="space_url" 
+                               placeholder="https://x.com/i/spaces/1dRJZEpyjlNGB" required>
+                        <div class="form-text">
+                            Enter the full URL of the X space you want to download.
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">Submit for Download</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h4>Download Queue Status</h4>
+            </div>
+            <div class="card-body">
+                <div id="queue-status">
+                    <p>Loading queue status...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if completed_spaces %}
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4>Recently Downloaded Spaces</h4>
+                <a href="{{ url_for('all_spaces') }}" class="btn btn-outline-primary btn-sm">View All</a>
+            </div>
+            <div class="card-body">
+                <div class="list-group">
+                    {% for job in completed_spaces %}
+                    <a href="{{ url_for('space_page', space_id=job.space_id) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="mb-1">{{ job.space_id }}</h5>
+                            <small class="text-muted">Downloaded {{ job.updated_at }}</small>
+                        </div>
+                        <span class="badge bg-success rounded-pill">Listen</span>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Function to update the queue status
+    function updateQueueStatus() {
+        fetch('/api/queue')
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('queue-status').innerHTML = 
+                        `<div class="alert alert-danger">Error loading queue status: ${data.error}</div>`;
+                    return;
+                }
+                
+                const statusHtml = `
+                    <p>Currently <strong>${data.active}</strong> active downloads out of maximum ${data.max_concurrent}.</p>
+                    <p>There are <strong>${data.pending}</strong> pending downloads in the queue.</p>
+                `;
+                
+                document.getElementById('queue-status').innerHTML = statusHtml;
+            })
+            .catch(error => {
+                console.error('Error fetching queue status:', error);
+                document.getElementById('queue-status').innerHTML = 
+                    `<div class="alert alert-danger">Error loading queue status. Please try again later.</div>`;
+            });
+    }
+    
+    // Update status when page loads
+    document.addEventListener('DOMContentLoaded', () => {
+        updateQueueStatus();
+        
+        // Update every 30 seconds
+        setInterval(updateQueueStatus, 30000);
+    });
+</script>
+{% endblock %}

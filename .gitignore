@@ -22,9 +22,13 @@ downloads/
 *.swp
 *.swo
 
-# Logs
+# Logs and test output
 *.log
 logs/
+api_test_*.json
+setup_*.txt
+*.pid
+*.bak
 
 # Dependency directories
 node_modules/

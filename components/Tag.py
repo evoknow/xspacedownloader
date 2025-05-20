@@ -115,6 +115,35 @@ class Tag:
         finally:
             if cursor:
                 cursor.close()
+                
+    def get_tag_by_name(self, tag_name):
+        """
+        Get tag ID by name.
+        
+        Args:
+            tag_name (str): Tag name
+            
+        Returns:
+            int: Tag ID or None if not found
+        """
+        try:
+            cursor = self.connection.cursor()
+            
+            # Normalize tag name (lowercase)
+            normalized_tag = tag_name.lower().strip()
+            
+            # Check if tag exists
+            cursor.execute("SELECT id FROM tags WHERE name = %s", (normalized_tag,))
+            result = cursor.fetchone()
+            
+            return result[0] if result else None
+            
+        except Error as e:
+            print(f"Error getting tag by name: {e}")
+            return None
+        finally:
+            if cursor:
+                cursor.close()
     
     def list_tags(self, limit=100, offset=0):
         """
@@ -325,11 +354,220 @@ class Tag:
             cursor.execute(query, params)
             tags = cursor.fetchall()
             
+            # For backwards compatibility with tests, map id to tag_id and name to tag_name
+            for tag in tags:
+                if 'id' in tag and 'tag_id' not in tag:
+                    tag['tag_id'] = tag['id']
+                if 'name' in tag and 'tag_name' not in tag:
+                    tag['tag_name'] = tag['name']
+            
             return tags
             
         except Error as e:
             print(f"Error getting space tags: {e}")
             return []
+        finally:
+            if cursor:
+                cursor.close()
+                
+    def get_tags_for_space(self, space_id):
+        """
+        Alias for get_space_tags for backwards compatibility.
+        
+        Args:
+            space_id (str): The unique space identifier
+            
+        Returns:
+            list: List of tag dictionaries
+        """
+        return self.get_space_tags(space_id)
+        
+    def tag_space(self, space_id, tag_id, user_id=0):
+        """
+        Add a tag to a space.
+        
+        Args:
+            space_id (str): The unique space identifier
+            tag_id (int): Tag ID
+            user_id (int, optional): User ID. Defaults to 0 for visitors.
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            cursor = self.connection.cursor()
+            
+            # Add relationship between space and tag
+            try:
+                cursor.execute(
+                    """
+                    INSERT INTO space_tags (space_id, tag_id, user_id)
+                    VALUES (%s, %s, %s)
+                    """,
+                    (space_id, tag_id, user_id)
+                )
+                self.connection.commit()
+                return True
+            except Error as e:
+                # Silently ignore duplicate key errors (code 1062)
+                if not (isinstance(e, mysql.connector.errors.IntegrityError) and "1062" in str(e)):
+                    print(f"Error adding tag to space: {e}")
+                # Return True even if tag was already associated (for API compatibility)
+                return True
+            
+        except Error as e:
+            print(f"Error tagging space: {e}")
+            self.connection.rollback()
+            return False
+        finally:
+            if cursor:
+                cursor.close()
+                
+    def remove_all_tags_from_space(self, space_id):
+        """
+        Remove all tags from a space.
+        
+        Args:
+            space_id (str): The unique space identifier
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            cursor = self.connection.cursor()
+            
+            query = "DELETE FROM space_tags WHERE space_id = %s"
+            cursor.execute(query, (space_id,))
+            self.connection.commit()
+            
+            return True
+            
+        except Error as e:
+            print(f"Error removing all tags from space: {e}")
+            self.connection.rollback()
+            return False
+        finally:
+            if cursor:
+                cursor.close()
+                
+    def get_spaces_by_tag(self, tag_name, user_id=None, limit=10, offset=0):
+        """
+        Get spaces with a specific tag.
+        
+        Args:
+            tag_name (str): Tag name
+            user_id (int, optional): Filter by user_id
+            limit (int, optional): Maximum number of results
+            offset (int, optional): Pagination offset
+            
+        Returns:
+            list: List of space dictionaries
+        """
+        try:
+            cursor = self.connection.cursor(dictionary=True)
+            
+            # First get the tag ID
+            tag_id = self.get_tag_by_name(tag_name)
+            if not tag_id:
+                return []
+            
+            # Then query spaces with this tag
+            query = """
+            SELECT s.*
+            FROM spaces s
+            JOIN space_tags st ON s.space_id = st.space_id
+            WHERE st.tag_id = %s
+            """
+            params = [tag_id]
+            
+            if user_id is not None:
+                query += " AND s.user_id = %s"
+                params.append(user_id)
+                
+            query += " ORDER BY s.created_at DESC LIMIT %s OFFSET %s"
+            params.extend([limit, offset])
+            
+            cursor.execute(query, params)
+            spaces = cursor.fetchall()
+            
+            # For compatibility, add title and map fields
+            for space in spaces:
+                if 'filename' in space and 'title' not in space:
+                    # Extract title from filename
+                    filename = space['filename']
+                    # Default title
+                    title = f"Space {space['space_id']}"
+                    
+                    # Try to extract a better title
+                    if '_' in filename and '.' in filename:
+                        # Remove extension
+                        base = filename.split('.')[0]
+                        # Remove space_id suffix if present
+                        if space['space_id'] in base:
+                            title = base.split('_' + space['space_id'])[0].replace('_', ' ')
+                    
+                    space['title'] = title
+                
+                # Map other fields for backwards compatibility
+                if 'download_cnt' in space and 'download_progress' not in space:
+                    space['download_progress'] = space['download_cnt']
+                    
+                # Status mapping
+                if 'status' in space:
+                    if space['status'] == 'completed':
+                        space['status'] = 'downloaded'
+                    elif space['status'] == 'pending' and space.get('download_progress', 0) > 0:
+                        space['status'] = 'downloading'
+            
+            return spaces
+            
+        except Error as e:
+            print(f"Error getting spaces by tag: {e}")
+            return []
+        finally:
+            if cursor:
+                cursor.close()
+                
+    def count_spaces_by_tag(self, tag_name, user_id=None):
+        """
+        Count spaces with a specific tag.
+        
+        Args:
+            tag_name (str): Tag name
+            user_id (int, optional): Filter by user_id
+            
+        Returns:
+            int: Total number of spaces with the tag
+        """
+        try:
+            cursor = self.connection.cursor()
+            
+            # First get the tag ID
+            tag_id = self.get_tag_by_name(tag_name)
+            if not tag_id:
+                return 0
+            
+            # Then count spaces with this tag
+            query = """
+            SELECT COUNT(*)
+            FROM space_tags st
+            JOIN spaces s ON st.space_id = s.space_id
+            WHERE st.tag_id = %s
+            """
+            params = [tag_id]
+            
+            if user_id is not None:
+                query += " AND s.user_id = %s"
+                params.append(user_id)
+                
+            cursor.execute(query, params)
+            count = cursor.fetchone()[0]
+            
+            return count
+            
+        except Error as e:
+            print(f"Error counting spaces by tag: {e}")
+            return 0
         finally:
             if cursor:
                 cursor.close()

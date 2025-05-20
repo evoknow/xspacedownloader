@@ -238,6 +238,13 @@ class Email:
                             "disposition": "attachment"
                         })
         
+        # Add mail settings to include sandbox mode detection
+        mail_settings = {
+            "sandbox_mode": {
+                "enable": False
+            }
+        }
+        
         # Prepare the request payload
         payload = {
             "personalizations": [personalization],
@@ -251,21 +258,48 @@ class Email:
                     "type": content_type,
                     "value": body
                 }
-            ]
+            ],
+            "mail_settings": mail_settings
+        }
+        
+        # Add reply-to header for better deliverability
+        payload["reply_to"] = {
+            "email": from_email,
+            "name": from_name
         }
         
         if payload_attachments:
             payload["attachments"] = payload_attachments
         
         try:
+            print("\n=== SENDGRID EMAIL DEBUGGING ===")
+            print(f"API Key (first 5 chars): {api_key[:5]}...")
+            print(f"From Email: {from_email}")
+            print(f"From Name: {from_name}")
+            print(f"To: {[recipient['email'] for recipient in personalization['to']]}")
+            print(f"Subject: {subject}")
+            print(f"Content type: {content_type}")
+            print(f"Request URL: https://api.sendgrid.com/v3/mail/send")
+            print(f"Headers: {headers}")
+            print(f"Payload: {json.dumps(payload, indent=2)}")
+            
             response = requests.post(
                 "https://api.sendgrid.com/v3/mail/send",
                 headers=headers,
                 json=payload
             )
             
+            print(f"\nSendGrid API response status: {response.status_code}")
+            print(f"SendGrid API response headers: {dict(response.headers)}")
+            
             if response.status_code == 202:
-                print(f"Email sent successfully via SendGrid")
+                print(f"Email sent successfully via SendGrid (202 Accepted)")
+                print("IMPORTANT: If emails are not being received, check the following:")
+                print("1. Is the SendGrid account in sandbox mode? (emails won't be delivered)")
+                print("2. Has the sender domain been verified in SendGrid?")
+                print("3. Is the API key restricted to only certain operations?")
+                print("4. Are there sending restrictions or limits on the account?")
+                print("5. Check recipient's spam folder")
                 return True
             else:
                 print(f"SendGrid API error: {response.status_code} - {response.text}")
@@ -273,6 +307,8 @@ class Email:
                 
         except Exception as e:
             print(f"Error sending email via SendGrid: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def _send_via_mailgun(self, to_list, from_addr, subject, body, attachments=None, content_type='text/html'):
@@ -336,6 +372,26 @@ class Email:
                 print("Invalid from_email in configuration, cannot determine domain for Mailgun API.")
                 return False
             
+            print("\n=== MAILGUN EMAIL DEBUGGING ===")
+            print(f"API Key (first 5 chars): {api_key[:5]}...")
+            print(f"From: {from_header}")
+            print(f"To: {to_headers}")
+            print(f"Subject: {subject}")
+            print(f"Content type: {content_type}")
+            print(f"Domain extracted: {domain}")
+            print(f"Request URL: https://api.mailgun.net/v3/{domain}/messages")
+            print(f"Request data: {data}")
+            
+            # Check for common Mailgun issues
+            if not domain:
+                print("ERROR: Cannot extract domain from from_email")
+                return False
+                
+            # Most from_emails should be from your Mailgun verified domain
+            if domain not in from_email:
+                print(f"WARNING: Sender email domain ({from_email.split('@')[1]}) doesn't match the Mailgun domain ({domain})")
+                print("This may cause delivery issues. The from_email should use your verified Mailgun domain.")
+            
             response = requests.post(
                 f"https://api.mailgun.net/v3/{domain}/messages",
                 auth=("api", api_key),
@@ -343,15 +399,25 @@ class Email:
                 files=files
             )
             
+            print(f"\nMailgun API response status: {response.status_code}")
+            print(f"Mailgun API response headers: {dict(response.headers)}")
+            print(f"Mailgun API response body: {response.text}")
+            
             if response.status_code == 200:
-                print(f"Email sent successfully via Mailgun")
+                print(f"Email sent successfully via Mailgun (200 OK)")
                 return True
             else:
                 print(f"Mailgun API error: {response.status_code} - {response.text}")
+                if "domain" in response.text.lower():
+                    print("HINT: Verify that your domain is properly configured in Mailgun")
+                if "api key" in response.text.lower():
+                    print("HINT: Verify that your API key is correct and active")
                 return False
                 
         except Exception as e:
             print(f"Error sending email via Mailgun: {e}")
+            import traceback
+            traceback.print_exc()
             return False
         finally:
             # Close file handles

@@ -26,18 +26,44 @@ This will:
 
 ### Updating the schema file
 
-If you make changes to the database structure, you should update the schema file. The repository includes a script for this purpose:
+If you make changes to the database structure, you should update the schema file. The repository includes several scripts for this purpose:
+
+#### Option 1: Using Python (Recommended)
 
 ```bash
-# Make sure you have permissions to connect to the database
+# Simple method that works with limited permissions
+./dump_schema.sh
+```
+
+This script:
+1. Uses Python to connect to the database
+2. Reads credentials from `db_config.json`
+3. Extracts table structure using SQL queries
+4. Works even with limited database permissions
+5. Saves the result to `mysql.schema`
+
+#### Option 2: Using mysqldump
+
+```bash
+# Traditional method using mysqldump
+# Requires more database permissions
 ./dump_sql_schema.sh
 ```
 
 This script:
 1. Reads database credentials from `db_config.json`
-2. Uses `mysqldump` to extract the schema (without data)
-3. Adds header information and usage instructions
+2. Tries multiple methods to extract the schema
+3. Falls back to simpler approaches if permissions are limited
 4. Saves the result to `mysql.schema`
+
+#### Option 3: Direct Python Extraction
+
+```bash
+# Run the Python script directly
+./extract_schema.py
+```
+
+This script provides detailed output during extraction and handles various error conditions.
 
 ## Configuration
 
