@@ -371,11 +371,21 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
     Args:
         job_id (int): Download job ID
         space_id (str): Space ID to download
-        file_type (str): Output file type (mp3, wav, etc)
+        file_type (str): Output file type (mp3, wav, m4a)
         
     Returns:
         Optional[int]: Child process ID if successful, None otherwise
     """
+    # Validate file_type to ensure it's a supported format
+    if not isinstance(file_type, str):
+        logger.warning(f"Invalid file_type {type(file_type)} for job {job_id}, defaulting to mp3")
+        file_type = 'mp3'
+    # Normalize to lowercase
+    file_type = file_type.lower()
+    # Ensure it's one of the supported formats
+    if file_type not in ['mp3', 'm4a', 'wav']:
+        logger.warning(f"Unsupported file_type '{file_type}' for job {job_id}, defaulting to mp3")
+        file_type = 'mp3'
     try:
         # Get absolute paths for logs and downloads
         base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1943,7 +1953,15 @@ def main() -> None:
                             
                         job_id = job.get('id')
                         space_id = job.get('space_id')
+                        
+                        # Ensure file_type is always one of the supported formats
                         file_type = job.get('file_type', 'mp3')
+                        # Normalize file_type to lowercase and ensure it's a valid format
+                        if isinstance(file_type, str):
+                            file_type = file_type.lower()
+                        if file_type not in ['mp3', 'm4a', 'wav']:
+                            logger.warning(f"Invalid file_type '{file_type}' for job {job_id}, defaulting to mp3")
+                            file_type = 'mp3'
                         
                         # Skip if this job is already in active_processes
                         if job_id in active_processes:
