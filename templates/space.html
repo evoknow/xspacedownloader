@@ -357,8 +357,47 @@
             // Update status when page loads
             updateDownloadStatus();
             
+            // Variable to store the interval ID so we can clear it
+            let statusInterval;
+            
+            // Function to check status and decide whether to continue polling
+            function checkStatusAndUpdate() {
+                $.ajax({
+                    url: '/api/space_status/' + spaceId,
+                    type: 'GET',
+                    dataType: 'json',
+                    success: function(data) {
+                        // If the download is complete or failed, stop polling
+                        if ((data.status === 'completed' || data.file_exists) || 
+                            data.status === 'failed' || 
+                            data.progress_in_percent >= 100) {
+                            console.log('Download complete or failed, stopping automatic updates');
+                            clearInterval(statusInterval);
+                            
+                            // Perform one final update
+                            updateDownloadStatus();
+                            
+                            // If file exists and status is completed, reload after a short delay
+                            if (data.file_exists && data.status === 'completed') {
+                                setTimeout(function() {
+                                    window.location.reload();
+                                }, 1000);
+                            }
+                        } else {
+                            // Still in progress, continue with normal updates
+                            updateDownloadStatus();
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error checking space status:', error);
+                        // Continue with normal updates even on error
+                        updateDownloadStatus();
+                    }
+                });
+            }
+            
             // Set interval for updates (every 5 seconds)
-            setInterval(updateDownloadStatus, 5000);
+            statusInterval = setInterval(checkStatusAndUpdate, 5000);
         }
     });
 </script>

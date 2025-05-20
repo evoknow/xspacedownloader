@@ -314,12 +314,55 @@
         // Set interval for updates
         const status = '{{ job.status }}';
         
+        // Variable to store the interval ID so we can clear it later
+        let statusInterval;
+        
         // If the job is still active, update status more frequently
         if (status === 'pending' || status === 'in_progress') {
-            setInterval(updateStatus, 5000); // Update every 5 seconds
-        } else {
-            setInterval(updateStatus, 30000); // Update every 30 seconds
+            statusInterval = setInterval(() => {
+                // Fetch the current status
+                fetch(`/api/status/{{ job.id }}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        // Check if job is completed or failed
+                        if (data.status === 'completed' || data.status === 'failed' || data.progress_in_percent >= 100) {
+                            console.log('Download complete or failed, stopping automatic updates');
+                            // Stop the interval if the job is complete or failed
+                            clearInterval(statusInterval);
+                            // Do one final update to ensure UI shows final state
+                            updateStatus();
+                        } else {
+                            // Job still in progress, update as normal
+                            updateStatus();
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error checking status:', error);
+                        // Continue updates even if there's an error
+                        updateStatus();
+                    });
+            }, 5000); // Check every 5 seconds
+        } else if (status !== 'completed' && status !== 'failed') {
+            // For other statuses that aren't completed or failed, check occasionally
+            statusInterval = setInterval(() => {
+                // Same logic as above but less frequent
+                fetch(`/api/status/{{ job.id }}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'completed' || data.status === 'failed' || data.progress_in_percent >= 100) {
+                            clearInterval(statusInterval);
+                            updateStatus();
+                        } else {
+                            updateStatus();
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error checking status:', error);
+                        updateStatus();
+                    });
+            }, 30000); // Check every 30 seconds
         }
+        // No interval for completed or failed jobs
     });
 </script>
 {% endblock %}
