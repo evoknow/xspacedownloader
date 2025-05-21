@@ -7,7 +7,9 @@ import sys
 import json
 import logging
 import datetime
-from flask import Flask, request, render_template, redirect, url_for, flash, jsonify, session, send_file
+import subprocess
+from pathlib import Path
+from flask import Flask, request, render_template, redirect, url_for, flash, jsonify, session, send_file, Response
 
 # Import our space record fixer
 try:
@@ -38,6 +40,14 @@ except ImportError:
 
 # Import application components
 from components.Space import Space
+# Import SpeechToText component if available
+try:
+    from components.SpeechToText import SpeechToText
+    SPEECH_TO_TEXT_AVAILABLE = True
+except ImportError:
+    SPEECH_TO_TEXT_AVAILABLE = False
+    logger = logging.getLogger('webapp')
+    logger.warning("SpeechToText component not available - transcription features will be limited")
 
 # Configure logging
 logging.basicConfig(
@@ -91,15 +101,46 @@ def get_space_component():
                     return space_component
             except Exception as ping_err:
                 logger.warning(f"Database ping failed: {ping_err}")
+                
+                # Explicitly close the connection to avoid memory leaks or corruption
+                try:
+                    if db_connection and hasattr(db_connection, 'close'):
+                        db_connection.close()
+                        db_connection = None
+                except Exception:
+                    pass
+                        
                 # Will try to reconnect below
         
-        # Create fresh connection if previous checks failed
+        # Create fresh connection if previous checks failed - clean up old one first
+        if space_component:
+            try:
+                if hasattr(space_component, 'connection') and space_component.connection:
+                    if hasattr(space_component.connection, 'close'):
+                        space_component.connection.close()
+            except Exception:
+                # Ignore any errors during cleanup
+                pass
+                
+        # Create a new instance
         space_component = Space()
         if hasattr(space_component, 'connection'):
             db_connection = space_component.connection
             logger.info("Recreated Space component with fresh connection")
     except Exception as e:
         logger.error(f"Error in get_space_component: {e}", exc_info=True)
+        
+        # Cleanup existing resources
+        try:
+            if db_connection and hasattr(db_connection, 'close'):
+                db_connection.close()
+        except Exception:
+            pass
+            
+        # Reset global variables
+        space_component = None
+        db_connection = None
+        
         # Create a new instance as a final fallback
         try:
             space_component = Space()
@@ -110,13 +151,6 @@ def get_space_component():
     
     return space_component
 
-def is_valid_space_url(url):
-    """Check if a given URL appears to be a valid X space URL."""
-    # This pattern matches URLs like https://x.com/i/spaces/1dRJZEpyjlNGB
-    pattern = r'https?://(?:www\.)?(?:twitter|x)\.com/\w+/(?:spaces|status)/\w+'
-    return bool(re.match(pattern, url))
-
-@app.route('/')
 def index():
     """Home page with form to submit a space URL."""
     # Get a list of completed downloads to display
@@ -285,852 +319,63 @@ def status(job_id):
         flash(f'An error occurred: {str(e)}', 'error')
         return redirect(url_for('index'))
 
-@app.route('/api/status/<int:job_id>', methods=['GET'])
-def api_status(job_id):
-    """API endpoint to get job status for AJAX updates."""
-    cursor = None
-    try:
-        # Get Space component with fresh connection if needed
-        space = get_space_component()
-        if not space or not hasattr(space, 'connection') or not space.connection:
-            logger.error("Could not get valid Space component or connection")
-            return jsonify({
-                'job_id': job_id,
-                'status': 'error',
-                'error': 'Database connection unavailable'
-            }), 500
-        
-        # Get job details directly from database for more reliability
-        direct_job = None
-        try:
-            # First check if connection is valid
-            if not space.connection.is_connected():
-                logger.warning("Connection lost before cursor creation, getting new component")
-                space = get_space_component()
-                if not space.connection.is_connected():
-                    raise Exception("Could not reestablish database connection")
-            
-            cursor = space.connection.cursor(dictionary=True)
-            
-            # Use a more detailed query to include all fields and join spaces table 
-            # to get additional information for completed downloads
-            query = """
-            SELECT 
-                sds.id, sds.space_id, sds.status, sds.progress_in_percent, 
-                sds.progress_in_size, sds.error_message, sds.created_at, 
-                sds.updated_at, sds.process_id, sds.end_time,
-                s.status as space_status, s.format as space_format, s.download_cnt
-            FROM space_download_scheduler sds
-            LEFT JOIN spaces s ON sds.space_id = s.space_id
-            WHERE sds.id = %s
-            """
-            cursor.execute(query, (job_id,))
-            direct_job = cursor.fetchone()
-            
-            # If we found the job, also check directly for the file
-            if direct_job and direct_job['space_id']:
-                # Check if file exists on disk, regardless of database status
-                space_id = direct_job['space_id']
-                download_dir = app.config['DOWNLOAD_DIR']
-                file_path = None
-                file_size = 0
-                
-                import os  # Ensure os is imported here
-                for ext in ['mp3', 'm4a', 'wav']:
-                    path = os.path.join(download_dir, f"{space_id}.{ext}")
-                    if os.path.exists(path) and os.path.getsize(path) > 1024*1024:  # > 1MB
-                        file_path = path
-                        file_size = os.path.getsize(path)
-                        logger.info(f"Found file for job {job_id}, space {space_id}: {file_path}, size: {file_size}")
-                        break
-                
-                # If file exists but job doesn't show completed, it should be considered completed
-                if file_path and direct_job['status'] != 'completed':
-                    logger.info(f"Job {job_id} shows status '{direct_job['status']}' but file exists, treating as completed")
-                    direct_job['status'] = 'completed'
-                    direct_job['progress_in_percent'] = 100
-                    direct_job['progress_in_size'] = file_size
-                    direct_job['file_exists'] = True
-                    direct_job['file_path'] = file_path
-                    
-                    # Try to update the database to reflect the completed status
-                    try:
-                        if cursor:
-                            update_query = """
-                            UPDATE space_download_scheduler
-                            SET status = 'completed', progress_in_percent = 100, 
-                                progress_in_size = %s, end_time = NOW(), updated_at = NOW()
-                            WHERE id = %s AND status != 'completed'
-                            """
-                            cursor.execute(update_query, (file_size, job_id))
-                            space.connection.commit()
-                            logger.info(f"Updated job {job_id} to completed status with size {file_size}")
-                    except Exception as update_err:
-                        logger.error(f"Error updating job status: {update_err}")
-                
-                # Always check for part file regardless of job status
-                part_file_exists = False
-                part_file_size = 0
-                # Check for part file with .part extension - check for both mp3 and m4a part files
-                for ext in ['mp3', 'm4a', 'wav']:
-                    part_file = os.path.join(download_dir, f"{space_id}.{ext}.part")
-                    if os.path.exists(part_file):
-                        part_file_exists = True
-                        part_file_size = os.path.getsize(part_file)
-                        logger.info(f"Found part file for job {job_id}, space {space_id}: {part_file}, size: {part_file_size}")
-                        break
-                
-                if part_file_exists:
-                    # Always update progress_in_size with part file size for accurate progress display
-                    direct_job['progress_in_size'] = part_file_size
-                    direct_job['part_file_exists'] = True
-                    direct_job['part_file_size'] = part_file_size
-                    
-                    # Also update the database to ensure progress_in_size is accurately stored
-                    try:
-                        # Calculate progress percentage based on file size in MB
-                        file_size_mb = part_file_size / (1024*1024)
-                        estimated_percent = max(1, min(99, int(file_size_mb)))
-                        
-                        update_query = """
-                        UPDATE space_download_scheduler
-                        SET progress_in_size = %s, progress_in_percent = %s, updated_at = NOW(),
-                            status = CASE WHEN status = 'pending' THEN 'in_progress' ELSE status END
-                        WHERE id = %s
-                        """
-                        cursor = space.connection.cursor()
-                        cursor.execute(update_query, (part_file_size, estimated_percent, job_id))
-                        space.connection.commit()
-                        cursor.close()
-                        logger.info(f"Updated job {job_id} progress_in_size to {part_file_size} bytes ({file_size_mb:.2f} MB), progress_in_percent to {estimated_percent}%")
-                    except Exception as update_err:
-                        logger.error(f"Error updating job progress_in_size: {update_err}")
-                    
-                    # Simply report the file size in MB for progress tracking without arbitrary thresholds
-                    # Calculate progress percentage as a proportion of the file size in MB
-                    # This assumes a more linear progression of download size over time
-                    file_size_mb = part_file_size / (1024*1024)
-                    
-                    # Start at 1% for any detectable progress
-                    if part_file_size > 0:
-                        estimated_percent = max(1, min(99, int(file_size_mb)))
-                    else:
-                        estimated_percent = 0
-                        
-                    logger.info(f"Current file size: {file_size_mb:.2f} MB, estimated progress: {estimated_percent}%")
-                    
-                    # Use our estimate if it's better than current progress or if current progress is 0
-                    current_progress = direct_job.get('progress_in_percent', 0) or 0
-                    if estimated_percent > current_progress or current_progress == 0:
-                        logger.info(f"Estimating progress as {estimated_percent}% based on part file size: {part_file_size/1024/1024:.2f}MB")
-                        direct_job['progress_in_percent'] = estimated_percent
-                        
-                        # Try to update the database with a more accurate estimate
-                        try:
-                            if cursor:
-                                # Update both job and space tables with our better estimate
-                                update_query = """
-                                UPDATE space_download_scheduler
-                                SET progress_in_size = %s, updated_at = NOW(),
-                                    status = CASE WHEN status = 'pending' THEN 'in_progress' ELSE status END,
-                                    progress_in_percent = CASE 
-                                        WHEN progress_in_percent IS NULL OR progress_in_percent < %s 
-                                        THEN %s 
-                                        ELSE progress_in_percent 
-                                    END
-                                WHERE id = %s
-                                """
-                                cursor.execute(update_query, (part_file_size, estimated_percent, estimated_percent, job_id))
-                                
-                                # Also update the space record download_cnt field
-                                # Keep the format field for storing file format (mp3, wav, etc), not file size
-                                space_update = """
-                                UPDATE spaces 
-                                SET status = 'downloading', download_cnt = CASE
-                                    WHEN download_cnt IS NULL OR download_cnt < %s
-                                    THEN %s
-                                    ELSE download_cnt
-                                END
-                                WHERE space_id = %s
-                                """
-                                cursor.execute(space_update, (estimated_percent, estimated_percent, space_id))
-                                
-                                space.connection.commit()
-                                logger.info(f"Updated job {job_id} and space {space_id} with estimated progress {estimated_percent}% from part file")
-                        except Exception as update_err:
-                            logger.error(f"Error updating job status from part file: {update_err}")
-                
-            # Always explicitly close cursor before using results
-            if cursor:
-                try:
-                    cursor.close()
-                except:
-                    pass
-                cursor = None
-            
-            # If we found the job directly, use that data
-            if direct_job:
-                logger.info(f"Retrieved job {job_id} directly from database: {direct_job['status']}, progress: {direct_job['progress_in_percent']}%, size: {direct_job['progress_in_size']} bytes")
-                
-                # For completed jobs, make sure progress is 100% and size is set
-                if direct_job['status'] == 'completed':
-                    if direct_job['progress_in_percent'] != 100:
-                        direct_job['progress_in_percent'] = 100
-                    
-                    # If space has format info (file size), use that as progress_in_size
-                    # if it's bigger than the current value
-                    if direct_job.get('space_format') and direct_job['space_format'] and str(direct_job['space_format']).isdigit():
-                        format_size = int(direct_job['space_format'])
-                        if format_size > (direct_job['progress_in_size'] or 0):
-                            direct_job['progress_in_size'] = format_size
-                
-                # If the job has no progress info but the space has download_cnt, use that
-                if (direct_job['progress_in_percent'] is None or direct_job['progress_in_percent'] == 0) and direct_job.get('download_cnt'):
-                    space_progress = direct_job.get('download_cnt')
-                    logger.info(f"Using download_cnt={space_progress} from spaces table as job has no progress")
-                    direct_job['progress_in_percent'] = space_progress
-                
-                # Create a safe dict for response that doesn't reference MySQL objects
-                # Fix: Ensure progress_in_size is properly converted to an integer
-                progress_size = direct_job['progress_in_size']
-                if progress_size is None:
-                    progress_size = 0
-                elif isinstance(progress_size, str) and progress_size.isdigit():
-                    progress_size = int(progress_size)
-                    
-                safe_response = {
-                    'job_id': job_id,
-                    'space_id': direct_job['space_id'],
-                    'status': direct_job['status'] or 'unknown',
-                    'progress_in_percent': direct_job['progress_in_percent'] or 0,
-                    'progress_in_size': progress_size,
-                    'error_message': direct_job['error_message'] or '',
-                    'direct_query': True
-                }
-                
-                # Add space status if available
-                if direct_job.get('space_status'):
-                    safe_response['space_status'] = direct_job.get('space_status')
-                
-                # Add space format if available and valid
-                if direct_job.get('space_format') and direct_job.get('space_format'):
-                    safe_response['space_format'] = direct_job.get('space_format')
-                
-                # Add download_cnt if available
-                if direct_job.get('download_cnt'):
-                    safe_response['space_download_cnt'] = direct_job.get('download_cnt')
-                
-                # Add part file info if applicable
-                if 'part_file_exists' in locals() and part_file_exists:
-                    safe_response['part_file_exists'] = True
-                    safe_response['part_file_size'] = part_file_size
-                
-                # Add process status (running or not)
-                if direct_job['process_id']:
-                    try:
-                        # On Unix systems, can check if process is running
-                        import os
-                        process_running = False
-                        try:
-                            # This will raise an error if process is not running
-                            os.kill(direct_job['process_id'], 0)
-                            process_running = True
-                        except OSError:
-                            process_running = False
-                        
-                        safe_response['process_running'] = process_running
-                    except Exception as proc_err:
-                        logger.error(f"Error checking process: {proc_err}")
-                
-                # Add file existence information if we checked for it
-                if 'file_path' in locals() and file_path:
-                    safe_response['file_exists'] = True
-                    safe_response['file_path'] = file_path
-                
-                # Use a new JSON object that doesn't reference any potential MySQL objects
-                return jsonify(safe_response)
-        except Exception as db_err:
-            logger.error(f"Error with direct database query: {db_err}", exc_info=True)
-            # Close cursor if it's still open
-            if cursor:
-                try:
-                    cursor.close()
-                except:
-                    pass
-                finally:
-                    cursor = None
-            
-            # Try to get a fresh connection for fallback method
-            space = get_space_component()
-        
-        # Fallback: Get job via Space component method
-        job = None
-        try:
-            job = space.get_download_job(job_id=job_id)
-        except Exception as get_job_err:
-            logger.error(f"Error getting job via Space component: {get_job_err}", exc_info=True)
-            
-        if not job:
-            return jsonify({
-                'job_id': job_id,
-                'status': 'error',
-                'error': 'Job not found'
-            }), 404
-        
-        # Get additional information from spaces table
-        space_details = None
-        if job.get('space_id'):
-            try:
-                space_details = space.get_space(job.get('space_id'))
-            except Exception as space_err:
-                logger.error(f"Error getting space details: {space_err}")
-        
-        # Create a safe dict for response
-        progress_percent = 0
-        progress_size = 0
-        try:
-            # Convert any None values to defaults
-            progress_percent = job.get('progress_in_percent', 0) or 0
-            progress_size = job.get('progress_in_size', 0) or 0
-        except Exception as val_err:
-            logger.error(f"Error processing job values: {val_err}")
-        
-        # If progress is 0 but space has download_cnt, use that instead
-        try:
-            if progress_percent == 0 and space_details and space_details.get('download_cnt'):
-                progress_percent = space_details.get('download_cnt')
-                logger.info(f"Using download_cnt={progress_percent} from spaces table")
-        except Exception as cnt_err:
-            logger.error(f"Error processing download_cnt: {cnt_err}")
-        
-        # Check space_id
-        space_id = None
-        try:
-            space_id = job.get('space_id')
-        except Exception:
-            logger.error("Error getting space_id from job")
-            
-        # Check for file existence
-        file_exists = False
-        file_path = None
-        
-        # Check for part file
-        part_file_exists = False
-        part_file_size = 0
-        
-        # If we have a space_id, check files
-        if space_id:
-            try:
-                download_dir = app.config['DOWNLOAD_DIR']
-                import os
-                
-                # Check for completed file
-                for ext in ['mp3', 'm4a', 'wav']:
-                    path = os.path.join(download_dir, f"{space_id}.{ext}")
-                    if os.path.exists(path) and os.path.getsize(path) > 1024*1024:  # > 1MB
-                        file_exists = True
-                        file_path = path
-                        progress_size = max(progress_size, os.path.getsize(path))
-                        
-                        # If job is not marked completed but file exists, ensure progress is 100%
-                        if job.get('status') != 'completed':
-                            progress_percent = 100
-                            
-                            # Try to update the database record
-                            try:
-                                space.update_download_job(
-                                    job_id,
-                                    status='completed',
-                                    progress_in_percent=100,
-                                    progress_in_size=os.path.getsize(path)
-                                )
-                                logger.info(f"Updated job {job_id} to completed based on file existence")
-                            except Exception as update_err:
-                                logger.error(f"Error updating job to completed: {update_err}")
-                        
-                        break
-                
-                # If checking for file failed, also check for part file
-                if not file_exists and job.get('status') in ['in_progress', 'downloading', 'pending']:
-                    # Check for part files with different extensions
-                    for ext in ['mp3', 'm4a', 'wav']:
-                        part_file = os.path.join(download_dir, f"{space_id}.{ext}.part")
-                        if os.path.exists(part_file):
-                            part_file_exists = True
-                            part_file_size = os.path.getsize(part_file)
-                            logger.info(f"Found part file for space {space_id}: {part_file}, size: {part_file_size}")
-                            break
-                    
-                    if part_file_exists:
-                        # Always update progress_in_size in the database
-                        try:
-                            # Calculate progress percentage based on file size in MB
-                            file_size_mb = part_file_size / (1024*1024)
-                            estimated_percent = max(1, min(99, int(file_size_mb)))
-                            
-                            # Update both size and percentage
-                            space.update_download_job(
-                                job_id,
-                                progress_in_size=part_file_size,
-                                progress_in_percent=estimated_percent,
-                                status='in_progress' if space.get_download_job(job_id=job_id).get('status') == 'pending' else None
-                            )
-                            logger.info(f"Updated job {job_id} progress_in_size to {part_file_size} bytes ({file_size_mb:.2f} MB), progress_in_percent to {estimated_percent}%")
-                            
-                            # Update our local progress values
-                            progress_size = part_file_size
-                            progress_percent = estimated_percent
-                        except Exception as update_err:
-                            logger.error(f"Error updating job progress_in_size: {update_err}")
-                        
-                        # If part file exists but no progress, estimate progress
-                        if progress_percent == 0 and part_file_size > 0:
-                            # Simply use file size in MB as progress indicator without arbitrary thresholds
-                            file_size_mb = part_file_size / (1024*1024)
-                            estimated_percent = max(1, min(99, int(file_size_mb)))
-                            logger.info(f"Current file size: {file_size_mb:.2f} MB, estimated progress: {estimated_percent}%")
-                            progress_percent = estimated_percent
-                            
-                            # Try to update the database
-                            try:
-                                space.update_download_job(
-                                    job_id,
-                                    progress_in_percent=estimated_percent,
-                                    progress_in_size=part_file_size
-                                )
-                                logger.info(f"Updated job {job_id} with estimated progress based on part file")
-                            except Exception as update_err:
-                                logger.error(f"Error updating job status from part file: {update_err}")
-            except Exception as file_err:
-                logger.error(f"Error checking file existence: {file_err}")
-        
-        # Fix: Ensure progress_in_size is properly converted to an integer
-        progress_size_fixed = progress_size
-        if isinstance(progress_size_fixed, str) and progress_size_fixed.isdigit():
-            progress_size_fixed = int(progress_size_fixed)
-            
-        # Return job data in a safe dict
-        response = {
-            'job_id': job_id,
-            'space_id': space_id,
-            'status': job.get('status', 'unknown'),
-            'progress_in_percent': progress_percent,
-            'progress_in_size': progress_size_fixed,
-            'error_message': job.get('error_message', ''),
-            'direct_query': False,
-            'file_exists': file_exists
-        }
-        
-        # Add space details if available
-        if space_details:
-            try:
-                if space_details.get('status'):
-                    response['space_status'] = space_details.get('status')
-                if space_details.get('format'):
-                    response['space_format'] = space_details.get('format')
-                if space_details.get('download_cnt'):
-                    response['space_download_cnt'] = space_details.get('download_cnt')
-            except Exception as detail_err:
-                logger.error(f"Error adding space details to response: {detail_err}")
-        
-        # Add part file info if applicable
-        if part_file_exists:
-            response['part_file_exists'] = True
-            # Fix: Ensure part_file_size is properly converted to an integer
-            part_size = part_file_size
-            if isinstance(part_size, str) and part_size.isdigit():
-                part_size = int(part_size)
-            response['part_file_size'] = part_size
-        
-        # Return a clean JSON response that doesn't reference any MySQL objects
-        return jsonify(response)
-        
-    except Exception as e:
-        # Close cursor if still open
-        if cursor:
-            try:
-                cursor.close()
-            except:
-                pass
-        
-        logger.error(f"Error in API status: {e}", exc_info=True)
-        return jsonify({
-            'job_id': job_id,
-            'status': 'error',
-            'error': f"Error retrieving job status: {str(e)}"
-        }), 500
-        
-@app.route('/api/space_status/<space_id>', methods=['GET'])
-def api_space_status(space_id):
-    """API endpoint to get space status for AJAX updates."""
+@app.route('/spaces')
+def all_spaces():
+    """Display all downloaded spaces."""
     try:
         # Get Space component
         space = get_space_component()
         
-        # Get space details
-        space_details = space.get_space(space_id)
-        if not space_details:
-            # Don't return 404 - create a minimal response that indicates an issue
-            # but allows the frontend to continue processing
-            return jsonify({
-                'space_id': space_id,
-                'status': 'unknown',
-                'file_exists': False,
-                'error': 'Space not found in database'
-            })
+        # Get all completed downloads
+        completed_spaces = space.list_download_jobs(status='completed')
         
-        # Check if the physical file exists
+        # Check which files actually exist
         download_dir = app.config['DOWNLOAD_DIR']
-        file_path = None
-        file_size = 0
-        
-        for ext in ['mp3', 'm4a', 'wav']:
-            path = os.path.join(download_dir, f"{space_id}.{ext}")
-            if os.path.exists(path) and os.path.getsize(path) > 1024*1024:  # > 1MB
-                file_path = path
-                file_size = os.path.getsize(path)
-                break
-        
-        # Get the latest job for this space (any status to include errors)
-        job = None
-        try:
-            cursor = space.connection.cursor(dictionary=True)
-            
-            # Check for any job for this space, prioritize active ones
-            query = """
-            SELECT * FROM space_download_scheduler
-            WHERE space_id = %s
-            ORDER BY 
-                CASE 
-                    WHEN status IN ('in_progress', 'downloading') THEN 1
-                    WHEN status = 'pending' THEN 2
-                    WHEN status = 'completed' THEN 3
-                    ELSE 4
-                END,
-                updated_at DESC, 
-                id DESC 
-            LIMIT 1
-            """
-            cursor.execute(query, (space_id,))
-            job = cursor.fetchone()
-            
-            # If we found a job, ensure that completed jobs have progress_in_percent = 100
-            if job and job['status'] == 'completed' and job['progress_in_percent'] != 100:
-                # Update the job to have 100% progress
-                update_query = """
-                UPDATE space_download_scheduler
-                SET progress_in_percent = 100
-                WHERE id = %s AND status = 'completed' AND progress_in_percent != 100
-                """
-                cursor.execute(update_query, (job['id'],))
-                space.connection.commit()
-                job['progress_in_percent'] = 100
-                logger.info(f"Updated job {job['id']} to have 100% progress")
-                
-            # If there's a completed job but progress_in_size is 0, try to get size from the spaces table
-            if job and job['status'] == 'completed' and (job['progress_in_size'] is None or job['progress_in_size'] == 0):
-                # Check if we have a format value in the spaces table
-                space_query = "SELECT format FROM spaces WHERE space_id = %s"
-                cursor.execute(space_query, (space_id,))
-                space_data = cursor.fetchone()
-                
-                if space_data and space_data['format'] and space_data['format'].isdigit():
-                    format_size = int(space_data['format'])
-                    if format_size > 0:
-                        # Update the job with the size from spaces table
-                        update_query = """
-                        UPDATE space_download_scheduler
-                        SET progress_in_size = %s
-                        WHERE id = %s AND (progress_in_size IS NULL OR progress_in_size = 0)
-                        """
-                        cursor.execute(update_query, (format_size, job['id']))
-                        space.connection.commit()
-                        job['progress_in_size'] = format_size
-                        logger.info(f"Updated job {job['id']} size to {format_size} from spaces table")
-                
-            cursor.close()
-        except Exception as job_err:
-            logger.error(f"Error getting job: {job_err}")
-        
-        # Check for partial file progress even if job is not active
-        part_file_exists = False
-        part_file_size = 0
-        if not file_path:  # Only check if the final file doesn't exist
-            # Check for partial file
+        for job in completed_spaces:
+            file_exists = False
             for ext in ['mp3', 'm4a', 'wav']:
-                part_path = os.path.join(download_dir, f"{space_id}.{ext}.part")
-                if os.path.exists(part_path):
-                    part_file_exists = True
-                    part_file_size = os.path.getsize(part_path)
-                    logger.info(f"Found partial file: {part_path}, size: {part_file_size} bytes")
-                    
-                    # If job exists, update the progress_in_size
-                    if job and job.get('id'):
-                        try:
-                            # Calculate progress percentage based on file size in MB
-                            file_size_mb = part_file_size / (1024*1024)
-                            estimated_percent = max(1, min(99, int(file_size_mb)))
-                            
-                            update_query = """
-                            UPDATE space_download_scheduler
-                            SET progress_in_size = %s, progress_in_percent = %s, updated_at = NOW()
-                            WHERE id = %s
-                            """
-                            cursor = space.connection.cursor()
-                            cursor.execute(update_query, (part_file_size, estimated_percent, job['id']))
-                            space.connection.commit()
-                            cursor.close()
-                            logger.info(f"Updated job {job['id']} progress_in_size to {part_file_size} bytes ({file_size_mb:.2f} MB), progress_in_percent to {estimated_percent}% from part file")
-                        except Exception as update_err:
-                            logger.error(f"Error updating job progress_in_size: {update_err}")
-                    
+                file_path = os.path.join(download_dir, f"{job['space_id']}.{ext}")
+                if os.path.exists(file_path) and os.path.getsize(file_path) > 1024*1024:  # > 1MB
+                    file_exists = True
+                    job['file_exists'] = True
+                    job['file_size'] = os.path.getsize(file_path)
+                    job['file_extension'] = ext
                     break
+            
+            if not file_exists:
+                job['file_exists'] = False
         
-        # Ensure space status is consistent with file existence
-        space_status = space_details.get('status', 'unknown')
-        
-        # If file exists but status doesn't show completed, update it
-        if file_path and space_status != 'completed':
-            try:
-                # Update the space record
-                cursor = space.connection.cursor()
-                update_query = """
-                UPDATE spaces
-                SET status = 'completed', format = %s, downloaded_at = NOW()
-                WHERE space_id = %s AND status != 'completed'
-                """
-                cursor.execute(update_query, (str(file_size), space_id))
-                space.connection.commit()
-                cursor.close()
-                
-                # Update local status
-                space_status = 'completed'
-                logger.info(f"Updated space {space_id} status to completed based on file existence")
-            except Exception as space_update_err:
-                logger.error(f"Error updating space status: {space_update_err}")
-        
-        # If we have a job that's completed but space status isn't, update space status
-        if job and job['status'] == 'completed' and space_status != 'completed':
-            try:
-                # Update the space record
-                cursor = space.connection.cursor()
-                update_query = """
-                UPDATE spaces
-                SET status = 'completed'
-                WHERE space_id = %s AND status != 'completed'
-                """
-                cursor.execute(update_query, (space_id,))
-                space.connection.commit()
-                cursor.close()
-                
-                # Update local status
-                space_status = 'completed'
-                logger.info(f"Updated space {space_id} status to completed based on job status")
-            except Exception as space_job_err:
-                logger.error(f"Error updating space status from job: {space_job_err}")
-                
-        # Fix: Ensure file_size and part_file_size are properly converted to integers
-        file_size_fixed = file_size
-        if isinstance(file_size_fixed, str) and file_size_fixed.isdigit():
-            file_size_fixed = int(file_size_fixed)
-            
-        part_size = part_file_size
-        if isinstance(part_size, str) and part_size.isdigit():
-            part_size = int(part_size)
-        
-        # Return status data
-        response = {
-            'space_id': space_id,
-            'status': space_status,
-            'file_exists': file_path is not None,
-            'file_size': file_size_fixed if file_path else 0,
-            'part_file_exists': part_file_exists,
-            'part_file_size': part_size
-        }
-        
-        # Add job data if available
-        if job:
-            # Make sure values are not None
-            job_status = job.get('status') or 'unknown'
-            progress_percent = job.get('progress_in_percent') or 0
-            progress_size = job.get('progress_in_size') or 0
-            
-            # Fix: Ensure progress_size is properly converted to an integer
-            if isinstance(progress_size, str) and progress_size.isdigit():
-                progress_size = int(progress_size)
-            
-            # Log for debugging
-            logger.info(f"Job data for space {space_id}: status={job_status}, progress={progress_percent}%, size={progress_size} bytes")
-            
-            # Always use part file size if it exists - this is the most accurate indicator
-            if part_file_exists and part_file_size > 0:
-                # First, update progress_size with part file size
-                logger.info(f"Using part file size ({part_file_size}) for progress tracking")
-                progress_size = part_file_size
-                
-                # Always update space record to store current part file size for other API endpoints
-                try:
-                    cursor = space.connection.cursor()
-                    space_update_query = """
-                    UPDATE spaces
-                    SET status = 'downloading'
-                    WHERE space_id = %s
-                    """
-                    cursor.execute(space_update_query, (space_id,))
-                    space.connection.commit()
-                    cursor.close()
-                    logger.info(f"Updated space {space_id} status to downloading")
-                except Exception as update_err:
-                    logger.error(f"Error updating space status: {update_err}")
-                
-                # Simply report file size in MB as progress indicator without arbitrary thresholds
-                file_size_mb = part_file_size / (1024*1024)
-                
-                # Start at 1% for any detectable progress, cap at 99% (reserve 100% for completion)
-                if part_file_size > 0:
-                    estimated_percent = max(1, min(99, int(file_size_mb)))
-                else:
-                    estimated_percent = 0
-                    
-                logger.info(f"Current file size: {file_size_mb:.2f} MB, estimated progress: {estimated_percent}%")
-                    
-                # Use our estimate if it's better than current progress or if current progress is 0
-                if estimated_percent > progress_percent or progress_percent == 0:
-                    progress_percent = estimated_percent 
-                    logger.info(f"Estimated progress as {estimated_percent}% based on part file size: {part_file_size/1024/1024:.2f}MB")
-                    
-                    # Update the job record with our estimated progress if it's significantly better
-                    try:
-                        cursor = space.connection.cursor()
-                        job_update_query = """
-                        UPDATE space_download_scheduler
-                        SET progress_in_percent = %s, progress_in_size = %s, updated_at = NOW()
-                        WHERE id = %s AND (progress_in_percent < %s OR progress_in_percent IS NULL)
-                        """
-                        cursor.execute(job_update_query, (estimated_percent, part_file_size, job.get('id'), estimated_percent))
-                        space.connection.commit()
-                        cursor.close()
-                        
-                        # Also update the space record with download_cnt
-                        cursor = space.connection.cursor()
-                        space_update_query = """
-                        UPDATE spaces
-                        SET download_cnt = %s, updated_at = NOW()
-                        WHERE space_id = %s AND (download_cnt < %s OR download_cnt IS NULL)
-                        """
-                        cursor.execute(space_update_query, (estimated_percent, space_id, estimated_percent))
-                        space.connection.commit()
-                        cursor.close()
-                        
-                        logger.info(f"Updated job {job.get('id')} and space {space_id} with estimated progress {estimated_percent}%")
-                    except Exception as estimate_update_err:
-                        logger.error(f"Error updating progress estimate: {estimate_update_err}")
-            
-            # Ensure progress_size is properly handled as an integer
-            response.update({
-                'job_id': job.get('id'),
-                'job_status': job_status,
-                'progress_in_percent': progress_percent,
-                'progress_in_size': progress_size,  # Already fixed above
-                'job_updated_at': job.get('updated_at'),
-                'job_process_id': job.get('process_id')
-            })
-            
-            # Check if process is still running
-            if job.get('process_id'):
-                try:
-                    import os
-                    process_running = False
-                    try:
-                        # This will raise an error if process is not running
-                        os.kill(job.get('process_id'), 0)
-                        process_running = True
-                    except (OSError, TypeError):
-                        process_running = False
-                    
-                    response['process_running'] = process_running
-                except Exception as proc_err:
-                    logger.error(f"Error checking process: {proc_err}")
-            
-            # Include error message for failed jobs
-            if job_status == 'failed' and job.get('error_message'):
-                response['error_message'] = job.get('error_message')
-                
-            # If job status is 'in_progress' but part file exists and is growing,
-            # provide an estimate even if the bg_downloader isn't reporting progress
-            if (job_status == 'in_progress' or job_status == 'downloading') and part_file_exists:
-                # Get a timestamp from when job was last updated
-                last_updated = job.get('updated_at')
-                
-                # If last update was more than 30 seconds ago but we have a part file,
-                # the background process might not be reporting progress correctly
-                if last_updated:
-                    now = datetime.datetime.now()
-                    try:
-                        # Calculate time difference
-                        if isinstance(last_updated, str):
-                            from dateutil import parser
-                            last_updated = parser.parse(last_updated)
-                        
-                        time_diff = now - last_updated
-                        
-                        # If we haven't had an update in a while but part file exists
-                        if time_diff.total_seconds() > 30 and part_file_size > 1024*1024:
-                            response['part_file_detected'] = True
-                            
-                            # Show at least 1% progress if file is substantial
-                            if progress_percent == 0 and part_file_size > 1024*1024:
-                                response['progress_in_percent'] = 1
-                    except Exception as time_err:
-                        logger.error(f"Error calculating time difference: {time_err}")
-        
-        # Even if no job was found, if we have a part file, report some progress
-        elif part_file_exists and part_file_size > 0:
-            # Simply use file size in MB as progress indicator without arbitrary thresholds
-            file_size_mb = part_file_size / (1024*1024)
-            estimated_percent = max(1, min(99, int(file_size_mb)))
-            logger.info(f"Current file size: {file_size_mb:.2f} MB, estimated progress: {estimated_percent}%")
-            
-            response.update({
-                'part_file_detected': True,
-                'job_status': 'in_progress',  # Assume download is in progress
-                'progress_in_percent': estimated_percent,
-                'progress_in_size': part_file_size
-            })
-        
-        return jsonify(response)
+        return render_template('all_spaces.html', spaces=completed_spaces)
         
     except Exception as e:
-        logger.error(f"Error in API space status: {e}", exc_info=True)
-        return jsonify({
-            'space_id': space_id,
-            'status': 'error',
-            'error': f"Error retrieving space status: {str(e)}"
-        })
+        logger.error(f"Error listing all spaces: {e}", exc_info=True)
+        flash(f'An error occurred: {str(e)}', 'error')
+        return redirect(url_for('index'))
 
-@app.route('/api/queue', methods=['GET'])
-def api_queue():
-    """API endpoint to get download queue status."""
+@app.route('/', methods=['GET'])
+def index():
+    """Home page with form to submit a space URL."""
+    # Get a list of completed downloads to display
     try:
-        # Get Space component
         space = get_space_component()
-        
-        # Get active downloads
-        in_progress = space.list_download_jobs(status='in_progress')
-        
-        # Get pending downloads
-        pending = space.list_download_jobs(status='pending')
-        
-        # Return queue data
-        return jsonify({
-            'active': len(in_progress),
-            'pending': len(pending),
-            'max_concurrent': app.config['MAX_CONCURRENT_DOWNLOADS']
-        })
-        
+        completed_spaces = space.list_download_jobs(status='completed', limit=5)
+        return render_template('index.html', completed_spaces=completed_spaces)
     except Exception as e:
-        logger.error(f"Error in API queue: {e}", exc_info=True)
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error loading completed spaces: {e}", exc_info=True)
+        return render_template('index.html')
+
+@app.route('/api/check_url', methods=['POST'])
+def check_url():
+    """API endpoint to check if a URL is valid."""
+    url = request.json.get('url', '')
+    valid = is_valid_space_url(url)
+    return jsonify({'valid': valid})
+
+def is_valid_space_url(url):
+    """Check if a given URL appears to be a valid X space URL."""
+    # This pattern matches URLs like https://x.com/i/spaces/1dRJZEpyjlNGB
+    pattern = r'https?://(?:www\.)?(?:twitter|x)\.com/\w+/(?:spaces|status)/\w+'
+    return bool(re.match(pattern, url))
 
 @app.route('/spaces/<space_id>')
 def space_page(space_id):
@@ -1157,7 +402,7 @@ def space_page(space_id):
         display_details = None
         
         # First priority: Use the database record if it exists
-        space_details = space.get_space(space_id)
+        space_details = space.get_space(space_id, include_transcript=True)
         if space_details:
             display_details = space_details
             
@@ -1230,13 +475,6 @@ def space_page(space_id):
         job = cursor.fetchone()
         cursor.close()
         
-        # Add debug logging to trace values being sent to template
-        logger.info(f"Rendering template for space {space_id}:")
-        logger.info(f"  file_path = {file_path}")
-        logger.info(f"  space.status = {space_details.get('status')}")
-        logger.info(f"  file_extension = {file_extension}")
-        logger.info(f"  file_size = {file_size}")
-        
         # Ensure we always have the right content type for the audio player
         if file_extension:
             # Map file extensions to MIME types
@@ -1252,20 +490,6 @@ def space_page(space_id):
             # Default to MP3 if no extension is found
             content_type = 'audio/mpeg'
             
-        # For debugging - create a special endpoint for debug info
-        if 'debug' in request.args:
-            debug_info = {
-                'space_id': space_id,
-                'file_path': str(file_path) if file_path else None,
-                'file_exists': file_path is not None,
-                'file_size': file_size,
-                'file_extension': file_extension,
-                'content_type': content_type,
-                'space_status': space_details.get('status'),
-                'space_details': space_details
-            }
-            return jsonify(debug_info)
-        
         return render_template('space.html', 
                                space=space_details, 
                                file_path=file_path, 
@@ -1279,44 +503,357 @@ def space_page(space_id):
         flash(f'An error occurred: {str(e)}', 'error')
         return redirect(url_for('index'))
 
-@app.route('/spaces')
-def all_spaces():
-    """Display all downloaded spaces."""
+@app.route('/api/queue', methods=['GET'])
+def api_queue():
+    """API endpoint to get download queue status."""
     try:
         # Get Space component
         space = get_space_component()
         
-        # Get all completed downloads
-        completed_spaces = space.list_download_jobs(status='completed')
+        # Get active downloads
+        in_progress = space.list_download_jobs(status='in_progress')
         
-        # Check which files actually exist
-        download_dir = app.config['DOWNLOAD_DIR']
-        for job in completed_spaces:
-            file_exists = False
-            for ext in ['mp3', 'm4a', 'wav']:
-                file_path = os.path.join(download_dir, f"{job['space_id']}.{ext}")
-                if os.path.exists(file_path) and os.path.getsize(file_path) > 1024*1024:  # > 1MB
-                    file_exists = True
-                    job['file_exists'] = True
-                    job['file_size'] = os.path.getsize(file_path)
-                    job['file_extension'] = ext
-                    break
-            
-            if not file_exists:
-                job['file_exists'] = False
+        # Get pending downloads
+        pending = space.list_download_jobs(status='pending')
         
-        return render_template('all_spaces.html', spaces=completed_spaces)
+        # Return queue data
+        return jsonify({
+            'active': len(in_progress),
+            'pending': len(pending),
+            'max_concurrent': app.config['MAX_CONCURRENT_DOWNLOADS']
+        })
         
     except Exception as e:
-        logger.error(f"Error listing all spaces: {e}", exc_info=True)
-        flash(f'An error occurred: {str(e)}', 'error')
-        return redirect(url_for('index'))
+        logger.error(f"Error in API queue: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
-@app.route('/download/<space_id>')
-def download_space(space_id):
-    """Serve the space audio file for download or streaming."""
+@app.route('/api/space_status/<space_id>', methods=['GET'])
+def api_space_status(space_id):
+    """API endpoint to get space download status."""
     try:
-        # Check if the file exists
+        # Get Space component
+        space = get_space_component()
+        
+        # Check if the physical file exists
+        download_dir = app.config['DOWNLOAD_DIR']
+        file_exists = False
+        file_size = 0
+        
+        for ext in ['mp3', 'm4a', 'wav']:
+            path = os.path.join(download_dir, f"{space_id}.{ext}")
+            if os.path.exists(path) and os.path.getsize(path) > 1024*1024:  # > 1MB
+                file_exists = True
+                file_size = os.path.getsize(path)
+                break
+        
+        # Get space details
+        space_details = space.get_space(space_id)
+        status = space_details['status'] if space_details else 'unknown'
+        
+        # Get the latest job for this space
+        try:
+            cursor = space.connection.cursor(dictionary=True)
+            query = """
+            SELECT * FROM space_download_scheduler
+            WHERE space_id = %s 
+            ORDER BY id DESC LIMIT 1
+            """
+            cursor.execute(query, (space_id,))
+            job = cursor.fetchone()
+            cursor.close()
+        except Exception as e:
+            logger.error(f"Error fetching job for space status API: {e}")
+            job = None
+            
+        result = {
+            'space_id': space_id,
+            'file_exists': file_exists,
+            'status': status,
+            'file_size': file_size if file_exists else 0
+        }
+        
+        # Add job details if job exists
+        if job:
+            result.update({
+                'job_id': job['id'],
+                'job_status': job['status'],
+                'progress_in_percent': job['progress_in_percent'],
+                'progress_in_size': job['progress_in_size'],
+                'error_message': job['error_message'] if 'error_message' in job else None,
+                'start_time': job['start_time'].isoformat() if job['start_time'] else None,
+                'end_time': job['end_time'].isoformat() if job['end_time'] else None
+            })
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error in space status API: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/transcript_job/<job_id>', methods=['GET'])
+def api_get_transcript_job(job_id):
+    """API endpoint to get transcript job status."""
+    try:
+        from pathlib import Path
+        import json
+        
+        # Check if job exists
+        job_file = Path(f'./transcript_jobs/{job_id}.json')
+        if not job_file.exists():
+            return jsonify({'error': 'Job not found'}), 404
+        
+        # Read job data
+        with open(job_file, 'r') as f:
+            job_data = json.load(f)
+        
+        # Get space details
+        space = get_space_component()
+        
+        # If job is completed, include transcript ID
+        if job_data['status'] == 'completed' and 'result' in job_data and job_data['result']:
+            # Try to get transcript details
+            transcript_id = job_data['result'].get('transcript_id')
+            if transcript_id:
+                transcript = space.get_transcript(transcript_id)
+                if transcript:
+                    job_data['transcript'] = {
+                        'id': transcript_id,
+                        'language': transcript['language'],
+                        'created_at': transcript['created_at'],
+                        'text_sample': transcript['transcript'][:500] + "..." if len(transcript['transcript']) > 500 else transcript['transcript']
+                    }
+        
+        return jsonify(job_data)
+        
+    except Exception as e:
+        logger.error(f"Error getting transcript job status: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+        
+@app.route('/download/<space_id>', methods=['GET'])
+@app.route('/spaces/<space_id>/download', methods=['GET'])
+def download_space(space_id):
+    """Download a space audio file."""
+    try:
+        # Get attachment flag
+        attachment = request.args.get('attachment', '0') == '1'
+        
+        # Get Space component
+        space = get_space_component()
+        
+        # First check if the physical file exists
+        download_dir = app.config['DOWNLOAD_DIR']
+        file_path = None
+        file_size = 0
+        content_type = 'audio/mpeg'  # Default
+        
+        for ext in ['mp3', 'm4a', 'wav']:
+            path = os.path.join(download_dir, f"{space_id}.{ext}")
+            if os.path.exists(path) and os.path.getsize(path) > 1024*1024:  # > 1MB
+                file_path = path
+                file_size = os.path.getsize(path)
+                # Map file extensions to MIME types
+                mime_types = {
+                    'mp3': 'audio/mpeg',
+                    'm4a': 'audio/mp4',
+                    'wav': 'audio/wav',
+                    'ogg': 'audio/ogg',
+                    'flac': 'audio/flac'
+                }
+                content_type = mime_types.get(ext, f'audio/{ext}')
+                break
+        
+        if not file_path:
+            flash('Space file not found', 'error')
+            return redirect(url_for('space_page', space_id=space_id))
+        
+        # Get space details to use for filename
+        space_details = space.get_space(space_id)
+        
+        # Count the download
+        try:
+            cursor = space.connection.cursor()
+            update_query = "UPDATE spaces SET download_cnt = download_cnt + 1 WHERE space_id = %s"
+            cursor.execute(update_query, (space_id,))
+            space.connection.commit()
+            cursor.close()
+        except Exception as e:
+            logger.error(f"Error updating download count: {e}")
+        
+        # Set filename
+        filename = f"{space_id}"
+        if space_details and space_details.get('title'):
+            # Clean the title to make it safe for filenames
+            clean_title = re.sub(r'[^\w\s-]', '', space_details['title']).strip()
+            clean_title = re.sub(r'[-\s]+', '-', clean_title)
+            if clean_title:
+                filename = f"{clean_title}_{space_id}"
+        
+        # Set extension based on content type
+        if content_type == 'audio/mpeg':
+            ext = 'mp3'
+        elif content_type == 'audio/mp4':
+            ext = 'm4a'
+        elif content_type == 'audio/wav':
+            ext = 'wav'
+        elif content_type == 'audio/ogg':
+            ext = 'ogg'
+        elif content_type == 'audio/flac':
+            ext = 'flac'
+        else:
+            ext = os.path.splitext(file_path)[1][1:]  # Extract from path as fallback
+        
+        filename = f"{filename}.{ext}"
+        
+        # Return the file
+        if attachment:
+            return send_file(file_path, as_attachment=True, download_name=filename, mimetype=content_type)
+        else:
+            return send_file(file_path, mimetype=content_type, conditional=True)
+            
+    except Exception as e:
+        logger.error(f"Error downloading space: {e}", exc_info=True)
+        flash(f'An error occurred: {str(e)}', 'error')
+        return redirect(url_for('space_page', space_id=space_id))
+        
+@app.errorhandler(404)
+def page_not_found(e):
+    """Handle 404 errors."""
+    # Check if this is an API request
+    if request.path.startswith('/api/') or request.is_json:
+        return jsonify({'error': 'Resource not found'}), 404
+    return render_template('404.html'), 404
+
+@app.errorhandler(500)
+def server_error(e):
+    """Handle 500 errors."""
+    logger.error(f"Server error: {e}", exc_info=True)
+    # Check if this is an API request
+    if request.path.startswith('/api/') or request.is_json:
+        return jsonify({'error': 'Internal server error'}), 500
+    return render_template('500.html'), 500
+
+@app.after_request
+def after_request(response):
+    """Cleanup after each request to avoid memory leaks."""
+    # Clean up resources that might cause memory corruption
+    try:
+        from gc import collect
+        collect()
+    except Exception:
+        pass
+    return response
+
+@app.route('/api/transcript/<transcript_id>', methods=['GET'])
+def api_get_transcript(transcript_id):
+    """API endpoint to get transcript content."""
+    try:
+        # Get a fresh Space component to avoid connection issues
+        try:
+            # Explicitly close any existing connection
+            global space_component, db_connection
+            if db_connection and hasattr(db_connection, 'close'):
+                try:
+                    db_connection.close()
+                except Exception:
+                    pass
+            space_component = None
+            db_connection = None
+            
+            # Get a fresh instance
+            space = Space()
+            
+            # Store in global variables
+            space_component = space
+            if hasattr(space, 'connection'):
+                db_connection = space.connection
+        except Exception as conn_err:
+            logger.error(f"Error creating fresh connection: {conn_err}", exc_info=True)
+            # Fall back to standard get_space_component
+            space = get_space_component()
+        
+        # Validate transcript_id is a valid integer
+        try:
+            transcript_id = int(transcript_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid transcript ID format'}), 400
+        
+        # Get transcript from database
+        try:
+            transcript = space.get_transcript(transcript_id)
+        except Exception as db_err:
+            logger.error(f"Database error getting transcript: {db_err}", exc_info=True)
+            return jsonify({'error': 'Database error retrieving transcript'}), 500
+            
+        if not transcript:
+            return jsonify({'error': 'Transcript not found'}), 404
+            
+        # Safely extract transcript fields with default values
+        safe_transcript = {
+            'transcript_id': transcript_id,
+            'language': 'unknown',
+            'transcript': '',
+            'created_at': None
+        }
+        
+        # Only update with values that exist in the transcript
+        if isinstance(transcript, dict):
+            if 'language' in transcript and transcript['language']:
+                safe_transcript['language'] = str(transcript['language'])
+                
+            if 'transcript' in transcript and transcript['transcript']:
+                safe_transcript['transcript'] = str(transcript['transcript'])
+                
+            if 'created_at' in transcript and transcript['created_at']:
+                try:
+                    # Convert to string if it's a datetime
+                    if hasattr(transcript['created_at'], 'isoformat'):
+                        safe_transcript['created_at'] = transcript['created_at'].isoformat()
+                    else:
+                        safe_transcript['created_at'] = str(transcript['created_at'])
+                except Exception:
+                    # Leave as default if conversion fails
+                    pass
+                    
+        # Return transcript data
+        return jsonify(safe_transcript)
+        
+    except Exception as e:
+        logger.error(f"Error getting transcript: {e}", exc_info=True)
+        return jsonify({'error': 'An unexpected error occurred'}), 500
+
+# Route for transcribing a space
+@app.route('/api/transcribe/<space_id>', methods=['POST'])
+@app.route('/spaces/<space_id>/transcribe', methods=['POST'])
+def transcribe_space(space_id):
+    """Submit a space for transcription."""
+    try:
+        # Check if SpeechToText component is available
+        if not SPEECH_TO_TEXT_AVAILABLE:
+            if request.is_json:
+                return jsonify({'error': 'Speech-to-text functionality is not available'}), 400
+            flash('Speech-to-text functionality is not available', 'error')
+            return redirect(url_for('space_page', space_id=space_id))
+        
+        # Get language parameter based on request type
+        if request.is_json:
+            # API request with JSON body
+            language = request.json.get('language', 'en')
+            model = request.json.get('model', 'base')
+            detect_language = request.json.get('detect_language', False)
+            translate_to = request.json.get('translate_to')
+            overwrite = request.json.get('overwrite', True)
+        else:
+            # Form submission
+            language = request.form.get('language', 'en')
+            model = request.form.get('model', 'base')
+            detect_language = request.form.get('detect_language', 'false') == 'true'
+            translate_to = request.form.get('translate_to')
+            overwrite = request.form.get('overwrite', 'true') == 'true'
+        
+        # Get Space component
+        space = get_space_component()
+        
+        # First check if the physical file exists
         download_dir = app.config['DOWNLOAD_DIR']
         file_path = None
         
@@ -1327,38 +864,75 @@ def download_space(space_id):
                 break
         
         if not file_path:
-            flash('File not found', 'error')
+            if request.is_json:
+                return jsonify({'error': 'Space audio file not found'}), 404
+            flash('Space audio file not found', 'error')
             return redirect(url_for('space_page', space_id=space_id))
+            
+        # Create transcription job with additional parameters
+        options = {
+            'model': model,
+            'detect_language': detect_language,
+            'translate_to': translate_to if translate_to else None,
+            'overwrite': overwrite
+        }
         
-        # Check if this is a direct download or for streaming
-        as_attachment = request.args.get('attachment', '0') == '1'
+        # Create a background job file
+        import uuid
+        import json
+        from pathlib import Path
+        import datetime
         
-        return send_file(
-            file_path,
-            as_attachment=as_attachment,
-            download_name=f"space_{space_id}.{file_path.split('.')[-1]}"
-        )
+        # Create transcript_jobs directory if it doesn't exist
+        os.makedirs('./transcript_jobs', exist_ok=True)
+        
+        # Generate a unique job ID
+        job_id = str(uuid.uuid4())
+        
+        # Create job data
+        job_data = {
+            'id': job_id,
+            'space_id': space_id,
+            'file_path': file_path,
+            'language': language,
+            'options': options,
+            'status': 'pending',
+            'progress': 0,
+            'created_at': datetime.datetime.now().isoformat(),
+            'updated_at': datetime.datetime.now().isoformat()
+        }
+        
+        # Save job data to file
+        job_file = Path(f'./transcript_jobs/{job_id}.json')
+        with open(job_file, 'w') as f:
+            json.dump(job_data, f)
+            
+        # API response or redirect based on request type
+        if request.is_json:
+            return jsonify({
+                'job_id': job_id,
+                'status': 'pending',
+                'message': 'Transcription job scheduled'
+            })
+        
+        # Redirect back to space page with success message
+        flash('Transcription job scheduled. You will receive a notification when it is complete.', 'success')
+        return redirect(url_for('space_page', space_id=space_id))
         
     except Exception as e:
-        logger.error(f"Error downloading space file: {e}", exc_info=True)
+        logger.error(f"Error transcribing space: {e}", exc_info=True)
+        if request.is_json:
+            return jsonify({'error': str(e)}), 500
         flash(f'An error occurred: {str(e)}', 'error')
         return redirect(url_for('space_page', space_id=space_id))
-
-@app.errorhandler(404)
-def page_not_found(e):
-    """Handle 404 errors."""
-    return render_template('404.html'), 404
-
-@app.errorhandler(500)
-def server_error(e):
-    """Handle 500 errors."""
-    logger.error(f"Server error: {e}", exc_info=True)
-    return render_template('500.html'), 500
 
 if __name__ == '__main__':
     # Get host and port from environment or use defaults
     host = os.environ.get('HOST', '0.0.0.0')  # Listen on all interfaces
     port = int(os.environ.get('PORT', 8080))
+    
+    # Create transcript jobs directory if it doesn't exist
+    os.makedirs('./transcript_jobs', exist_ok=True)
     
     # Print startup message
     print(f"Starting XSpace Downloader Web App on {host}:{port}")
