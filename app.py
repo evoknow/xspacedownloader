@@ -48,6 +48,15 @@ except ImportError:
     SPEECH_TO_TEXT_AVAILABLE = False
     logger = logging.getLogger('webapp')
     logger.warning("SpeechToText component not available - transcription features will be limited")
+    
+# Import Translate component if available
+try:
+    from components.Translate import Translate
+    TRANSLATE_AVAILABLE = True
+except ImportError:
+    TRANSLATE_AVAILABLE = False
+    logger = logging.getLogger('webapp')
+    logger.warning("Translate component not available - translation features will be limited")
 
 # Configure logging
 logging.basicConfig(
@@ -742,6 +751,149 @@ def after_request(response):
     except Exception:
         pass
     return response
+
+# Global translate component instance
+translate_component = None
+
+def get_translate_component():
+    """Get a Translate component instance."""
+    global translate_component
+    
+    if not TRANSLATE_AVAILABLE:
+        return None
+        
+    try:
+        # Create a new Translate component if it doesn't exist
+        if not translate_component:
+            translate_component = Translate()
+            logger.info("Created new Translate component instance")
+        
+        return translate_component
+    except Exception as e:
+        logger.error(f"Error in get_translate_component: {e}", exc_info=True)
+        # Create a new instance as a final fallback
+        try:
+            translate_component = Translate()
+        except Exception as new_err:
+            logger.error(f"Failed to create new Translate component: {new_err}", exc_info=True)
+    
+    return translate_component
+
+@app.route('/api/translate/languages', methods=['GET'])
+def api_translate_languages():
+    """API endpoint to get available translation languages."""
+    if not TRANSLATE_AVAILABLE:
+        return jsonify({'error': 'Translation service is not available'}), 503
+        
+    try:
+        # Get Translate component
+        translator = get_translate_component()
+        if not translator:
+            return jsonify({'error': 'Could not initialize translation service'}), 500
+            
+        # Get available languages
+        languages = translator.get_languages()
+        
+        # Return languages
+        return jsonify({
+            'languages': languages
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting translation languages: {e}", exc_info=True)
+        return jsonify({'error': 'An unexpected error occurred'}), 500
+
+@app.route('/api/translate', methods=['POST'])
+def api_translate():
+    """API endpoint to translate text."""
+    if not TRANSLATE_AVAILABLE:
+        return jsonify({'error': 'Translation service is not available'}), 503
+        
+    try:
+        # Validate request
+        if not request.is_json:
+            return jsonify({'error': 'Request must be JSON'}), 400
+            
+        # Get request data
+        data = request.json
+        text = data.get('text')
+        source_lang = data.get('source_lang', 'auto')
+        target_lang = data.get('target_lang')
+        
+        # Validate required fields
+        if not text:
+            return jsonify({'error': 'Missing text parameter'}), 400
+            
+        if not target_lang:
+            return jsonify({'error': 'Missing target_lang parameter'}), 400
+            
+        # Get Translate component
+        translator = get_translate_component()
+        if not translator:
+            return jsonify({'error': 'Could not initialize translation service'}), 500
+            
+        # Auto-detect source language if set to 'auto'
+        if source_lang == 'auto':
+            success, result = translator.detect_language(text)
+            if not success:
+                return jsonify({'error': 'Language detection failed', 'details': result}), 400
+            source_lang = result
+            
+        # Perform translation
+        success, result = translator.translate(text, source_lang, target_lang)
+        
+        if not success:
+            return jsonify({'error': 'Translation failed', 'details': result}), 400
+            
+        # Return translated text
+        return jsonify({
+            'translated_text': result,
+            'source_lang': source_lang,
+            'target_lang': target_lang
+        })
+        
+    except Exception as e:
+        logger.error(f"Error translating text: {e}", exc_info=True)
+        return jsonify({'error': 'An unexpected error occurred'}), 500
+
+@app.route('/api/detect-language', methods=['POST'])
+def api_detect_language():
+    """API endpoint to detect language of text."""
+    if not TRANSLATE_AVAILABLE:
+        return jsonify({'error': 'Translation service is not available'}), 503
+        
+    try:
+        # Validate request
+        if not request.is_json:
+            return jsonify({'error': 'Request must be JSON'}), 400
+            
+        # Get request data
+        data = request.json
+        text = data.get('text')
+        
+        # Validate required fields
+        if not text:
+            return jsonify({'error': 'Missing text parameter'}), 400
+            
+        # Get Translate component
+        translator = get_translate_component()
+        if not translator:
+            return jsonify({'error': 'Could not initialize translation service'}), 500
+            
+        # Detect language
+        success, result = translator.detect_language(text)
+        
+        if not success:
+            return jsonify({'error': 'Language detection failed', 'details': result}), 400
+            
+        # Return detected language
+        return jsonify({
+            'detected_language': result
+        })
+        
+    except Exception as e:
+        logger.error(f"Error detecting language: {e}", exc_info=True)
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 @app.route('/api/transcript/<transcript_id>', methods=['GET'])
 def api_get_transcript(transcript_id):

@@ -1,0 +1,21 @@
+{
+    "max_concurrent_downloads": 5,
+    "scan_interval": 5,
+    "download_dir": "./downloads",
+    "log_dir": "./logs",
+    "database": {
+        "type": "mysql",
+        "mysql": {
+            "host": "173.255.245.16",
+            "port": 3306,
+            "database": "xspacedownloader",
+            "user": "xspaceuser",
+            "password": "l0veAi@2025.xyz",
+            "use_ssl": false
+        }
+    },
+    "translate": {
+        "api_url": "https://libretranslate.com/translate",
+        "api_key": ""
+    }
+}
