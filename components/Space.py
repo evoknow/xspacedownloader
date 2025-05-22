@@ -927,13 +927,14 @@ class Space:
                     # Insert new space record
                     space_insert = """
                     INSERT INTO spaces (
-                        space_id, space_url, filename, status, download_cnt, created_at, updated_at
+                        space_id, space_url, filename, format, status, download_cnt, created_at
                     ) VALUES (
-                        %s, %s, %s, 'pending', 0, NOW(), NOW()
+                        %s, %s, %s, %s, 'pending', 0, NOW()
                     )
                     """
                     space_filename = f"{space_id}.mp3"  # Default filename based on space_id
-                    cursor.execute(space_insert, (space_id, space_url, space_filename))
+                    space_format = "mp3"  # Default format
+                    cursor.execute(space_insert, (space_id, space_url, space_filename, space_format))
                     self.connection.commit()
                     
                     logger.info(f"Created new space record for {space_id}")
@@ -944,7 +945,7 @@ class Space:
             # Check if there's already a job for this space
             check_job_query = """
             SELECT id FROM space_download_scheduler
-            WHERE space_id = %s AND status IN ('pending', 'in_progress')
+            WHERE space_id = %s AND status IN ('pending', 'downloading')
             ORDER BY id DESC LIMIT 1
             """
             cursor.execute(check_job_query, (space_id,))
@@ -959,9 +960,9 @@ class Space:
             # Create a new download job
             insert_query = """
             INSERT INTO space_download_scheduler (
-                space_id, user_id, file_type, status, created_at, updated_at
+                space_id, user_id, file_type, status, start_time, created_at, updated_at
             ) VALUES (
-                %s, %s, %s, 'pending', NOW(), NOW()
+                %s, %s, %s, 'pending', NOW(), NOW(), NOW()
             )
             """
             cursor.execute(insert_query, (
@@ -1018,8 +1019,8 @@ class Space:
             if 'status' in kwargs:
                 if kwargs['status'] == 'completed':
                     fields.append("end_time = NOW()")
-                elif kwargs['status'] == 'in_progress' and 'process_id' in kwargs:
-                    # When a job changes to in_progress, update the start_time and store process ID
+                elif kwargs['status'] == 'downloading' and 'process_id' in kwargs:
+                    # When a job changes to downloading, update the start_time field and store process ID
                     fields.append("start_time = NOW()")
             
             query = f"""

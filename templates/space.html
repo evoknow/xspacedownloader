@@ -139,6 +139,7 @@
                                             <option value="de">German</option>
                                             <option value="it">Italian</option>
                                             <option value="pt">Portuguese</option>
+                                            <option value="bn">Bengali</option>
                                             <option value="zh">Chinese</option>
                                             <option value="ja">Japanese</option>
                                             <option value="ru">Russian</option>
@@ -170,113 +171,6 @@
                                     <p class="text-muted">No transcript available yet. Click the Transcribe button to generate one.</p>
                                 </div>
                                 {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Transcription Modal -->
-                <div class="modal fade" id="transcriptionModal" tabindex="-1" aria-labelledby="transcriptionModalLabel" aria-hidden="true">
-                    <div class="modal-dialog">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title" id="transcriptionModalLabel">Transcribe Audio</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                            </div>
-                            <div class="modal-body">
-                                <form id="transcription-form">
-                                    <div class="mb-3">
-                                        <label for="transcription-language" class="form-label">Language</label>
-                                        <select id="transcription-language" class="form-select" required>
-                                            <option value="en-US">English (United States)</option>
-                                            <option value="en-GB">English (United Kingdom)</option>
-                                            <option value="es">Spanish</option>
-                                            <option value="fr">French</option>
-                                            <option value="de">German</option>
-                                            <option value="it">Italian</option>
-                                            <option value="pt">Portuguese</option>
-                                            <option value="hi">Hindi</option>
-                                            <option value="bn-BD">Bengali</option>
-                                            <option value="ar">Arabic</option>
-                                            <option value="zh">Chinese</option>
-                                            <option value="ja">Japanese</option>
-                                            <option value="ko">Korean</option>
-                                            <option value="ru">Russian</option>
-                                        </select>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label for="transcription-model" class="form-label">Model Quality</label>
-                                        <select id="transcription-model" class="form-select" required>
-                                            <option value="tiny">Tiny (Fastest, least accurate)</option>
-                                            <option value="base" selected>Base (Good balance)</option>
-                                            <option value="small">Small (More accurate)</option>
-                                            <option value="medium">Medium (High accuracy)</option>
-                                            <option value="large">Large (Most accurate, slowest)</option>
-                                        </select>
-                                        <div class="form-text">
-                                            Higher quality models take longer to process and use more resources.
-                                        </div>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label for="detect-language" class="form-label">Language Detection</label>
-                                        <select id="detect-language" class="form-select" required>
-                                            <option value="false" selected>Use specified language</option>
-                                            <option value="true">Auto-detect language</option>
-                                        </select>
-                                        <div class="form-text">
-                                            Choose whether to auto-detect the audio language or use the selected language above.
-                                        </div>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label for="translate-to" class="form-label">Translation</label>
-                                        <select id="translate-to" class="form-select">
-                                            <option value="" selected>No translation</option>
-                                            <option value="en">English</option>
-                                            <option value="es">Spanish</option>
-                                            <option value="fr">French</option>
-                                            <option value="de">German</option>
-                                            <option value="it">Italian</option>
-                                            <option value="pt">Portuguese</option>
-                                            <option value="hi">Hindi</option>
-                                            <option value="bn">Bengali</option>
-                                            <option value="ar">Arabic</option>
-                                            <option value="zh">Chinese</option>
-                                            <option value="ja">Japanese</option>
-                                            <option value="ko">Korean</option>
-                                            <option value="ru">Russian</option>
-                                        </select>
-                                        <div class="form-text">
-                                            Choose a language to translate the transcript to. Translation is powered by LibreTranslate.
-                                        </div>
-                                    </div>
-                                    <div class="form-check mb-3">
-                                        <input class="form-check-input" type="checkbox" id="overwrite-existing" checked>
-                                        <label class="form-check-label" for="overwrite-existing">
-                                            Overwrite existing transcript (if any)
-                                        </label>
-                                    </div>
-                                </form>
-                                <div id="transcription-progress" style="display: none;">
-                                    <p class="text-center" id="transcription-status-text">Transcribing audio...</p>
-                                    <div class="progress">
-                                        <div id="transcription-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" 
-                                             role="progressbar" style="width: 0%" 
-                                             aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
-                                    </div>
-                                    <p class="text-center text-muted mt-2">
-                                        <small>This process can take several minutes depending on the length of the audio and the selected model. The transcription will continue in the background and you'll be notified when it's complete.</small>
-                                    </p>
-                                    <div id="job-details" class="text-center mt-3" style="display: none;">
-                                        <p class="mb-1"><small>Job ID: <span id="job-id"></span></small></p>
-                                        <p class="mb-1"><small>Status: <span id="job-status"></span></small></p>
-                                        <p><small>Last Updated: <span id="job-updated"></span></small></p>
-                                    </div>
-                                </div>
-                                <div id="transcription-error" class="alert alert-danger mt-3" style="display: none;"></div>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                <button type="button" class="btn btn-primary" id="start-transcription-btn">Start Transcription</button>
                             </div>
                         </div>
                     </div>
@@ -395,6 +289,28 @@
         const audioPlayer = document.getElementById('audio-player');
         const spaceId = '{{ space.space_id }}';
         const spaceStatus = '{{ space.status }}';
+        
+        // Language code to name mapping
+        const languageNames = {
+            'en': 'English',
+            'es': 'Spanish', 
+            'fr': 'French',
+            'de': 'German',
+            'it': 'Italian',
+            'pt': 'Portuguese',
+            'hi': 'Hindi',
+            'bn': 'Bengali',
+            'ar': 'Arabic',
+            'zh': 'Chinese',
+            'ja': 'Japanese',
+            'ko': 'Korean',
+            'ru': 'Russian'
+        };
+        
+        // Function to get language name from code
+        function getLanguageName(code) {
+            return languageNames[code] || code;
+        }
         
         // Audio player setup
         if (audioPlayer) {
@@ -518,204 +434,76 @@
         
         // Transcription functionality
         const transcribeBtn = document.getElementById('transcribe-btn');
-        const transcriptionModal = new bootstrap.Modal(document.getElementById('transcriptionModal'));
         const transcriptSection = document.getElementById('transcript-section');
         const transcriptContent = document.getElementById('transcript-content');
-        const startTranscriptionBtn = document.getElementById('start-transcription-btn');
-        const transcriptionProgress = document.getElementById('transcription-progress');
-        const transcriptionForm = document.getElementById('transcription-form');
-        const transcriptionError = document.getElementById('transcription-error');
+        
+        // Store the full transcript text in JavaScript variable (more reliable than HTML attributes)
+        let fullTranscriptText = '';
         
         if (transcribeBtn) {
             transcribeBtn.addEventListener('click', function() {
-                // Reset modal state
-                transcriptionProgress.style.display = 'none';
-                transcriptionForm.style.display = 'block';
-                transcriptionError.style.display = 'none';
-                startTranscriptionBtn.disabled = false;
-                
-                // Show the modal
-                transcriptionModal.show();
-            });
-        }
-        
-        if (startTranscriptionBtn) {
-            startTranscriptionBtn.addEventListener('click', function() {
-                // Get form values
-                const language = document.getElementById('transcription-language').value;
-                const model = document.getElementById('transcription-model').value;
-                const detectLanguage = document.getElementById('detect-language').value === 'true';
-                const translateTo = document.getElementById('translate-to').value;
-                const overwrite = document.getElementById('overwrite-existing').checked;
-                
-                // Hide form, show progress
-                transcriptionForm.style.display = 'none';
-                transcriptionProgress.style.display = 'block';
-                startTranscriptionBtn.disabled = true;
+                // Disable button during transcription
+                transcribeBtn.disabled = true;
+                transcribeBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Transcribing...';
                 
                 // Request permissions for notifications
                 if ('Notification' in window && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
                     Notification.requestPermission();
                 }
                 
-                // Make API request to start transcription
+                // Make API request to start transcription directly with English defaults
                 fetch(`/api/transcribe/${spaceId}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        language: language,
-                        model: model,
-                        detect_language: detectLanguage,
-                        translate_to: translateTo || null,
-                        overwrite: overwrite
+                        language: 'en',
+                        model: 'base',
+                        detect_language: false,
+                        translate_to: null,
+                        overwrite: true
                     })
                 })
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
                         // Show error
-                        transcriptionError.textContent = data.error;
-                        transcriptionError.style.display = 'block';
-                        transcriptionProgress.style.display = 'none';
-                        startTranscriptionBtn.disabled = false;
-                    } else {
-                        // Background transcription was started successfully
+                        alert('Transcription failed: ' + data.error);
+                        // Reset button
+                        transcribeBtn.disabled = false;
+                        transcribeBtn.innerHTML = '<i class="bi bi-mic"></i> Transcribe';
+                        return;
+                    }
+                    
+                    if (data.job_id) {
+                        // Start polling for progress
+                        const jobId = data.job_id;
+                        pollTranscriptionProgress(jobId);
+                    } else if (data.transcript_id) {
+                        // Transcription completed immediately (existing transcript)
+                        transcribeBtn.disabled = false;
+                        transcribeBtn.innerHTML = '<i class="bi bi-mic"></i> Transcribe';
                         
-                        // Update job details in the progress section
-                        document.getElementById('job-id').textContent = data.job_id;
-                        document.getElementById('job-status').textContent = data.status;
-                        document.getElementById('job-updated').textContent = new Date().toLocaleString();
-                        document.getElementById('job-details').style.display = 'block';
+                        // Load and show the transcript
+                        loadTranscript(data.transcript_id);
+                        transcriptSection.style.display = 'block';
                         
-                        // Show notification that transcription has started
+                        // Show success notification
                         if ('Notification' in window && Notification.permission === 'granted') {
-                            new Notification('Transcription Started', {
-                                body: 'Transcription has been started and will continue in the background. You\'ll be notified when it\'s complete.'
+                            new Notification('Transcription Complete', {
+                                body: 'The transcript is ready to view.',
+                                icon: '/static/favicon.ico'
                             });
                         }
-                        
-                        // Setup polling for job status updates
-                        let jobId = data.job_id;
-                        let statusInterval = setInterval(function() {
-                            fetch(`/api/transcript_job/${jobId}`)
-                                .then(response => response.json())
-                                .then(jobData => {
-                                    // Update progress display
-                                    const progressBar = document.getElementById('transcription-progress-bar');
-                                    const statusText = document.getElementById('transcription-status-text');
-                                    const progress = jobData.progress || 0;
-                                    
-                                    progressBar.style.width = `${progress}%`;
-                                    progressBar.setAttribute('aria-valuenow', progress);
-                                    progressBar.textContent = `${progress}%`;
-                                    
-                                    // Update job status and last updated
-                                    document.getElementById('job-status').textContent = jobData.status;
-                                    document.getElementById('job-updated').textContent = new Date(jobData.updated_at).toLocaleString();
-                                    
-                                    // Update status text based on job status
-                                    if (jobData.status === 'pending') {
-                                        statusText.textContent = 'Waiting to start transcription...';
-                                    } else if (jobData.status === 'processing') {
-                                        statusText.textContent = 'Transcribing audio...';
-                                    } else if (jobData.status === 'completed') {
-                                        statusText.textContent = 'Transcription completed!';
-                                        
-                                        // Stop polling
-                                        clearInterval(statusInterval);
-                                        
-                                        // Show notification
-                                        if ('Notification' in window && Notification.permission === 'granted') {
-                                            new Notification('Transcription Complete', {
-                                                body: 'The audio has been successfully transcribed.'
-                                            });
-                                        }
-                                        
-                                        // Close modal after a delay
-                                        setTimeout(() => {
-                                            transcriptionModal.hide();
-                                            
-                                            // Show transcript section
-                                            transcriptSection.style.display = 'block';
-                                            
-                                            // Check if result has transcript info
-                                            if (jobData.result && jobData.result.transcript_id) {
-                                                // Load transcript content
-                                                loadTranscript(jobData.result.transcript_id);
-                                                
-                                                // Update language selector
-                                                const langSelector = document.getElementById('language-selector');
-                                                if (langSelector) {
-                                                    // Check if option already exists
-                                                    let optionExists = false;
-                                                    for (let i = 0; i < langSelector.options.length; i++) {
-                                                        if (langSelector.options[i].value == jobData.result.transcript_id) {
-                                                            optionExists = true;
-                                                            langSelector.selectedIndex = i;
-                                                            break;
-                                                        }
-                                                    }
-                                                    
-                                                    if (!optionExists) {
-                                                        // Add new option
-                                                        const option = document.createElement('option');
-                                                        option.value = jobData.result.transcript_id;
-                                                        option.text = jobData.result.language;
-                                                        option.selected = true;
-                                                        langSelector.appendChild(option);
-                                                    }
-                                                } else {
-                                                    // Create language selector
-                                                    const headerContent = document.querySelector('.card-header .d-flex .d-flex');
-                                                    if (headerContent) {
-                                                        const select = document.createElement('select');
-                                                        select.id = 'language-selector';
-                                                        select.className = 'form-select form-select-sm ms-3';
-                                                        select.style.width = 'auto';
-                                                        
-                                                        const option = document.createElement('option');
-                                                        option.value = jobData.result.transcript_id;
-                                                        option.text = jobData.result.language;
-                                                        select.appendChild(option);
-                                                        
-                                                        headerContent.appendChild(select);
-                                                        
-                                                        // Add event listener
-                                                        select.addEventListener('change', function() {
-                                                            loadTranscript(this.value);
-                                                        });
-                                                    }
-                                                }
-                                            }
-                                        }, 2000);
-                                    } else if (jobData.status === 'failed') {
-                                        statusText.textContent = 'Transcription failed!';
-                                        
-                                        // Stop polling
-                                        clearInterval(statusInterval);
-                                        
-                                        // Show error message
-                                        transcriptionError.textContent = jobData.error || 'An error occurred during transcription.';
-                                        transcriptionError.style.display = 'block';
-                                        
-                                        // Enable button to try again
-                                        startTranscriptionBtn.disabled = false;
-                                    }
-                                })
-                                .catch(error => {
-                                    console.error('Error polling job status:', error);
-                                });
-                        }, 5000); // Check every 5 seconds
                     }
                 })
                 .catch(error => {
                     console.error('Error:', error);
-                    transcriptionError.textContent = 'An error occurred while processing your request.';
-                    transcriptionError.style.display = 'block';
-                    transcriptionProgress.style.display = 'none';
-                    startTranscriptionBtn.disabled = false;
+                    alert('An error occurred while starting transcription.');
+                    // Reset button
+                    transcribeBtn.disabled = false;
+                    transcribeBtn.innerHTML = '<i class="bi bi-mic"></i> Transcribe';
                 });
             });
         }
@@ -732,10 +520,14 @@
                             </div>
                         `;
                     } else {
-                        // Store the original transcript text in a data attribute for translation
+                        // Store the full transcript text in JavaScript variable (safer than HTML attributes)
+                        fullTranscriptText = data.transcript;
+                        
+                        // Format text for display
                         const formattedText = data.transcript.replace(/\n/g, '</p><p>');
+                        
                         transcriptContent.innerHTML = `
-                            <div class="transcript-text" data-original-text="${data.transcript.replace(/"/g, '&quot;')}">
+                            <div class="transcript-text">
                                 <p>${formattedText}</p>
                             </div>
                         `;
@@ -757,6 +549,49 @@
                 });
         }
         
+        // Function to check translation service availability
+        function checkTranslationService() {
+            return new Promise((resolve, reject) => {
+                // Simple health check request to the translation API
+                fetch('/api/translate/info', { 
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        reject(new Error('Translation service unavailable'));
+                        return;
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data && data.available) {
+                        resolve(data);
+                    } else {
+                        reject(new Error('Translation service configuration issue'));
+                    }
+                })
+                .catch(error => {
+                    reject(error);
+                });
+            });
+        }
+        
+        // Function to reset transcript view to original content
+        function resetTranscriptView() {
+            const originalText = fullTranscriptText || transcriptContent.getAttribute('data-original-text') || '';
+            const formattedOriginalText = originalText.replace(/\n/g, '</p><p>');
+            transcriptContent.innerHTML = `
+                <div class="transcript-text">
+                    <p>${formattedOriginalText}</p>
+                </div>
+            `;
+            // Reset the translation dropdown
+            document.getElementById('translate-target-lang').value = '';
+        }
+        
         // Function to translate transcript content
         function translateTranscript(sourceText, sourceLang, targetLang) {
             // Show loading indicator
@@ -765,69 +600,158 @@
                     <div class="spinner-border text-primary" role="status">
                         <span class="visually-hidden">Translating...</span>
                     </div>
-                    <p class="mt-2">Translating to ${targetLang}...</p>
+                    <p class="mt-2">Translating to ${getLanguageName(targetLang)}...</p>
                 </div>
             `;
             
-            // Call the translation API
-            fetch('/api/translate', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    text: sourceText,
-                    source_lang: sourceLang,
-                    target_lang: targetLang
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
+            // First check if translation service is available
+            checkTranslationService()
+                .catch(error => {
+                    // Service check failed, show a helpful message
                     transcriptContent.innerHTML = `
                         <div class="alert alert-danger">
-                            Translation error: ${data.error}
+                            <div><i class="bi bi-exclamation-triangle-fill me-2"></i> Translation service is not available</div>
+                            <p class="mt-2 mb-0">
+                                <strong>Self-hosted mode:</strong> Make sure LibreTranslate is properly configured 
+                                in <code>mainconfig.json</code> and the service is running.
+                                Check <code>COMPONENTS.md</code> for setup instructions.
+                            </p>
                         </div>
                     `;
-                } else {
-                    // Format and display the translated text
-                    const formattedText = data.translated_text.replace(/\n/g, '</p><p>');
-                    transcriptContent.innerHTML = `
-                        <div class="transcript-text translated">
-                            <div class="alert alert-info mb-3">
-                                <small>
-                                    <i class="bi bi-info-circle"></i> 
-                                    This transcript has been translated from ${data.source_lang} to ${data.target_lang}.
-                                    <a href="#" id="show-original">Show original</a>
-                                </small>
-                            </div>
-                            <p>${formattedText}</p>
-                        </div>
-                    `;
-                    
-                    // Add event listener to "Show original" link
-                    document.getElementById('show-original').addEventListener('click', function(e) {
-                        e.preventDefault();
-                        const originalText = transcriptContent.querySelector('.transcript-text').getAttribute('data-original-text');
-                        const formattedOriginalText = originalText.replace(/\n/g, '</p><p>');
+                    // Rethrow to stop the translation process
+                    throw error;
+                })
+                .then(() => {
+                    // If service is available, proceed with the translation
+                        return fetch('/api/translate', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            text: sourceText,
+                            source_lang: sourceLang,
+                            target_lang: targetLang,
+                            space_id: spaceId
+                        })
+                    });
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        let errorMessage = data.error;
+                        let helpText = '';
+                        let setupInstructions = '';
+                        
+                        // Check for specific error types from our enhanced backend
+                        if (data.details && data.details.setup_instructions) {
+                            setupInstructions = `
+                                <div class="mt-3 card border-info">
+                                    <div class="card-header bg-info text-white">
+                                        <i class="bi bi-info-circle-fill me-2"></i>Setup Instructions
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="mb-2"><strong>Option 1:</strong> ${data.details.setup_instructions.option1}</p>
+                                        <p class="mb-0"><strong>Option 2:</strong> ${data.details.setup_instructions.option2}</p>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                        
+                        if (data.details && data.details.suggestion) {
+                            helpText = `
+                                <p class="mt-2 mb-0">
+                                    <strong>Suggestion:</strong> ${data.details.suggestion}
+                                </p>
+                            `;
+                        }
+                        
+                        // Check for common error patterns
+                        if (errorMessage.includes('API key required') || errorMessage.includes('Authentication') || 
+                            errorMessage.includes('authentication') || errorMessage.includes('requires API key')) {
+                            errorMessage = 'Translation API key is required or self-hosted setup needed';
+                            helpText = `
+                                <p class="mt-2 mb-0">
+                                    <strong>Quick Fix:</strong> Run <code>./setup_libretranslate_no_docker.sh</code> in your terminal
+                                    to set up a free local translation server (no Docker required).
+                                </p>
+                            `;
+                        } else if (errorMessage.includes('connection refused') || errorMessage.includes('not found') || 
+                                  errorMessage.includes('unreachable') || errorMessage.includes('unavailable')) {
+                            errorMessage = 'Translation service is not available';
+                            helpText = `
+                                <p class="mt-2 mb-0">
+                                    <strong>Self-hosted mode:</strong> You need to start your LibreTranslate server.
+                                    Run these commands to start it:
+                                    <code>cd libretranslate && source venv/bin/activate && libretranslate --host localhost --port 5000</code>
+                                </p>
+                            `;
+                        }
+                        
                         transcriptContent.innerHTML = `
-                            <div class="transcript-text">
-                                <p>${formattedOriginalText}</p>
+                            <div class="alert alert-danger">
+                                <div><i class="bi bi-exclamation-triangle-fill me-2"></i> <strong>Translation Error:</strong> ${errorMessage}</div>
+                                ${helpText}
+                                ${setupInstructions}
+                                <div class="mt-3">
+                                    <a href="javascript:void(0)" onclick="resetTranscriptView()" class="btn btn-sm btn-outline-secondary">
+                                        <i class="bi bi-arrow-return-left"></i> Return to Original Text
+                                    </a>
+                                    <a href="/TRANSLATION.md" target="_blank" class="btn btn-sm btn-outline-info ms-2">
+                                        <i class="bi bi-question-circle"></i> View Translation Documentation
+                                    </a>
+                                </div>
                             </div>
                         `;
-                        // Reset the translation dropdown
-                        document.getElementById('translate-target-lang').value = '';
-                    });
-                }
-            })
-            .catch(error => {
-                console.error('Error translating:', error);
-                transcriptContent.innerHTML = `
-                    <div class="alert alert-danger">
-                        An error occurred during translation. Please try again later.
-                    </div>
-                `;
-            });
+                    } else {
+                        // Format and display the translated text
+                        const formattedText = data.translated_text.replace(/\n/g, '</p><p>');
+                        transcriptContent.innerHTML = `
+                            <div class="transcript-text translated">
+                                <div class="alert alert-info mb-3">
+                                    <small>
+                                        <i class="bi bi-info-circle"></i> 
+                                        This transcript has been translated from ${getLanguageName(data.source_lang)} to ${getLanguageName(data.target_lang)}.
+                                        <a href="#" id="show-original">Show original</a>
+                                    </small>
+                                </div>
+                                <p>${formattedText}</p>
+                            </div>
+                        `;
+                    
+                        // Store original text in a more reliable way
+                        transcriptContent.setAttribute('data-original-text', sourceText);
+                        
+                        // Add event listener to "Show original" link
+                        document.getElementById('show-original').addEventListener('click', function(e) {
+                            e.preventDefault();
+                            const originalText = fullTranscriptText || transcriptContent.getAttribute('data-original-text');
+                            const formattedOriginalText = originalText.replace(/\n/g, '</p><p>');
+                            transcriptContent.innerHTML = `
+                                <div class="transcript-text">
+                                    <div class="alert alert-success mb-3">
+                                        <small>
+                                            <i class="bi bi-check-circle"></i> 
+                                            Showing original transcript.
+                                        </small>
+                                    </div>
+                                    <p>${formattedOriginalText}</p>
+                                </div>
+                            `;
+                            // Reset the translation dropdown
+                            document.getElementById('translate-target-lang').value = '';
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error translating:', error);
+                    transcriptContent.innerHTML = `
+                        <div class="alert alert-danger">
+                            <div><i class="bi bi-exclamation-triangle-fill me-2"></i> Translation failed</div>
+                            <p class="mt-2 mb-0">An unexpected error occurred during translation. Please try again later.</p>
+                        </div>
+                    `;
+                });
         }
         
         // Set up language selector
@@ -865,6 +789,82 @@
             });
         }
         
+        // Function to poll transcription progress for direct transcription
+        function pollTranscriptionProgress(jobId) {
+            const pollInterval = setInterval(function() {
+                fetch(`/api/transcript_job/${jobId}`)
+                    .then(response => response.json())
+                    .then(jobData => {
+                        // Update button text with progress
+                        if (jobData.progress) {
+                            transcribeBtn.innerHTML = `<i class="bi bi-hourglass-split"></i> Transcribing... ${jobData.progress}%`;
+                        }
+                        
+                        if (jobData.status === 'completed') {
+                            // Stop polling
+                            clearInterval(pollInterval);
+                            
+                            // Reset button
+                            transcribeBtn.disabled = false;
+                            transcribeBtn.innerHTML = '<i class="bi bi-mic"></i> Transcribe';
+                            
+                            // Show transcript section
+                            transcriptSection.style.display = 'block';
+                            
+                            // Load transcript if available
+                            if (jobData.result && jobData.result.transcript_id) {
+                                loadTranscript(jobData.result.transcript_id);
+                                
+                                // Update language selector
+                                const langSelector = document.getElementById('language-selector');
+                                if (langSelector) {
+                                    // Check if option already exists
+                                    let optionExists = false;
+                                    for (let i = 0; i < langSelector.options.length; i++) {
+                                        if (langSelector.options[i].value == jobData.result.transcript_id) {
+                                            optionExists = true;
+                                            langSelector.selectedIndex = i;
+                                            break;
+                                        }
+                                    }
+                                    
+                                    if (!optionExists) {
+                                        // Add new option
+                                        const option = document.createElement('option');
+                                        option.value = jobData.result.transcript_id;
+                                        option.text = jobData.result.language;
+                                        option.selected = true;
+                                        langSelector.appendChild(option);
+                                    }
+                                }
+                            }
+                            
+                            // Show notification
+                            if ('Notification' in window && Notification.permission === 'granted') {
+                                new Notification('Transcription Complete', {
+                                    body: 'The audio has been successfully transcribed.',
+                                    icon: '/static/favicon.ico'
+                                });
+                            }
+                        } else if (jobData.status === 'failed') {
+                            // Stop polling
+                            clearInterval(pollInterval);
+                            
+                            // Reset button
+                            transcribeBtn.disabled = false;
+                            transcribeBtn.innerHTML = '<i class="bi bi-mic"></i> Transcribe';
+                            
+                            // Show error
+                            alert('Transcription failed: ' + (jobData.error || 'Unknown error occurred'));
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error polling transcription progress:', error);
+                        // Continue polling on network errors
+                    });
+            }, 2000); // Poll every 2 seconds
+        }
+        
         // Set up translation functionality
         const translateBtn = document.getElementById('translate-btn');
         const translateSelect = document.getElementById('translate-target-lang');
@@ -887,14 +887,24 @@
                     return;
                 }
                 
-                // Get original text from current content or data attribute
-                let sourceText;
-                const transcriptTextDiv = transcriptContent.querySelector('.transcript-text');
+                // Get original text from JavaScript variable (most reliable)
+                let sourceText = fullTranscriptText;
                 
-                if (transcriptTextDiv && transcriptTextDiv.hasAttribute('data-original-text')) {
-                    sourceText = transcriptTextDiv.getAttribute('data-original-text');
-                } else {
-                    // Fallback to current text content with paragraph tags stripped
+                // Fallback to data attributes if JavaScript variable is empty
+                if (!sourceText) {
+                    sourceText = transcriptContent.getAttribute('data-original-text');
+                }
+                
+                // If still not found, try from the transcript text div
+                if (!sourceText) {
+                    const transcriptTextDiv = transcriptContent.querySelector('.transcript-text');
+                    if (transcriptTextDiv && transcriptTextDiv.hasAttribute('data-original-text')) {
+                        sourceText = transcriptTextDiv.getAttribute('data-original-text');
+                    }
+                }
+                
+                // Final fallback to current text content
+                if (!sourceText) {
                     sourceText = transcriptContent.innerText.replace(/\s+/g, ' ').trim();
                 }
                 
@@ -903,9 +913,42 @@
                     return;
                 }
                 
-                // Call translation function
-                translateTranscript(sourceText, sourceLang, targetLang);
+                // Debug logging
+                console.log('Translation request - Text length:', sourceText.length);
+                console.log('First 200 chars:', sourceText.substring(0, 200));
+                console.log('Last 200 chars:', sourceText.substring(sourceText.length - 200));
+                
+                // Check translation service info first
+                fetch('/api/translate/info')
+                    .then(response => response.json())
+                    .then(info => {
+                        // Only show resource warning for self-hosted mode without AI APIs
+                        const isAiAvailable = info.api_key_configured && info.provider !== "None";
+                        const isLargeText = sourceText.length > 10000;
+                        
+                        if (isLargeText && !isAiAvailable && info.self_hosted) {
+                            // Only warn for self-hosted mode without AI APIs
+                            if (!confirm('The transcript is quite large (' + Math.round(sourceText.length/1000) + 'K characters). ' +
+                                      'In self-hosted mode, this might cause issues if your server has limited resources. Continue anyway?')) {
+                                return;
+                            }
+                        }
+                        
+                        // Proceed with translation
+                        performTranslation(sourceText, sourceLang, targetLang);
+                    })
+                    .catch(error => {
+                        console.warn('Could not check translation service info:', error);
+                        // Proceed anyway if we can't check
+                        performTranslation(sourceText, sourceLang, targetLang);
+                    });
             });
+        }
+        
+        // Helper function for translation
+        function performTranslation(sourceText, sourceLang, targetLang) {
+            // Call translation function
+            translateTranscript(sourceText, sourceLang, targetLang);
         }
         
         // Set up transcript download button

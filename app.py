@@ -11,6 +11,14 @@ import subprocess
 from pathlib import Path
 from flask import Flask, request, render_template, redirect, url_for, flash, jsonify, session, send_file, Response
 
+# Load environment variables from .env file if it exists
+try:
+    from load_env import load_env
+    load_env()
+    print("Environment variables loaded from .env file")
+except ImportError:
+    print("load_env module not found - using system environment variables only")
+
 # Import our space record fixer
 try:
     from fix_direct_spaces import ensure_space_record
@@ -83,82 +91,24 @@ app.config.update(
 # Create download directory if it doesn't exist
 os.makedirs(app.config['DOWNLOAD_DIR'], exist_ok=True)
 
-# Maintain a database connection
-db_connection = None
+# Global variables for space component and database connection
 space_component = None
+db_connection = None
+
+# Database connection is now created per request to avoid memory corruption
 
 def get_space_component():
-    """Get a Space component instance with an active DB connection."""
-    global space_component, db_connection
-    
+    """Get a Space component instance with a fresh DB connection."""
     try:
-        # Create a new Space component if it doesn't exist
-        if not space_component:
-            space_component = Space()
-            if hasattr(space_component, 'connection'):
-                db_connection = space_component.connection
-            logger.info("Created new Space component instance")
-            return space_component
-            
-        # Check if connection is valid and ping it to test
-        if db_connection and hasattr(db_connection, 'is_connected'):
-            try:
-                # Try to ping the connection with a timeout
-                db_connection.ping(reconnect=True, attempts=1, delay=0.5)
-                if db_connection.is_connected():
-                    # Connection is good
-                    return space_component
-            except Exception as ping_err:
-                logger.warning(f"Database ping failed: {ping_err}")
-                
-                # Explicitly close the connection to avoid memory leaks or corruption
-                try:
-                    if db_connection and hasattr(db_connection, 'close'):
-                        db_connection.close()
-                        db_connection = None
-                except Exception:
-                    pass
-                        
-                # Will try to reconnect below
-        
-        # Create fresh connection if previous checks failed - clean up old one first
-        if space_component:
-            try:
-                if hasattr(space_component, 'connection') and space_component.connection:
-                    if hasattr(space_component.connection, 'close'):
-                        space_component.connection.close()
-            except Exception:
-                # Ignore any errors during cleanup
-                pass
-                
-        # Create a new instance
+        # Always create a new Space component to avoid threading issues
+        # This prevents memory corruption from shared database connections
         space_component = Space()
-        if hasattr(space_component, 'connection'):
-            db_connection = space_component.connection
-            logger.info("Recreated Space component with fresh connection")
+        logger.info("Created new Space component instance")
+        return space_component
+        
     except Exception as e:
-        logger.error(f"Error in get_space_component: {e}", exc_info=True)
-        
-        # Cleanup existing resources
-        try:
-            if db_connection and hasattr(db_connection, 'close'):
-                db_connection.close()
-        except Exception:
-            pass
-            
-        # Reset global variables
-        space_component = None
-        db_connection = None
-        
-        # Create a new instance as a final fallback
-        try:
-            space_component = Space()
-            if hasattr(space_component, 'connection'):
-                db_connection = space_component.connection
-        except Exception as new_err:
-            logger.error(f"Failed to create new Space component: {new_err}", exc_info=True)
-    
-    return space_component
+        logger.error(f"Error getting Space component: {e}")
+        return None
 
 def index():
     """Home page with form to submit a space URL."""
@@ -536,6 +486,58 @@ def api_queue():
         logger.error(f"Error in API queue: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/status/<int:job_id>', methods=['GET'])
+def api_job_status(job_id):
+    """API endpoint to get download job status by job ID."""
+    try:
+        # Get Space component
+        space = get_space_component()
+        
+        # Get job details
+        job = space.get_download_job(job_id=job_id)
+        
+        if not job:
+            return jsonify({'error': 'Resource not found'}), 404
+        
+        # Check if the physical file exists
+        download_dir = app.config['DOWNLOAD_DIR']
+        file_exists = False
+        file_size = 0
+        file_path = None
+        
+        space_id = job.get('space_id')
+        if space_id:
+            for ext in ['mp3', 'm4a', 'wav']:
+                path = os.path.join(download_dir, f"{space_id}.{ext}")
+                if os.path.exists(path) and os.path.getsize(path) > 1024*1024:  # > 1MB
+                    file_exists = True
+                    file_size = os.path.getsize(path)
+                    file_path = path
+                    break
+        
+        # Build response
+        response = {
+            'job_id': job_id,
+            'space_id': job.get('space_id'),
+            'status': job.get('status', 'unknown'),
+            'progress_in_percent': job.get('progress_in_percent', 0),
+            'progress_in_size': job.get('progress_in_size', 0),
+            'file_type': job.get('file_type', 'mp3'),
+            'created_at': job.get('created_at'),
+            'start_time': job.get('start_time'),
+            'end_time': job.get('end_time'),
+            'error_message': job.get('error_message'),
+            'file_exists': file_exists,
+            'file_size': file_size,
+            'file_path': file_path
+        }
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        logger.error(f"Error in API job status: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/space_status/<space_id>', methods=['GET'])
 def api_space_status(space_id):
     """API endpoint to get space download status."""
@@ -779,6 +781,44 @@ def get_translate_component():
     
     return translate_component
 
+@app.route('/api/translate/info', methods=['GET'])
+def api_translate_info():
+    """API endpoint to check translation service availability."""
+    if not TRANSLATE_AVAILABLE:
+        return jsonify({
+            'available': False,
+            'error': 'Translation service is not available',
+            'setup_options': {
+                'self_hosted': './setup_libretranslate_no_docker.sh',
+                'api_key': 'https://portal.libretranslate.com/'
+            }
+        }), 503
+        
+    # Get Translate component
+    translator = get_translate_component()
+    if not translator:
+        return jsonify({
+            'available': False,
+            'error': 'Could not initialize translation service',
+            'setup_options': {
+                'self_hosted': './setup_libretranslate_no_docker.sh',
+                'api_key': 'https://portal.libretranslate.com/'
+            }
+        }), 503
+    
+    # Check if AI component is available
+    ai_available = hasattr(translator, 'ai') and translator.ai is not None
+    
+    # Return service info
+    return jsonify({
+        'available': ai_available,
+        'self_hosted': translator.self_hosted,
+        'api_key_configured': ai_available,
+        'api_url': translator.api_url,
+        'provider': translator.ai.get_provider_name() if ai_available else "None",
+        'error': None if ai_available else "AI component not initialized - check API keys"
+    })
+
 @app.route('/api/translate/languages', methods=['GET'])
 def api_translate_languages():
     """API endpoint to get available translation languages."""
@@ -819,6 +859,13 @@ def api_translate():
         text = data.get('text')
         source_lang = data.get('source_lang', 'auto')
         target_lang = data.get('target_lang')
+        space_id = data.get('space_id')  # Optional: for database storage
+        
+        # Debug logging
+        logger.info(f"Translation request - Text length: {len(text) if text else 0}, Source: {source_lang}, Target: {target_lang}, Space ID: {space_id}")
+        if text:
+            logger.info(f"First 200 chars: {text[:200]}...")
+            logger.info(f"Last 200 chars: ...{text[-200:]}")
         
         # Validate required fields
         if not text:
@@ -831,6 +878,48 @@ def api_translate():
         translator = get_translate_component()
         if not translator:
             return jsonify({'error': 'Could not initialize translation service'}), 500
+        
+        # Check database for existing translation if space_id is provided
+        if space_id:
+            try:
+                space = get_space_component()
+                
+                # Format target language consistently
+                if target_lang and len(target_lang) == 2:
+                    target_lang_formatted = f"{target_lang}-{target_lang.upper()}"
+                else:
+                    target_lang_formatted = target_lang
+                
+                # Check for existing translation
+                cursor = space.connection.cursor(dictionary=True)
+                
+                # First try exact match
+                query = "SELECT * FROM space_transcripts WHERE space_id = %s AND language = %s"
+                cursor.execute(query, (space_id, target_lang_formatted))
+                existing_translation = cursor.fetchone()
+                
+                # If no exact match, try language family match
+                if not existing_translation and '-' in target_lang_formatted:
+                    base_language = target_lang_formatted.split('-')[0]
+                    query = "SELECT * FROM space_transcripts WHERE space_id = %s AND language LIKE %s"
+                    cursor.execute(query, (space_id, f"{base_language}-%"))
+                    existing_translation = cursor.fetchone()
+                    
+                cursor.close()
+                
+                if existing_translation:
+                    logger.info(f"Found existing translation for space {space_id} in {existing_translation['language']}")
+                    return jsonify({
+                        'success': True,
+                        'translated_text': existing_translation['transcript'],
+                        'source_lang': source_lang,
+                        'target_lang': existing_translation['language'],
+                        'from_database': True
+                    })
+                    
+            except Exception as db_err:
+                logger.warning(f"Error checking existing translation: {db_err}")
+                # Continue with AI translation if database check fails
             
         # Auto-detect source language if set to 'auto'
         if source_lang == 'auto':
@@ -840,16 +929,82 @@ def api_translate():
             source_lang = result
             
         # Perform translation
+        logger.info(f"Starting AI translation from {source_lang} to {target_lang}")
         success, result = translator.translate(text, source_lang, target_lang)
         
         if not success:
-            return jsonify({'error': 'Translation failed', 'details': result}), 400
+            error_msg = 'Translation failed'
+            status_code = 400
             
+            # Check for specific error types to provide better guidance
+            if isinstance(result, dict) and 'error' in result:
+                if 'AI provider not available' in result.get('error', ''):
+                    error_msg = 'AI translation service requires API key configuration'
+                    # Add setup instructions for AI providers
+                    result['setup_instructions'] = {
+                        'option1': 'Set OPENAI_API_KEY environment variable with your OpenAI API key from https://platform.openai.com/api-keys',
+                        'option2': 'Set ANTHROPIC_API_KEY environment variable with your Claude API key from https://console.anthropic.com/',
+                        'option3': 'Configure the AI provider in mainconfig.json'
+                    }
+                elif 'API key required' in result.get('error', ''):
+                    error_msg = 'Translation requires API key or self-hosted setup'
+                    # Add setup instructions to the response
+                    result['setup_instructions'] = {
+                        'option1': 'Get API key from https://portal.libretranslate.com/',
+                        'option2': 'Run ./setup_libretranslate_no_docker.sh to set up a free local server'
+                    }
+                elif '400' in result.get('error', '') or '403' in result.get('error', ''):
+                    error_msg = 'Authentication error with translation service'
+                    if not translator.self_hosted:
+                        result['suggestion'] = 'Consider using self-hosted mode by running ./setup_libretranslate_no_docker.sh'
+                    else:
+                        result['suggestion'] = 'Start your LibreTranslate server with: cd libretranslate && source venv/bin/activate && libretranslate --host localhost --port 5000'
+            
+            return jsonify({'error': error_msg, 'details': result}), status_code
+            
+        # Log successful translation result
+        logger.info(f"AI translation successful - Result length: {len(result) if result else 0}")
+        if result:
+            logger.info(f"Translation first 200 chars: {result[:200]}...")
+            logger.info(f"Translation last 200 chars: ...{result[-200:]}")
+            
+        # Store successful translation in database if space_id is provided
+        if space_id:
+            try:
+                space = get_space_component()
+                cursor = space.connection.cursor()
+                
+                # Format target language consistently
+                if target_lang and len(target_lang) == 2:
+                    target_lang_formatted = f"{target_lang}-{target_lang.upper()}"
+                else:
+                    target_lang_formatted = target_lang
+                
+                # Insert or update translation in database
+                insert_query = """
+                INSERT INTO space_transcripts (space_id, language, transcript, created_at, updated_at)
+                VALUES (%s, %s, %s, NOW(), NOW())
+                ON DUPLICATE KEY UPDATE
+                transcript = VALUES(transcript),
+                updated_at = NOW()
+                """
+                cursor.execute(insert_query, (space_id, target_lang_formatted, result))
+                space.connection.commit()
+                cursor.close()
+                
+                logger.info(f"Stored translation for space {space_id} in {target_lang_formatted}")
+                
+            except Exception as db_err:
+                logger.warning(f"Error storing translation in database: {db_err}")
+                # Continue even if database storage fails
+        
         # Return translated text
         return jsonify({
+            'success': True,
             'translated_text': result,
             'source_lang': source_lang,
-            'target_lang': target_lang
+            'target_lang': target_lang,
+            'from_database': False
         })
         
     except Exception as e:
@@ -893,6 +1048,49 @@ def api_detect_language():
         
     except Exception as e:
         logger.error(f"Error detecting language: {e}", exc_info=True)
+        return jsonify({'error': 'An unexpected error occurred'}), 500
+
+@app.route('/api/summary', methods=['POST'])
+def api_summary():
+    """API endpoint to generate summary of text."""
+    if not TRANSLATE_AVAILABLE:
+        return jsonify({'error': 'AI service is not available'}), 503
+        
+    try:
+        # Validate request
+        if not request.is_json:
+            return jsonify({'error': 'Request must be JSON'}), 400
+            
+        # Get request data
+        data = request.json
+        text = data.get('text')
+        max_length = data.get('max_length')  # Optional parameter
+        
+        # Validate required fields
+        if not text:
+            return jsonify({'error': 'Missing text parameter'}), 400
+            
+        # Get Translate component (which now includes AI functionality)
+        translator = get_translate_component()
+        if not translator:
+            return jsonify({'error': 'Could not initialize AI service'}), 500
+            
+        # Generate summary
+        success, result = translator.summary(text, max_length)
+        
+        if not success:
+            return jsonify({'error': 'Summary generation failed', 'details': result}), 400
+            
+        # Return summary
+        return jsonify({
+            'summary': result,
+            'original_length': len(text),
+            'summary_length': len(result),
+            'max_length': max_length
+        })
+        
+    except Exception as e:
+        logger.error(f"Error generating summary: {e}", exc_info=True)
         return jsonify({'error': 'An unexpected error occurred'}), 500
 
 @app.route('/api/transcript/<transcript_id>', methods=['GET'])
@@ -973,6 +1171,49 @@ def api_get_transcript(transcript_id):
         logger.error(f"Error getting transcript: {e}", exc_info=True)
         return jsonify({'error': 'An unexpected error occurred'}), 500
 
+@app.route('/api/transcripts/<space_id>', methods=['GET'])
+def api_get_transcripts_for_space(space_id):
+    """API endpoint to get all transcripts for a space, optionally filtered by language."""
+    try:
+        # Get optional language parameter
+        language = request.args.get('language')
+        
+        # Get Space component
+        space = get_space_component()
+        
+        # Get transcripts for the space
+        if language:
+            # Get specific language transcript
+            cursor = space.connection.cursor(dictionary=True)
+            query = "SELECT * FROM space_transcripts WHERE space_id = %s AND language = %s"
+            cursor.execute(query, (space_id, language))
+            transcripts = cursor.fetchall()
+            cursor.close()
+        else:
+            # Get all transcripts for the space
+            transcripts = space.get_transcripts_for_space(space_id)
+        
+        # Convert datetime objects to strings for JSON serialization
+        safe_transcripts = []
+        for transcript in transcripts:
+            safe_transcript = {}
+            for key, value in transcript.items():
+                if hasattr(value, 'isoformat'):
+                    safe_transcript[key] = value.isoformat()
+                else:
+                    safe_transcript[key] = value
+            safe_transcripts.append(safe_transcript)
+        
+        return jsonify({
+            'space_id': space_id,
+            'transcripts': safe_transcripts,
+            'count': len(safe_transcripts)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting transcripts for space {space_id}: {e}", exc_info=True)
+        return jsonify({'error': 'An unexpected error occurred'}), 500
+
 # Route for transcribing a space
 @app.route('/api/transcribe/<space_id>', methods=['POST'])
 @app.route('/spaces/<space_id>/transcribe', methods=['POST'])
@@ -1019,6 +1260,48 @@ def transcribe_space(space_id):
             if request.is_json:
                 return jsonify({'error': 'Space audio file not found'}), 404
             flash('Space audio file not found', 'error')
+            return redirect(url_for('space_page', space_id=space_id))
+            
+        # Check if transcript already exists in database
+        # Determine target language for checking existing transcripts
+        target_language = translate_to if translate_to else language
+        if target_language and len(target_language) == 2:
+            target_language = f"{target_language}-{target_language.upper()}"
+        
+        # Check for existing transcript
+        existing_transcript = None
+        try:
+            cursor = space.connection.cursor(dictionary=True)
+            
+            # First try exact match
+            query = "SELECT * FROM space_transcripts WHERE space_id = %s AND language = %s"
+            cursor.execute(query, (space_id, target_language))
+            existing_transcript = cursor.fetchone()
+            
+            # If no exact match, try language family match (e.g., en-US matches en-EN)
+            if not existing_transcript and '-' in target_language:
+                base_language = target_language.split('-')[0]
+                query = "SELECT * FROM space_transcripts WHERE space_id = %s AND language LIKE %s"
+                cursor.execute(query, (space_id, f"{base_language}-%"))
+                existing_transcript = cursor.fetchone()
+                if existing_transcript:
+                    logger.info(f"Found compatible transcript in {existing_transcript['language']} for requested {target_language}")
+            
+            cursor.close()
+        except Exception as db_err:
+            logger.warning(f"Error checking existing transcript: {db_err}")
+        
+        # If transcript exists and overwrite is False, return it immediately
+        if existing_transcript and not overwrite:
+            if request.is_json:
+                return jsonify({
+                    'message': 'Transcript already exists',
+                    'transcript_id': existing_transcript['id'],
+                    'language': existing_transcript['language'],
+                    'created_at': existing_transcript['created_at'].isoformat() if existing_transcript['created_at'] else None,
+                    'from_database': True
+                })
+            flash('Transcript already exists for this language', 'info')
             return redirect(url_for('space_page', space_id=space_id))
             
         # Create transcription job with additional parameters

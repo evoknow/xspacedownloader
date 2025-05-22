@@ -781,15 +781,18 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                             cursor = conn.cursor()
                             
                             # Update the job status and process_id directly
+                            # Set initial progress to ensure UI immediately shows activity
                             update_query = """
                             UPDATE space_download_scheduler 
                             SET status = 'in_progress', process_id = %s, 
+                                progress_in_percent = 1, progress_in_size = 1024,
                                 updated_at = NOW()
                             WHERE id = %s
                             """
                             cursor.execute(update_query, (process_id, job_id))
                             
-                            # Also update the space record to show downloading
+                            # Also update the space record to show downloading with initial progress
+                            # Keep the format field as the file format, not the file size
                             update_space_query = """
                             UPDATE spaces
                             SET status = 'downloading', download_cnt = 1
@@ -801,7 +804,7 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                             cursor.close()
                             conn.close()
                             
-                            print(f"Updated job {job_id} status to 'in_progress' with process ID {process_id}")
+                            print(f"Updated job {job_id} status to 'in_progress' with process ID {process_id} and initial 1% progress")
                             
                 except Exception as update_err:
                     print(f"Error updating job status in database: {update_err}")
@@ -831,29 +834,376 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                 # Ensure the directory exists
                 os.makedirs(os.path.dirname(output_file), exist_ok=True)
                 
-                # Create a simple file watcher function to run in a separate thread
+                # Create a file watcher function to run in a separate thread
                 def file_watcher_thread():
                     """
-                    Simple thread that watches the part file and updates the database directly.
+                    Thread that watches the part file and updates the database directly.
                     This ensures progress is always reported regardless of yt-dlp output.
                     """
                     import time
                     import os
+                    import json
                     from mysql.connector import connect
                     
                     print(f"Starting file watcher thread for job {job_id}, space {space_id}")
+                    last_size = 0
+                    update_counter = 0
+                    
                     while True:
                         try:
                             # Check if part file exists
                             part_file = str(output_file) + ".part"
+                            final_file = str(output_file)
+                            
+                            # Check if the download has completed
+                            if os.path.exists(final_file):
+                                file_size = os.path.getsize(final_file)
+                                print(f"File watcher detected completed file of size {file_size} bytes")
+                                
+                                # Final update with 100% progress
+                                try:
+                                    with open('db_config.json', 'r') as config_file:
+                                        db_config = json.load(config_file)
+                                        if db_config["type"] == "mysql":
+                                            mysql_config = db_config["mysql"].copy()
+                                            if 'use_ssl' in mysql_config:
+                                                del mysql_config['use_ssl']
+                                            
+                                            # Connect directly to MySQL
+                                            conn = connect(**mysql_config)
+                                            cursor = conn.cursor()
+                                            
+                                            # Update job with final file size and 100% progress
+                                            cursor.execute("""
+                                                UPDATE space_download_scheduler 
+                                                SET progress_in_size = %s, progress_in_percent = 100, 
+                                                    status = 'completed', updated_at = NOW(), end_time = NOW()
+                                                WHERE id = %s
+                                            """, (int(file_size), job_id))
+                                            
+                                            # Update space record to completed status 
+                                            # Don't update format field with file size
+                                            cursor.execute("""
+                                                UPDATE spaces 
+                                                SET status = 'completed', download_cnt = 100,
+                                                    downloaded_at = NOW(), updated_at = NOW()
+                                                WHERE space_id = %s
+                                            """, (space_id,))
+                                            
+                                            conn.commit()
+                                            cursor.close()
+                                            conn.close()
+                                            
+                                            print(f"FILE WATCHER: Final update - job completed with size={file_size} bytes")
+                                except Exception as db_err:
+                                    print(f"Error in file watcher final update: {db_err}")
+                                
+                                # Exit the thread as the download is complete
+                                break
+                            
+                            # Check the part file for progress updates
+                            elif os.path.exists(part_file):
+                                file_size = os.path.getsize(part_file)
+                                update_counter += 1
+                                
+                                # Only update DB if size has changed or on every 10th check
+                                if file_size != last_size or update_counter % 10 == 0:
+                                    # More accurate progress estimation based on typical file sizes
+                                    # Most space recordings are between 30-100MB, so scale accordingly
+                                    if file_size > 60*1024*1024:  # > 60MB
+                                        estimated_percent = 90 + min(9, int((file_size - 60*1024*1024) / (10*1024*1024)))
+                                    elif file_size > 40*1024*1024:  # > 40MB
+                                        estimated_percent = 75 + min(15, int((file_size - 40*1024*1024) / (1.33*1024*1024)))
+                                    elif file_size > 20*1024*1024:  # > 20MB
+                                        estimated_percent = 50 + min(25, int((file_size - 20*1024*1024) / (0.8*1024*1024)))
+                                    elif file_size > 10*1024*1024:  # > 10MB
+                                        estimated_percent = 25 + min(25, int((file_size - 10*1024*1024) / (0.4*1024*1024)))
+                                    elif file_size > 5*1024*1024:   # > 5MB
+                                        estimated_percent = 10 + min(15, int((file_size - 5*1024*1024) / (0.33*1024*1024)))
+                                    elif file_size > 1*1024*1024:   # > 1MB
+                                        estimated_percent = 1 + min(9, int((file_size - 1*1024*1024) / (0.44*1024*1024)))
+                                    else:
+                                        estimated_percent = 1  # At least show 1% if file exists
+                                    
+                                    # If size increased, log it
+                                    if file_size > last_size:
+                                        print(f"FILE WATCHER: Part file size increased to {file_size} bytes (+{file_size - last_size} bytes)")
+                                    
+                                    # Direct database update using a fresh connection
+                                    try:
+                                        with open('db_config.json', 'r') as config_file:
+                                            db_config = json.load(config_file)
+                                            if db_config["type"] == "mysql":
+                                                mysql_config = db_config["mysql"].copy()
+                                                if 'use_ssl' in mysql_config:
+                                                    del mysql_config['use_ssl']
+                                                
+                                                # Connect directly to MySQL
+                                                conn = connect(**mysql_config)
+                                                cursor = conn.cursor()
+                                                
+                                                # First check if job exists
+                                                check_query = "SELECT id FROM space_download_scheduler WHERE id = %s"
+                                                cursor.execute(check_query, (job_id,))
+                                                job_exists = cursor.fetchone() is not None
+                                                
+                                                if job_exists:
+                                                    # Update job with current file size and progress
+                                                    cursor.execute("""
+                                                        UPDATE space_download_scheduler 
+                                                        SET progress_in_size = %s, progress_in_percent = %s, 
+                                                            status = 'in_progress', updated_at = NOW() 
+                                                        WHERE id = %s
+                                                    """, (int(file_size), int(estimated_percent), job_id))
+                                                    
+                                                    # Verify the update was successful
+                                                    cursor.execute("SELECT progress_in_size FROM space_download_scheduler WHERE id = %s", (job_id,))
+                                                    verify = cursor.fetchone()
+                                                    if verify:
+                                                        updated_size = verify[0]
+                                                        print(f"FILE WATCHER: Verified job update - progress_in_size is now {updated_size} bytes")
+                                                    
+                                                    # Check if space exists
+                                                    cursor.execute("SELECT id FROM spaces WHERE space_id = %s", (space_id,))
+                                                    space_exists = cursor.fetchone() is not None
+                                                    
+                                                    if space_exists:
+                                                        # Update space record with progress and size
+                                                        cursor.execute("""
+                                                            UPDATE spaces 
+                                                            SET format = %s, status = 'downloading', download_cnt = %s,
+                                                                updated_at = NOW()
+                                                            WHERE space_id = %s
+                                                        """, (str(int(file_size)), int(estimated_percent), space_id))
+                                                        
+                                                        # Verify the space update was successful
+                                                        cursor.execute("SELECT format FROM spaces WHERE space_id = %s", (space_id,))
+                                                        verify_space = cursor.fetchone()
+                                                        if verify_space:
+                                                            updated_format = verify_space[0]
+                                                            print(f"FILE WATCHER: Verified space update - format is now {updated_format}")
+                                                    else:
+                                                        print(f"FILE WATCHER: Space {space_id} not found in database")
+                                                else:
+                                                    print(f"FILE WATCHER: Job {job_id} not found in database")
+                                                
+                                                conn.commit()
+                                                cursor.close()
+                                                conn.close()
+                                                
+                                                print(f"FILE WATCHER: Updated database with size={file_size}, percent={estimated_percent}%")
+                                    except Exception as db_err:
+                                        print(f"Error in file watcher thread DB update: {db_err}")
+                                    
+                                    # Save the current size for the next comparison
+                                    last_size = file_size
+                            else:
+                                print("FILE WATCHER: No part file found yet")
+                                
+                        except Exception as e:
+                            print(f"Error in file watcher thread: {e}")
+                            
+                        # Sleep for 2 seconds before checking again (more frequent updates)
+                        time.sleep(2)
+                
+                # Start the file watcher thread
+                import threading
+                watcher_thread = threading.Thread(target=file_watcher_thread)
+                watcher_thread.daemon = True  # Thread will exit when main thread exits
+                watcher_thread.start()
+                
+                # Start a dedicated file size tracker that just updates progress_in_size
+                def size_tracker_thread():
+                    """
+                    Thread that directly updates the progress_in_size field without any other logic.
+                    This thread ONLY does one thing - update the file size in the database.
+                    """
+                    import time
+                    import os
+                    import json
+                    from mysql.connector import connect
+                    
+                    print(f"Starting dedicated file size tracker thread for job {job_id}")
+                    
+                    while True:
+                        try:
+                            # Check for part file
+                            part_file = str(output_file) + ".part"
+                            final_file = str(output_file)
+                            
+                            # If final file exists, exit
+                            if os.path.exists(final_file):
+                                print(f"Size tracker: Final file exists, exiting thread")
+                                break
+                                
+                            # Update the file size if part file exists
                             if os.path.exists(part_file):
                                 file_size = os.path.getsize(part_file)
                                 
-                                # Simple progress estimate: use 75MB as a full space estimate
-                                # Most spaces are 30-100MB, so 75MB is a reasonable middle ground
-                                estimated_percent = min(99, int((file_size / (75*1024*1024)) * 100))
-                                if estimated_percent < 1 and file_size > 1024*1024:
-                                    estimated_percent = 1  # At least show 1% if file is >1MB
+                                # Direct database update ONLY for file size
+                                try:
+                                    with open('db_config.json', 'r') as config_file:
+                                        db_config = json.load(config_file)
+                                        if db_config["type"] == "mysql":
+                                            mysql_config = db_config["mysql"].copy()
+                                            if 'use_ssl' in mysql_config:
+                                                del mysql_config['use_ssl']
+                                            
+                                            # Connect directly to MySQL
+                                            conn = connect(**mysql_config)
+                                            cursor = conn.cursor()
+                                            
+                                            # CRITICAL: Only update the progress_in_size field
+                                            cursor.execute("""
+                                                UPDATE space_download_scheduler 
+                                                SET progress_in_size = %s 
+                                                WHERE id = %s
+                                            """, (int(file_size), job_id))
+                                            
+                                            conn.commit()
+                                            cursor.close()
+                                            conn.close()
+                                            
+                                            # Only log occasionally to avoid spamming logs
+                                            if int(time.time()) % 4 == 0:
+                                                print(f"SIZE TRACKER: Updated size to {file_size} bytes for job {job_id}")
+                                except Exception as db_err:
+                                    print(f"Error in size tracker update: {db_err}")
+                        except Exception as e:
+                            print(f"Error in size tracker thread: {e}")
+                            
+                        # Sleep briefly between updates
+                        time.sleep(0.5)
+                
+                # Start the size tracker thread
+                size_thread = threading.Thread(target=size_tracker_thread)
+                size_thread.daemon = True  # Thread will exit when main thread exits
+                size_thread.start()
+                
+                # Start another thread for heartbeat progress updates
+                # This will ensure progress updates happen even if the file watcher misses some
+                def heartbeat_progress_thread():
+                    """
+                    Thread that periodically sends heartbeat progress updates to the database.
+                    This ensures progress is always reported regardless of other updates.
+                    """
+                    import time
+                    import os
+                    import json
+                    from mysql.connector import connect
+                    
+                    print(f"Starting heartbeat progress thread for job {job_id}, space {space_id}")
+                    last_progress = 0
+                    last_size = 0
+                    
+                    # Critical: Make sure job is initialized with progress_in_size = 1024 at minimum
+                    # This ensures the frontend sees activity even before part file appears
+                    try:
+                        with open('db_config.json', 'r') as config_file:
+                            db_config = json.load(config_file)
+                            if db_config["type"] == "mysql":
+                                mysql_config = db_config["mysql"].copy()
+                                if 'use_ssl' in mysql_config:
+                                    del mysql_config['use_ssl']
+                                
+                                # Connect directly to MySQL
+                                conn = connect(**mysql_config)
+                                cursor = conn.cursor()
+                                
+                                # Update job with initial size
+                                cursor.execute("""
+                                    UPDATE space_download_scheduler 
+                                    SET progress_in_size = 1024, progress_in_percent = 1, 
+                                        status = 'in_progress', updated_at = NOW() 
+                                    WHERE id = %s AND progress_in_size < 1024
+                                """, (job_id,))
+                                
+                                conn.commit()
+                                cursor.close()
+                                conn.close()
+                    except Exception as init_err:
+                        print(f"Error in heartbeat thread initialization: {init_err}")
+                    
+                    while True:
+                        try:
+                            # Check if part file exists
+                            part_file = str(output_file) + ".part"
+                            final_file = str(output_file)
+                            
+                            # Check if the download has completed
+                            if os.path.exists(final_file):
+                                file_size = os.path.getsize(final_file)
+                                print(f"Heartbeat detected completed file of size {file_size} bytes")
+                                
+                                # Final update with 100% progress
+                                try:
+                                    with open('db_config.json', 'r') as config_file:
+                                        db_config = json.load(config_file)
+                                        if db_config["type"] == "mysql":
+                                            mysql_config = db_config["mysql"].copy()
+                                            if 'use_ssl' in mysql_config:
+                                                del mysql_config['use_ssl']
+                                            
+                                            # Connect directly to MySQL
+                                            conn = connect(**mysql_config)
+                                            cursor = conn.cursor()
+                                            
+                                            # Update job with final file size and 100% progress
+                                            cursor.execute("""
+                                                UPDATE space_download_scheduler 
+                                                SET progress_in_size = %s, progress_in_percent = 100, 
+                                                    status = 'completed', updated_at = NOW(), end_time = NOW()
+                                                WHERE id = %s
+                                            """, (int(file_size), job_id))
+                                            
+                                            # Update space record to completed status 
+                                            # Don't update format field with file size
+                                            cursor.execute("""
+                                                UPDATE spaces 
+                                                SET status = 'completed', download_cnt = 100,
+                                                    downloaded_at = NOW(), updated_at = NOW()
+                                                WHERE space_id = %s
+                                            """, (space_id,))
+                                            
+                                            conn.commit()
+                                            cursor.close()
+                                            conn.close()
+                                            
+                                            print(f"HEARTBEAT: Final update - job completed with size={file_size} bytes")
+                                except Exception as db_err:
+                                    print(f"Error in heartbeat final update: {db_err}")
+                                
+                                # Exit the thread as the download is complete
+                                break
+                            
+                            # Check the part file for progress updates
+                            elif os.path.exists(part_file):
+                                file_size = os.path.getsize(part_file)
+                                
+                                # Always update DB regardless of changes
+                                # More accurate progress estimation based on typical file sizes
+                                # Most space recordings are between 30-100MB, so scale accordingly
+                                if file_size > 60*1024*1024:  # > 60MB
+                                    estimated_percent = 90 + min(9, int((file_size - 60*1024*1024) / (10*1024*1024)))
+                                elif file_size > 40*1024*1024:  # > 40MB
+                                    estimated_percent = 75 + min(15, int((file_size - 40*1024*1024) / (1.33*1024*1024)))
+                                elif file_size > 20*1024*1024:  # > 20MB
+                                    estimated_percent = 50 + min(25, int((file_size - 20*1024*1024) / (0.8*1024*1024)))
+                                elif file_size > 10*1024*1024:  # > 10MB
+                                    estimated_percent = 25 + min(25, int((file_size - 10*1024*1024) / (0.4*1024*1024)))
+                                elif file_size > 5*1024*1024:   # > 5MB
+                                    estimated_percent = 10 + min(15, int((file_size - 5*1024*1024) / (0.33*1024*1024)))
+                                elif file_size > 1*1024*1024:   # > 1MB
+                                    estimated_percent = 1 + min(9, int((file_size - 1*1024*1024) / (0.44*1024*1024)))
+                                else:
+                                    estimated_percent = 1  # At least show 1% if file exists
+                                
+                                # Always log progress, even if small changes
+                                # This helps with debugging and ensures we can see activity
+                                print(f"HEARTBEAT: Part file size {file_size} bytes, progress {estimated_percent}%")
+                                
+                                # ALWAYS update the job's progress_in_size, regardless of other changes
+                                # This is critical for accurate progress tracking
                                 
                                 # Direct database update using a fresh connection
                                 try:
@@ -868,57 +1218,84 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                                             conn = connect(**mysql_config)
                                             cursor = conn.cursor()
                                             
-                                            # Update job with current file size and progress
-                                            cursor.execute("""
-                                                UPDATE space_download_scheduler 
-                                                SET progress_in_size = %s, progress_in_percent = %s, 
-                                                    status = 'in_progress', updated_at = NOW() 
-                                                WHERE id = %s
-                                            """, (int(file_size), int(estimated_percent), job_id))
+                                            # First check if job exists
+                                            check_query = "SELECT id FROM space_download_scheduler WHERE id = %s"
+                                            cursor.execute(check_query, (job_id,))
+                                            job_exists = cursor.fetchone() is not None
                                             
-                                            # Update space record too
-                                            cursor.execute("""
-                                                UPDATE spaces 
-                                                SET format = %s, status = 'downloading', download_cnt = %s 
-                                                WHERE space_id = %s
-                                            """, (str(int(file_size)), int(estimated_percent), space_id))
+                                            if job_exists:
+                                                # Update job with current file size and progress
+                                                # CRITICAL FIX: Always update progress_in_size, even if no other changes
+                                                # This is essential for tracking download progress
+                                                cursor.execute("""
+                                                    UPDATE space_download_scheduler 
+                                                    SET progress_in_size = %s, progress_in_percent = %s, 
+                                                        status = 'in_progress', updated_at = NOW() 
+                                                    WHERE id = %s
+                                                """, (int(file_size), int(estimated_percent), job_id))
+                                                
+                                                # CRITICAL: Add a backup update that only updates size
+                                                # This ensures file size is always tracked correctly
+                                                cursor.execute("""
+                                                    UPDATE space_download_scheduler 
+                                                    SET progress_in_size = %s, updated_at = NOW() 
+                                                    WHERE id = %s
+                                                """, (int(file_size), job_id))
+                                                
+                                                # Check if space exists
+                                                cursor.execute("SELECT id FROM spaces WHERE space_id = %s", (space_id,))
+                                                space_exists = cursor.fetchone() is not None
+                                                
+                                                if space_exists:
+                                                    # Update space record with progress
+                                                    # Don't use format field for storing file size
+                                                    cursor.execute("""
+                                                        UPDATE spaces 
+                                                        SET status = 'downloading', download_cnt = %s,
+                                                            updated_at = NOW()
+                                                        WHERE space_id = %s
+                                                    """, (int(estimated_percent), space_id))
                                             
                                             conn.commit()
                                             cursor.close()
                                             conn.close()
-                                            
-                                            print(f"FILE WATCHER: Updated database with size={file_size}, percent={estimated_percent}%")
                                 except Exception as db_err:
-                                    print(f"Error in file watcher thread DB update: {db_err}")
-                            
-                            # Check if output file exists (download completed)
-                            if os.path.exists(output_file):
-                                print("File watcher detected completed file, exiting thread")
-                                break
+                                    print(f"Error in heartbeat thread DB update: {db_err}")
                                 
+                                # Save the current progress and size for the next comparison
+                                last_progress = estimated_percent
+                                last_size = file_size
                         except Exception as e:
-                            print(f"Error in file watcher thread: {e}")
+                            print(f"Error in heartbeat thread: {e}")
                             
-                        # Sleep for 3 seconds before checking again
-                        time.sleep(3)
+                        # Sleep for 1 second before checking again (more frequent updates)
+                        time.sleep(1)
                 
-                # Start the file watcher thread
-                import threading
-                watcher_thread = threading.Thread(target=file_watcher_thread)
-                watcher_thread.daemon = True  # Thread will exit when main thread exits
-                watcher_thread.start()
+                # Start the heartbeat thread
+                heartbeat_thread = threading.Thread(target=heartbeat_progress_thread)
+                heartbeat_thread.daemon = True  # Thread will exit when main thread exits
+                heartbeat_thread.start()
                 
                 # Set up yt-dlp command to download the actual audio file
+                # Force MP3 format as the default output format per user requirements
+                final_format = 'mp3'  # Always use MP3 regardless of what was requested
+                
                 yt_dlp_cmd = [
                     yt_dlp_path,
                     "--extract-audio",
-                    "--audio-format", file_type,
+                    "--audio-format", final_format,  # Always use MP3 format
                     "--audio-quality", "0",  # Best quality
-                    "--output", str(output_file),
+                    "--output", str(download_dir / f"{space_id}.{final_format}"),  # Ensure .mp3 extension
                     "--no-progress",  # Don't show progress bar (cleaner logs)
                     "--no-warnings",  # Reduce log spam
                     "--no-playlist",  # Don't download playlists
+                    "--remux-video", "mp3",  # Force remuxing to mp3 to avoid intermediary files
+                    "--postprocessor-args", "-strict -2",  # More permissive ffmpeg options
                 ]
+                
+                # Update output file path and file_type to reflect MP3 format
+                output_file = download_dir / f"{space_id}.mp3"
+                file_type = 'mp3'
                 
                 # Add X space extractor if the URL is from X
                 if "x.com" in space_url:
@@ -976,6 +1353,34 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                 last_size_update_time = time.time()
                 last_part_check_time = time.time()
                 force_update_needed = True  # Start with a forced update to show immediate progress
+                
+                # CRITICAL FIX: Directly update job with initial size before starting download
+                # This ensures the job's progress_in_size is set immediately
+                try:
+                    with open('db_config.json', 'r') as config_file:
+                        db_config = json.load(config_file)
+                        if db_config["type"] == "mysql":
+                            mysql_config = db_config["mysql"].copy()
+                            if 'use_ssl' in mysql_config:
+                                del mysql_config['use_ssl']
+                                
+                            conn = mysql.connector.connect(**mysql_config)
+                            cursor = conn.cursor()
+                            
+                            # Ensure job starts with a known size value
+                            initial_size_query = """
+                            UPDATE space_download_scheduler
+                            SET progress_in_size = 1024, updated_at = NOW()
+                            WHERE id = %s AND (progress_in_size IS NULL OR progress_in_size < 1024)
+                            """
+                            cursor.execute(initial_size_query, (job_id,))
+                            conn.commit()
+                            cursor.close()
+                            conn.close()
+                            
+                            print(f"Set initial progress_in_size to 1024 bytes for job {job_id}")
+                except Exception as initial_size_err:
+                    print(f"Error setting initial size: {initial_size_err}")
                 
                 for line in iter(process.stdout.readline, ''):
                     print(line, end='')
@@ -1263,14 +1668,14 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                                 except Exception as space_err:
                                     print(f"Error updating progress via Space component: {space_err}")
                 
-                # Check part file size every 5 seconds regardless of output to ensure progress updates
+                # Check part file size every 2 seconds regardless of output to ensure progress updates
                 last_update_time = time.time()
                 part_check_counter = 0
                 
                 while process.poll() is None:  # While process is still running
                     current_time = time.time()
-                    # Check every 5 seconds
-                    if current_time - last_update_time >= 5:
+                    # Check more frequently (every 2 seconds) to ensure better progress tracking
+                    if current_time - last_update_time >= 2:
                         part_check_counter += 1
                         try:
                             # Check part file size
@@ -1362,6 +1767,16 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                                             conn = mysql.connector.connect(**mysql_config)
                                             cursor = conn.cursor()
                                             
+                                            # IMPORTANT: Always update the database with the current file size
+                                            # This is critical to ensure progress tracking works correctly
+                                            job_size_update_query = """
+                                            UPDATE space_download_scheduler
+                                            SET progress_in_size = %s, updated_at = NOW()
+                                            WHERE id = %s
+                                            """
+                                            cursor.execute(job_size_update_query, (file_size, job_id))
+                                            print(f"DIRECT SIZE UPDATE: Updated job {job_id} with current size={file_size} bytes")
+                                            
                                             # For new downloads with no progress yet, set progress to at least 1%
                                             # This helps show some progress on the frontend
                                             current_percent = progress  # Default value if we don't update it
@@ -1424,15 +1839,15 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                                                     os.getpid(), size_to_update, current_percent, job_id
                                                 ))
                                                 
-                                                # IMPORTANT: Also update the spaces table format field with the current size
-                                                # This ensures the UI properly displays progress
+                                                # Update the spaces table status
+                                                # Don't use format field for storing file size
                                                 space_update_query = """
                                                 UPDATE spaces
-                                                SET format = %s, status = 'downloading'
+                                                SET status = 'downloading'
                                                 WHERE space_id = %s
                                                 """
-                                                cursor.execute(space_update_query, (str(size_to_update), space_id))
-                                                print(f"Updated spaces table format field with size {size_to_update} bytes")
+                                                cursor.execute(space_update_query, (space_id,))
+                                                print(f"Updated spaces table status to downloading")
                                                 
                                                 update_count = cursor.rowcount
                                                 print(f"Part check: Job {job_id} update affected {update_count} rows")
@@ -1513,6 +1928,64 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                     file_size = os.path.getsize(output_file)
                     print(f"File size: {file_size} bytes")
                     
+                    # CRITICAL: Always convert non-MP3 formats to MP3 as required by user
+                    if file_type.lower() != 'mp3' or not str(output_file).endswith('.mp3'):
+                        # The file exists but is not MP3 format - convert it
+                        print(f"Converting {output_file} to MP3 format as required by user")
+                        
+                        # Define the mp3 output file path
+                        mp3_output = str(output_file).rsplit('.', 1)[0] + '.mp3'
+                        
+                        try:
+                            # Use ffmpeg to convert the file to MP3
+                            convert_cmd = [
+                                'ffmpeg',
+                                '-y',  # Overwrite existing files
+                                '-i', str(output_file),  # Input file
+                                '-acodec', 'libmp3lame',  # Use LAME MP3 encoder
+                                '-q:a', '2',  # Use VBR quality 2 (high quality)
+                                mp3_output  # Output file
+                            ]
+                            
+                            print(f"Running conversion command: {' '.join(convert_cmd)}")
+                            convert_result = subprocess.run(convert_cmd, 
+                                                          stdout=subprocess.PIPE, 
+                                                          stderr=subprocess.PIPE,
+                                                          text=True)
+                            
+                            if convert_result.returncode == 0 and os.path.exists(mp3_output) and os.path.getsize(mp3_output) > 0:
+                                print(f"Successfully converted file to MP3: {mp3_output}")
+                                
+                                # If conversion successful, delete the original non-MP3 file
+                                os.remove(output_file)
+                                print(f"Removed original {file_type} file: {output_file}")
+                                
+                                # Update output_file to point to the MP3 file
+                                output_file = mp3_output
+                                file_type = 'mp3'
+                                
+                                # Update the file size for database records
+                                file_size = os.path.getsize(output_file)
+                                print(f"New MP3 file size: {file_size} bytes")
+                            else:
+                                print(f"Error converting file to MP3: {convert_result.stderr}")
+                                # Continue with validation, don't fail the download
+                        except Exception as convert_err:
+                            print(f"Error during conversion to MP3: {convert_err}")
+                    
+                    # Clean up any m4a files that might have been left behind
+                    try:
+                        # Check for any m4a files with this space_id
+                        for filename in os.listdir(str(download_dir)):
+                            if space_id in filename and filename.endswith('.m4a') and filename != os.path.basename(output_file):
+                                m4a_file = os.path.join(str(download_dir), filename)
+                                print(f"Found stray m4a file: {m4a_file}, removing...")
+                                os.remove(m4a_file)
+                                print(f"Removed stray m4a file: {m4a_file}")
+                    except Exception as cleanup_err:
+                        print(f"Error cleaning up m4a files: {cleanup_err}")
+                        # Non-critical error, continue with validation
+                    
                     # Verify that file is valid and complete by checking if it can be read correctly
                     print("Validating downloaded file...")
                     try:
@@ -1558,13 +2031,6 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                         progress_in_percent=100
                     )
                     
-                    # Update space record as completed
-                    space.update_download_progress(
-                        space_id,
-                        progress=100,
-                        file_size=file_size
-                    )
-                    
                     # Also make sure there's a record in the spaces table with status 1 for search
                     try:
                         # Create direct database connection
@@ -1584,15 +2050,17 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                                 
                                 if exists:
                                     # Update existing space - don't modify download_cnt counter
+                                    # Set format field to the file type, not the file size
                                     update_query = """
                                     UPDATE spaces 
                                     SET status = 'completed', format = %s, 
                                         updated_at = NOW(), downloaded_at = NOW()
                                     WHERE space_id = %s
                                     """
-                                    cursor.execute(update_query, (str(file_size), space_id))
+                                    cursor.execute(update_query, (file_type, space_id))
                                 else:
                                     # Insert new space record with status 'completed' and download_cnt 0
+                                    # Store file type in format field, not file size
                                     insert_query = """
                                     INSERT INTO spaces 
                                     (space_id, space_url, filename, status, download_cnt, format, created_at, updated_at, downloaded_at)
@@ -1601,7 +2069,7 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                                     # Use space details URL if available or construct one
                                     space_url = space_details.get('space_url') if space_details else f"https://x.com/i/spaces/{space_id}"
                                     filename = f"{space_id}.{file_type}"
-                                    cursor.execute(insert_query, (space_id, space_url, filename, str(file_size)))
+                                    cursor.execute(insert_query, (space_id, space_url, filename, file_type))
                                 
                                 conn.commit()
                                 cursor.close()

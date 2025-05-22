@@ -13,6 +13,12 @@ Handles email operations using configurable email providers (SendGrid, Mailgun, 
 ### DownloadSpace Component
 Handles downloading X space audio using yt-dlp with progress tracking.
 
+### SpeechToText Component
+Handles transcription of audio files using Whisper with progress tracking.
+
+### Translate Component
+Handles translation of text between languages using LibreTranslate API.
+
 ## Installation
 
 1. Clone this repository
@@ -47,6 +53,42 @@ Create a `db_config.json` file with your MySQL connection details:
 }
 ```
 
+## Translation Configuration
+
+Configure LibreTranslate API settings in `mainconfig.json`:
+
+```json
+{
+    "translate": {
+        "api_url": "https://libretranslate.com/translate",
+        "api_key": "your-api-key-from-libretranslate",
+        "self_hosted": false,
+        "self_hosted_url": "http://localhost:5000/translate"
+    }
+}
+```
+
+You have two options for using the translation functionality:
+
+1. **Use LibreTranslate's hosted service**:
+   - Get an API key from [LibreTranslate Portal](https://portal.libretranslate.com/)
+   - Add the API key to the `api_key` field in the config
+
+2. **Set up a self-hosted LibreTranslate instance**:
+   - Run the provided setup script to install LibreTranslate:
+     ```bash
+     ./setup_libretranslate_no_docker.sh
+     ```
+   - Start the LibreTranslate server:
+     ```bash
+     cd libretranslate
+     source venv/bin/activate
+     libretranslate --host localhost --port 5000
+     ```
+   - Set `self_hosted` to `true` in mainconfig.json (default setting)
+   - Configure the `self_hosted_url` to point to your local instance (default: http://localhost:5000/translate)
+   - No API key is required for self-hosted mode
+
 ## Usage
 
 ### Web Interface
@@ -64,6 +106,10 @@ This will start:
 2. The background downloader daemon in foreground mode
 
 You can then access the web interface by opening http://127.0.0.1:5000 in your browser.
+
+### Downloaded File Format
+
+**IMPORTANT**: All downloaded files are automatically converted to MP3 format, regardless of the original format from the source. This ensures compatibility with most audio players and standardizes the output format. Even if you specify a different format when downloading, the system will ensure the final output is converted to MP3.
 
 ### Command-Line Tools
 
@@ -111,7 +157,8 @@ job_id = downloader.download("https://x.com/i/spaces/1dRJZEpyjlNGB")
 # Synchronous download
 file_path = downloader.download("https://x.com/i/spaces/1dRJZEpyjlNGB", async_mode=False)
 
-# Download as WAV
+# Note: Even if you specify a different file type, the final output will always be MP3
+# The file_type parameter is mainly for compatibility with older code
 job_id = downloader.download("https://x.com/i/spaces/1dRJZEpyjlNGB", file_type="wav")
 
 # Check download status
@@ -122,6 +169,54 @@ downloader.cancel_download(job_id)
 
 # List all downloads
 jobs = downloader.list_downloads()
+```
+
+#### Speech-to-Text Transcription
+
+```python
+from components.SpeechToText import SpeechToText
+
+# Create transcriber instance
+transcriber = SpeechToText()
+
+# Transcribe audio file
+job_id = transcriber.transcribe("/path/to/audio.mp3")
+
+# Check transcription status
+status = transcriber.get_transcription_status(job_id)
+
+# Get transcript
+success, transcript = transcriber.get_transcript(job_id)
+```
+
+#### Translation
+
+```python
+from components.Translate import Translate
+
+# Create translator instance
+translator = Translate()
+
+# Get available languages
+languages = translator.get_languages()
+print(languages)  # [{"code": "en", "name": "English"}, ...]
+
+# Translate text
+success, result = translator.translate(
+    text="Hello, how are you?",
+    source_lang="en",
+    target_lang="es"
+)
+
+if success:
+    print(f"Translation: {result}")
+else:
+    print(f"Error: {result['error']}")
+
+# Detect language
+success, lang_code = translator.detect_language("Bonjour, comment allez-vous?")
+if success:
+    print(f"Detected language: {lang_code}")  # "fr"
 ```
 
 #### Sending Emails
@@ -151,6 +246,9 @@ The web interface provides a simple way to submit space URLs for download. Featu
 - Check download status and progress
 - View queue status (active and pending downloads)
 - Real-time status updates
+- Speech-to-text transcription and viewing
+- Translate transcripts between multiple languages
+- Multi-language support for transcriptions
 
 ## Testing
 
@@ -208,6 +306,32 @@ Table to store email provider configuration:
 - `status`: Status (0=disabled, 1=enabled)
 - `templates`: JSON field for email templates
 - `testers`: JSON field for email testers
+
+## File Format Conversion
+
+The system now ensures all downloaded files are in MP3 format. If you have existing non-MP3 files (like .m4a or .wav) that need to be converted, use the `convert_to_mp3.py` script:
+
+```bash
+./convert_to_mp3.py
+```
+
+This script will:
+1. Scan the downloads directory for any non-MP3 audio files (m4a, wav)
+2. Convert each file to MP3 format using FFmpeg
+3. Remove the original non-MP3 file after successful conversion
+4. Update database records to reflect the new MP3 file
+
+Example output:
+```
+2025-05-20 14:10:55,123 - convert_to_mp3 - INFO - Starting conversion of all non-MP3 files to MP3 format
+2025-05-20 14:10:55,124 - convert_to_mp3 - INFO - Scanning directory: /path/to/downloads
+2025-05-20 14:10:55,125 - convert_to_mp3 - INFO - Found 3 non-MP3 files to convert: 2 m4a, 1 wav
+2025-05-20 14:10:55,126 - convert_to_mp3 - INFO - Converting /path/to/downloads/1YpKkgVgMQAKj.m4a to MP3...
+2025-05-20 14:10:55,127 - convert_to_mp3 - INFO - Running: ffmpeg -y -i /path/to/downloads/1YpKkgVgMQAKj.m4a -acodec libmp3lame -q:a 2 /path/to/downloads/1YpKkgVgMQAKj.mp3
+2025-05-20 14:11:05,128 - convert_to_mp3 - INFO - Successfully converted to MP3: /path/to/downloads/1YpKkgVgMQAKj.mp3 (64574123 bytes)
+2025-05-20 14:11:05,129 - convert_to_mp3 - INFO - Removing original file: /path/to/downloads/1YpKkgVgMQAKj.m4a
+2025-05-20 14:11:06,130 - convert_to_mp3 - INFO - Conversion complete.
+```
 
 ## Troubleshooting
 

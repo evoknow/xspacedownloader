@@ -1,9 +1,9 @@
 TODO LIST
 1. Support for speech to text via whisper
 1. Removing white noise
+1. Cliping support
 1. Using spaces transcript to create summary
 1. Fetching speaker, host, info via spacedashboard or x api
-1. Cliping support
 1. Better /spaces/<spaceid | space title when available> page
 1. Tracking popular space play, download
 1. Sharing widget

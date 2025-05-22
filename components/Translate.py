@@ -1,56 +1,53 @@
 #!/usr/bin/env python3
 # components/Translate.py
-"""Translation component for XSpace Downloader using LibreTranslate."""
+"""Translation component for XSpace Downloader using AI providers."""
 
 import os
 import json
 import logging
-import requests
 from typing import Dict, List, Optional, Union, Tuple
+from .AI import AI
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('translate_component.log'),
-        logging.StreamHandler()
-    ]
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
 class Translate:
-    """Class for handling translation of text between languages."""
+    """Translation component that uses AI providers for translation."""
     
     def __init__(self, api_url=None, api_key=None, config_file="mainconfig.json"):
         """
         Initialize the Translate component.
         
         Args:
-            api_url (str, optional): URL of the LibreTranslate API server
-            api_key (str, optional): API key for LibreTranslate if required
+            api_url (str, optional): Not used - kept for compatibility
+            api_key (str, optional): Not used - kept for compatibility
             config_file (str, optional): Path to the configuration file
         """
-        self.api_url = api_url
-        self.api_key = api_key
+        self.config_file = config_file
+        self.ai = None
+        self.self_hosted = True  # Set to True to avoid API key warnings
+        self.api_key = "configured"  # Fake value to avoid warnings
+        self.api_url = "AI-powered translation"  # Descriptive value for web API
         
-        # If no API URL provided, try to load from config
-        if not self.api_url or not self.api_key:
-            self._load_config(config_file)
-            
-        # Default API URL if not provided in config
-        if not self.api_url:
-            self.api_url = "https://libretranslate.com/translate"
-            logger.warning(f"No API URL provided, using default: {self.api_url}")
-            
-        # Initialize session
-        self.session = requests.Session()
+        try:
+            self.ai = AI(config_file)
+            logger.info(f"Translation component initialized using AI provider: {self.ai.get_provider_name()}")
+            self.api_key = "AI-configured"
+        except Exception as e:
+            logger.error(f"Failed to initialize AI component: {e}")
+            self.ai = None
+            self.api_key = None
+            self.api_url = "AI component not available - check API keys"
         
-        # Try to get available languages
-        self.available_languages = self._get_available_languages()
-        if not self.available_languages:
-            logger.warning("Could not fetch available languages from API")
-            # Default language list if API call fails
+        # Get available languages from AI provider
+        if self.ai:
+            self.available_languages = self.ai.get_supported_languages()
+        else:
+            # Fallback language list
             self.available_languages = [
                 {"code": "en", "name": "English"},
                 {"code": "es", "name": "Spanish"},
@@ -61,62 +58,12 @@ class Translate:
                 {"code": "ru", "name": "Russian"},
                 {"code": "zh", "name": "Chinese"},
                 {"code": "ja", "name": "Japanese"},
-                {"code": "ar", "name": "Arabic"}
+                {"code": "ar", "name": "Arabic"},
+                {"code": "bn", "name": "Bengali/Bangla"},
+                {"code": "hi", "name": "Hindi"},
+                {"code": "ko", "name": "Korean"}
             ]
     
-    def _load_config(self, config_file: str) -> None:
-        """
-        Load configuration from file.
-        
-        Args:
-            config_file (str): Path to the configuration file
-        """
-        try:
-            if os.path.exists(config_file):
-                with open(config_file, 'r') as f:
-                    config = json.load(f)
-                    
-                translate_config = config.get('translate', {})
-                self.api_url = translate_config.get('api_url', self.api_url)
-                self.api_key = translate_config.get('api_key', self.api_key)
-                
-                if self.api_url and self.api_key:
-                    logger.info(f"Loaded translation configuration from {config_file}")
-            else:
-                logger.warning(f"Configuration file {config_file} not found")
-        except Exception as e:
-            logger.error(f"Error loading translation configuration: {e}")
-            
-    def _get_available_languages(self) -> List[Dict[str, str]]:
-        """
-        Get list of available languages from LibreTranslate API.
-        
-        Returns:
-            List[Dict[str, str]]: List of language dictionaries with code and name
-        """
-        try:
-            # Get the base API URL (without /translate endpoint)
-            base_url = self.api_url
-            if base_url.endswith('/translate'):
-                base_url = base_url[:-10]
-                
-            languages_url = f"{base_url}/languages"
-            
-            # Make API request
-            params = {}
-            if self.api_key:
-                params['api_key'] = self.api_key
-                
-            response = self.session.get(languages_url, params=params, timeout=5)
-            response.raise_for_status()
-            
-            languages = response.json()
-            logger.info(f"Retrieved {len(languages)} available languages from API")
-            return languages
-        except Exception as e:
-            logger.error(f"Error fetching available languages: {e}")
-            return []
-            
     def get_languages(self) -> List[Dict[str, str]]:
         """
         Get the list of available languages for translation.
@@ -125,7 +72,7 @@ class Translate:
             List[Dict[str, str]]: List of language dictionaries with code and name
         """
         return self.available_languages
-        
+    
     def translate(self, text: str, source_lang: str, target_lang: str) -> Tuple[bool, Union[str, Dict]]:
         """
         Translate text from source language to target language.
@@ -140,64 +87,70 @@ class Translate:
                 - Success flag (True if successful, False otherwise)
                 - Either the translated text (if successful) or an error dictionary
         """
+        if not self.ai:
+            return False, {
+                "error": "AI provider not available",
+                "details": "Please configure an AI provider (OpenAI or Claude) in mainconfig.json"
+            }
+        
         if not text:
             return False, {"error": "No text provided for translation"}
             
         if source_lang == target_lang:
-            return True, text  # No translation needed
-            
+            return True, text
+        
+        # Complex languages that often have issues with GPT-3.5
+        problematic_languages = ['bn', 'ar', 'hi', 'th', 'ko', 'ja']
+        
         try:
-            # Prepare request payload
-            payload = {
-                'q': text,
-                'source': source_lang,
-                'target': target_lang,
-                'format': 'text'
-            }
+            success, result = self.ai.translate(source_lang, target_lang, text)
             
-            # Add API key if available
-            if self.api_key:
-                payload['api_key'] = self.api_key
-                
-            # Make API request
-            response = self.session.post(self.api_url, json=payload, timeout=30)
+            # If translation failed or is for a problematic language, try with Claude if available
+            if (not success or target_lang.lower() in problematic_languages) and hasattr(self, '_try_claude_fallback'):
+                logger.info(f"Attempting Claude fallback for {target_lang} translation")
+                claude_success, claude_result = self._try_claude_fallback(source_lang, target_lang, text)
+                if claude_success:
+                    logger.info(f"Claude fallback successful for {target_lang}")
+                    return True, claude_result
             
-            # Check response status
-            if response.status_code != 200:
-                logger.error(f"Translation API error: {response.status_code} - {response.text}")
-                return False, {
-                    "error": f"API error: {response.status_code}",
-                    "details": response.text
-                }
-                
-            # Parse response
-            result = response.json()
+            return success, result
             
-            # Handle different API response formats
-            translated_text = result.get('translatedText', None)
-            if translated_text is None:
-                translated_text = result.get('text', None)
-                
-            if translated_text is None:
-                logger.error(f"Unexpected API response format: {result}")
-                return False, {
-                    "error": "Unexpected API response format",
-                    "details": result
-                }
-                
-            logger.info(f"Successfully translated text from {source_lang} to {target_lang}")
-            return True, translated_text
-            
-        except requests.RequestException as e:
-            logger.error(f"Request error in translation: {e}")
-            return False, {"error": f"Network error: {str(e)}"}
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error in translation: {e}")
-            return False, {"error": f"Invalid response format: {str(e)}"}
         except Exception as e:
-            logger.error(f"Unexpected error in translation: {e}")
-            return False, {"error": f"Unexpected error: {str(e)}"}
+            logger.error(f"Translation error: {e}")
+            return False, {"error": f"Translation error: {str(e)}"}
+    
+    def _try_claude_fallback(self, source_lang: str, target_lang: str, text: str) -> Tuple[bool, Union[str, Dict]]:
+        """
+        Try translation with Claude as fallback.
+        
+        Args:
+            source_lang (str): Source language code
+            target_lang (str): Target language code  
+            text (str): Text to translate
             
+        Returns:
+            Tuple[bool, Union[str, Dict]]: Success flag and result
+        """
+        try:
+            from .Claude import Claude
+            import os
+            
+            # Check if Claude API key is available
+            api_key = os.getenv('ANTHROPIC_API_KEY')
+            if not api_key:
+                logger.warning("Claude fallback not available - no API key")
+                return False, {"error": "Claude API key not available"}
+            
+            # Create Claude instance
+            claude = Claude(api_key)
+            
+            # Try translation with Claude
+            return claude.translate(source_lang, target_lang, text)
+            
+        except Exception as e:
+            logger.error(f"Claude fallback error: {e}")
+            return False, {"error": f"Claude fallback error: {str(e)}"}
+    
     def detect_language(self, text: str) -> Tuple[bool, Union[str, Dict]]:
         """
         Detect the language of the provided text.
@@ -212,86 +165,117 @@ class Translate:
         """
         if not text:
             return False, {"error": "No text provided for language detection"}
-            
+        
+        # Simple language detection fallback
         try:
-            # Get the base API URL (without /translate endpoint)
-            base_url = self.api_url
-            if base_url.endswith('/translate'):
-                base_url = base_url[:-10]
-                
-            detect_url = f"{base_url}/detect"
+            # Count non-ASCII characters
+            non_ascii_count = sum(1 for c in text if ord(c) > 127)
+            non_ascii_ratio = non_ascii_count / len(text) if len(text) > 0 else 0
             
-            # Prepare request payload
-            payload = {'q': text}
+            # Check for specific scripts
+            has_cyrillic = any(0x0400 <= ord(c) <= 0x04FF for c in text)
+            has_arabic = any(0x0600 <= ord(c) <= 0x06FF for c in text)
+            has_devanagari = any(0x0900 <= ord(c) <= 0x097F for c in text)
+            has_bengali = any(0x0980 <= ord(c) <= 0x09FF for c in text)
+            has_cjk = any((0x4E00 <= ord(c) <= 0x9FFF or  # CJK Unified
+                          0x3040 <= ord(c) <= 0x30FF or   # Japanese
+                          0xAC00 <= ord(c) <= 0xD7A3)     # Korean
+                         for c in text)
             
-            # Add API key if available
-            if self.api_key:
-                payload['api_key'] = self.api_key
-                
-            # Make API request
-            response = self.session.post(detect_url, json=payload, timeout=10)
-            
-            # Check response status
-            if response.status_code != 200:
-                logger.error(f"Language detection API error: {response.status_code} - {response.text}")
-                return False, {
-                    "error": f"API error: {response.status_code}",
-                    "details": response.text
-                }
-                
-            # Parse response
-            result = response.json()
-            
-            # LibreTranslate returns a list of possible languages with confidence scores
-            # We'll take the one with the highest confidence
-            if isinstance(result, list) and len(result) > 0:
-                # Sort by confidence (descending)
-                result.sort(key=lambda x: x.get('confidence', 0), reverse=True)
-                detected_lang = result[0].get('language')
-                confidence = result[0].get('confidence', 0)
-                
-                logger.info(f"Detected language: {detected_lang} with confidence {confidence}")
-                return True, detected_lang
+            # Determine language based on script
+            if has_cyrillic:
+                detected_lang = "ru"
+            elif has_arabic:
+                detected_lang = "ar"
+            elif has_devanagari:
+                detected_lang = "hi"
+            elif has_bengali:
+                detected_lang = "bn"
+            elif has_cjk:
+                if any(0x3040 <= ord(c) <= 0x30FF for c in text):
+                    detected_lang = "ja"
+                elif any(0xAC00 <= ord(c) <= 0xD7A3 for c in text):
+                    detected_lang = "ko"
+                else:
+                    detected_lang = "zh"
             else:
-                logger.error(f"Unexpected API response format for language detection: {result}")
-                return False, {
-                    "error": "Unexpected API response format",
-                    "details": result
-                }
+                detected_lang = "en"  # Default to English for Latin scripts
+
+            logger.info(f"Language detected: {detected_lang}")
+            return True, detected_lang
                 
-        except requests.RequestException as e:
-            logger.error(f"Request error in language detection: {e}")
-            return False, {"error": f"Network error: {str(e)}"}
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error in language detection: {e}")
-            return False, {"error": f"Invalid response format: {str(e)}"}
         except Exception as e:
-            logger.error(f"Unexpected error in language detection: {e}")
-            return False, {"error": f"Unexpected error: {str(e)}"}
+            logger.error(f"Language detection error: {e}")
+            return False, {"error": f"Language detection error: {str(e)}"}
+    
+    def summary(self, content: str, max_length: int = None) -> Tuple[bool, Union[str, Dict]]:
+        """
+        Generate a summary of the given content using AI.
+        
+        Args:
+            content (str): Content to summarize
+            max_length (int, optional): Maximum length of summary in words
+            
+        Returns:
+            Tuple[bool, Union[str, Dict]]: Success flag and summary or error dict
+        """
+        if not self.ai:
+            return False, {
+                "error": "AI provider not available",
+                "details": "Please configure an AI provider (OpenAI or Claude) in mainconfig.json"
+            }
+        
+        if not content:
+            return False, {"error": "No content provided for summarization"}
+        
+        try:
+            return self.ai.summary(content, max_length)
+        except Exception as e:
+            logger.error(f"Summarization error: {e}")
+            return False, {"error": f"Summarization error: {str(e)}"}
 
 
-# Example usage if run directly
+# Example usage
 if __name__ == "__main__":
-    # Initialize Translate component
+    # Initialize the translator
     translator = Translate()
     
-    # Get available languages
-    languages = translator.get_languages()
-    print(f"Available languages: {languages}")
-    
-    # Example translation
+    # Test translation
+    print("Testing translation:")
     text = "Hello, how are you today?"
-    result = translator.translate(text, "en", "es")
+    success, result = translator.translate(text, "en", "es")
     
-    if result[0]:
-        print(f"Translation: {result[1]}")
+    if success:
+        print(f"Original: {text}")
+        print(f"Translation: {result}")
     else:
-        print(f"Translation error: {result[1]}")
-        
-    # Example language detection
-    detect_result = translator.detect_language(text)
+        print(f"Translation error: {result}")
     
-    if detect_result[0]:
-        print(f"Detected language: {detect_result[1]}")
+    # Test summarization
+    print("\nTesting summarization:")
+    long_text = """
+    Artificial intelligence (AI) is intelligence demonstrated by machines, in contrast to the natural intelligence displayed by humans and animals. Leading AI textbooks define the field as the study of intelligent agents: any device that perceives its environment and takes actions that maximize its chance of successfully achieving its goals. Colloquially, the term artificial intelligence is often used to describe machines that mimic cognitive functions that humans associate with the human mind, such as learning and problem solving.
+    """
+    success, result = translator.summary(long_text.strip(), max_length=50)
+    
+    if success:
+        print(f"Summary: {result}")
     else:
-        print(f"Detection error: {detect_result[1]}")
+        print(f"Summary error: {result}")
+    
+    # Test language detection
+    print("\nTesting language detection:")
+    test_texts = [
+        "Hello world",
+        "Hola mundo", 
+        "こんにちは",
+        "नमस्ते दुनिया",
+        "বিশ্ব নমস্কার"
+    ]
+    
+    for test_text in test_texts:
+        success, lang = translator.detect_language(test_text)
+        if success:
+            print(f"Text: {test_text} => Language: {lang}")
+        else:
+            print(f"Error: {lang}")

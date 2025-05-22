@@ -1,0 +1,825 @@
+{% extends "base.html" %}
+
+{% block title %}{{ space.title if space.title else space.space_id }} - XSpace Downloader{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4>{{ space.title if space.title else "Space " + space.space_id }}</h4>
+                <a href="{{ url_for('index') }}" class="btn btn-outline-primary btn-sm">Back to Home</a>
+            </div>
+            <div class="card-body">
+                <div class="space-details mb-4">
+                    <h5>Space Details</h5>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>Space ID:</span>
+                            <span class="badge bg-secondary rounded-pill">{{ space.space_id }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>Space URL:</span>
+                            <a href="{{ space.space_url }}" target="_blank" rel="noopener" class="text-truncate ms-2" 
+                               style="max-width: 400px; display: inline-block;">{{ space.space_url }}</a>
+                        </li>
+                        {% if space.created_at %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>Added on:</span>
+                            <span>{{ space.created_at }}</span>
+                        </li>
+                        {% endif %}
+                        {% if space.status %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>Status:</span>
+                            <span class="badge 
+                                {% if space.status == 'completed' %}bg-success
+                                {% elif space.status == 'downloading' %}bg-info
+                                {% elif space.status == 'pending' %}bg-warning
+                                {% elif space.status == 'failed' %}bg-danger
+                                {% else %}bg-secondary{% endif %}">
+                                {{ space.status|title }}
+                            </span>
+                        </li>
+                        {% endif %}
+                        {% if file_path %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>File Size:</span>
+                            <span>{{ file_size|filesizeformat }}</span>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </div>
+                
+                {# Check if file exists, regardless of status #}
+                {% if file_path is defined and file_path %}
+                <div class="audio-player mb-4">
+                    <h5>Audio Player</h5>
+                    <div class="card">
+                        <div class="card-header bg-primary bg-opacity-25">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span>{{ space.title if space.title else "Space " + space.space_id }}</span>
+                                <div>
+                                    <button id="transcribe-btn" class="btn btn-info btn-sm me-2" {% if space.transcripts %}data-has-transcript="true"{% endif %}>
+                                        <i class="bi bi-file-earmark-text"></i> Transcribe
+                                    </button>
+                                    <a href="/download/{{ space.space_id }}?attachment=1" class="btn btn-primary btn-sm">
+                                        <i class="bi bi-download"></i> Download
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <audio id="audio-player" controls class="w-100">
+                                <source src="/download/{{ space.space_id }}" type="{{ content_type|default('audio/mpeg') }}">
+                                Your browser does not support the audio element.
+                            </audio>
+                            
+                            <div class="mt-3 d-flex justify-content-between flex-wrap">
+                                <div class="me-3 mb-2">
+                                    <label for="playback-speed" class="form-label">
+                                        <i class="bi bi-speedometer2"></i> Playback Speed
+                                    </label>
+                                    <select id="playback-speed" class="form-select form-select-sm" style="width: auto;">
+                                        <option value="0.50">0.50x</option>
+                                        <option value="0.75">0.75x</option>
+                                        <option value="1.00" selected>1.00x</option>
+                                        <option value="1.25">1.25x</option>
+                                        <option value="1.50">1.50x</option>
+                                        <option value="1.75">1.75x</option>
+                                        <option value="2.00">2.00x</option>
+                                        <option value="2.50">2.50x</option>
+                                        <option value="3.00">3.00x</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="me-3 mb-2">
+                                    <label for="volume" class="form-label">
+                                        <i class="bi bi-volume-up"></i> Volume
+                                    </label>
+                                    <input type="range" class="form-range" min="0" max="1" step="0.05" id="volume" value="1">
+                                </div>
+                                
+                                <div class="mb-2">
+                                    <button id="skip-forward" class="btn btn-sm btn-outline-secondary me-1" title="Skip forward 30 seconds">
+                                        <i class="bi bi-skip-forward"></i> 30s
+                                    </button>
+                                    <button id="skip-backward" class="btn btn-sm btn-outline-secondary" title="Skip backward 15 seconds">
+                                        <i class="bi bi-skip-backward"></i> 15s
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Transcript Section -->
+                <div id="transcript-section" class="mb-4" style="display: {% if space.transcripts %}block{% else %}none{% endif %};">
+                    <h5>Transcript</h5>
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div class="d-flex align-items-center">
+                                    <span>Audio Transcript</span>
+                                    {% if space.transcripts %}
+                                    <select id="language-selector" class="form-select form-select-sm ms-3" style="width: auto;">
+                                        {% for transcript in space.transcripts %}
+                                        <option value="{{ transcript.id }}">{{ transcript.language }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    {% endif %}
+                                </div>
+                                <div>
+                                    <button id="transcript-copy-btn" class="btn btn-sm btn-outline-secondary">
+                                        <i class="bi bi-clipboard"></i> Copy
+                                    </button>
+                                    <button id="transcript-download-btn" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-download"></i> Download
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div id="transcript-content" class="transcript-text p-3" style="max-height: 400px; overflow-y: auto;">
+                                {% if space.transcripts %}
+                                <div class="transcript-loader text-center py-4">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <p class="mt-2">Loading transcript...</p>
+                                </div>
+                                {% else %}
+                                <div class="text-center py-4">
+                                    <p class="text-muted">No transcript available yet. Click the Transcribe button to generate one.</p>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Transcription Modal -->
+                <div class="modal fade" id="transcriptionModal" tabindex="-1" aria-labelledby="transcriptionModalLabel" aria-hidden="true">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="transcriptionModalLabel">Transcribe Audio</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <form id="transcription-form">
+                                    <div class="mb-3">
+                                        <label for="transcription-language" class="form-label">Language</label>
+                                        <select id="transcription-language" class="form-select" required>
+                                            <option value="en-US">English (United States)</option>
+                                            <option value="en-GB">English (United Kingdom)</option>
+                                            <option value="es">Spanish</option>
+                                            <option value="fr">French</option>
+                                            <option value="de">German</option>
+                                            <option value="it">Italian</option>
+                                            <option value="pt">Portuguese</option>
+                                            <option value="hi">Hindi</option>
+                                            <option value="bn-BD">Bengali</option>
+                                            <option value="ar">Arabic</option>
+                                            <option value="zh">Chinese</option>
+                                            <option value="ja">Japanese</option>
+                                            <option value="ko">Korean</option>
+                                            <option value="ru">Russian</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="transcription-model" class="form-label">Model Quality</label>
+                                        <select id="transcription-model" class="form-select" required>
+                                            <option value="tiny">Tiny (Fastest, least accurate)</option>
+                                            <option value="base" selected>Base (Good balance)</option>
+                                            <option value="small">Small (More accurate)</option>
+                                            <option value="medium">Medium (High accuracy)</option>
+                                            <option value="large">Large (Most accurate, slowest)</option>
+                                        </select>
+                                        <div class="form-text">
+                                            Higher quality models take longer to process and use more resources.
+                                        </div>
+                                    </div>
+                                    <div class="form-check mb-3">
+                                        <input class="form-check-input" type="checkbox" id="overwrite-existing" checked>
+                                        <label class="form-check-label" for="overwrite-existing">
+                                            Overwrite existing transcript (if any)
+                                        </label>
+                                    </div>
+                                </form>
+                                <div id="transcription-progress" style="display: none;">
+                                    <p class="text-center">Transcribing audio...</p>
+                                    <div class="progress">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                             role="progressbar" style="width: 100%" 
+                                             aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
+                                    </div>
+                                    <p class="text-center text-muted mt-2">
+                                        <small>This process can take several minutes depending on the length of the audio and the selected model.</small>
+                                    </p>
+                                </div>
+                                <div id="transcription-error" class="alert alert-danger mt-3" style="display: none;"></div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn btn-primary" id="start-transcription-btn">Start Transcription</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% elif space._file_missing or ((file_path is not defined or not file_path) and space.status == 'completed') %}
+                <div class="alert alert-warning">
+                    <h5>File Missing</h5>
+                    <p>The audio file for this space is not available. It might have been deleted or moved.</p>
+                    <form action="{{ url_for('submit_space') }}" method="POST">
+                        <input type="hidden" name="space_url" value="{{ space.space_url }}">
+                        <button type="submit" class="btn btn-primary">Download Again</button>
+                    </form>
+                </div>
+                {% elif space.status != 'completed' %}
+                <div id="download-status-container" class="alert alert-info">
+                    <h5>Download Status</h5>
+                    {% if space.status == 'downloading' or space.status == 'in_progress' %}
+                    <p id="download-message">This space is currently being downloaded. You'll be able to listen to it once the download is complete.</p>
+                    <p id="download-progress">Current progress: <span id="progress-percent">{{ space.download_cnt }}</span>%</p>
+                    <div class="progress" style="height: 20px;">
+                        <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" 
+                             style="width: {{ space.download_cnt }}%;"
+                             aria-valuenow="{{ space.download_cnt }}" 
+                             aria-valuemin="0" 
+                             aria-valuemax="100">
+                            {{ space.download_cnt }}%
+                        </div>
+                    </div>
+                    <div id="progress-size" class="mt-2">
+                        {% if job and job.progress_in_size %}
+                            Downloaded {{ job.progress_in_size|filesizeformat }} ({{ (job.progress_in_size / 1048576)|round(2) }} MB)
+                        {% else %}
+                            Waiting for download to start...
+                        {% endif %}
+                    </div>
+                    {% elif space.status == 'pending' %}
+                    <p id="download-message">This space is in the download queue. The download will start automatically.</p>
+                    <div id="progress-container" class="d-none">
+                        <p id="download-progress">Current progress: <span id="progress-percent">0</span>%</p>
+                        <div class="progress" style="height: 20px;">
+                            <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" 
+                                 style="width: 0%;"
+                                 aria-valuenow="0" 
+                                 aria-valuemin="0" 
+                                 aria-valuemax="100">
+                                0%
+                            </div>
+                        </div>
+                        <div id="progress-size" class="mt-2">Waiting for download to start...</div>
+                    </div>
+                    {% elif space.status == 'failed' %}
+                    <p id="download-message">The download for this space failed. You can try downloading it again.</p>
+                    <form action="{{ url_for('submit_space') }}" method="POST">
+                        <input type="hidden" name="space_url" value="{{ space.space_url }}">
+                        <button type="submit" class="btn btn-primary">Try Downloading Again</button>
+                    </form>
+                    {% else %}
+                    <p id="download-message">This space has status: {{ space.status }}</p>
+                    <form action="{{ url_for('submit_space') }}" method="POST">
+                        <input type="hidden" name="space_url" value="{{ space.space_url }}">
+                        <button type="submit" class="btn btn-primary">Try Downloading</button>
+                    </form>
+                    {% endif %}
+                </div>
+                {% else %}
+                <div class="alert alert-warning">
+                    <p>The audio file for this space is not available. It might have been deleted or moved.</p>
+                    <a href="{{ url_for('submit_space') }}?space_url={{ space.space_url|urlencode }}" class="btn btn-primary">
+                        Download Again
+                    </a>
+                </div>
+                {% endif %}
+                
+                {% if job %}
+                <div class="job-details mt-4">
+                    <h5>Download Job Details</h5>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>Job ID:</span>
+                            <span class="badge bg-secondary rounded-pill">{{ job.id }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>Started:</span>
+                            <span>{{ job.start_time }}</span>
+                        </li>
+                        {% if job.end_time %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>Completed:</span>
+                            <span>{{ job.end_time }}</span>
+                        </li>
+                        {% endif %}
+                        {% if job.progress_in_size %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>Download Size:</span>
+                            <span>{{ job.progress_in_size|filesizeformat }} ({{ (job.progress_in_size / 1048576)|round(2) }} MB)</span>
+                        </li>
+                        {% endif %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>File Type:</span>
+                            <span>{{ job.file_type }}</span>
+                        </li>
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const audioPlayer = document.getElementById('audio-player');
+        const spaceId = '{{ space.space_id }}';
+        const spaceStatus = '{{ space.status }}';
+        
+        // Audio player setup
+        if (audioPlayer) {
+            // Playback speed control
+            const playbackSpeed = document.getElementById('playback-speed');
+            playbackSpeed.addEventListener('change', function() {
+                audioPlayer.playbackRate = parseFloat(this.value);
+            });
+            
+            // Volume control
+            const volume = document.getElementById('volume');
+            volume.addEventListener('input', function() {
+                audioPlayer.volume = this.value;
+            });
+            
+            // Remember playback position
+            const storageKey = 'xspace_position_' + spaceId;
+            
+            // Load saved position
+            const savedPosition = localStorage.getItem(storageKey);
+            if (savedPosition) {
+                audioPlayer.currentTime = parseFloat(savedPosition);
+            }
+            
+            // Save position every 5 seconds
+            setInterval(() => {
+                if (!audioPlayer.paused) {
+                    localStorage.setItem(storageKey, audioPlayer.currentTime.toString());
+                }
+            }, 5000);
+            
+            // Save position on pause/stop
+            audioPlayer.addEventListener('pause', () => {
+                localStorage.setItem(storageKey, audioPlayer.currentTime.toString());
+            });
+            
+            // Save speed preference
+            const speedKey = 'xspace_speed';
+            const savedSpeed = localStorage.getItem(speedKey);
+            if (savedSpeed) {
+                audioPlayer.playbackRate = parseFloat(savedSpeed);
+                playbackSpeed.value = savedSpeed;
+            }
+            
+            playbackSpeed.addEventListener('change', function() {
+                localStorage.setItem(speedKey, this.value);
+            });
+            
+            // Skip forward/backward buttons
+            const skipForward = document.getElementById('skip-forward');
+            const skipBackward = document.getElementById('skip-backward');
+            
+            if (skipForward) {
+                skipForward.addEventListener('click', function() {
+                    audioPlayer.currentTime = Math.min(audioPlayer.currentTime + 30, audioPlayer.duration);
+                });
+            }
+            
+            if (skipBackward) {
+                skipBackward.addEventListener('click', function() {
+                    audioPlayer.currentTime = Math.max(audioPlayer.currentTime - 15, 0);
+                });
+            }
+            
+            // Add time display element
+            audioPlayer.addEventListener('loadedmetadata', function() {
+                if (!document.getElementById('time-display')) {
+                    const timeDisplay = document.createElement('div');
+                    timeDisplay.id = 'time-display';
+                    timeDisplay.className = 'mt-2 text-muted small';
+                    audioPlayer.parentNode.insertBefore(timeDisplay, audioPlayer.nextSibling);
+                }
+                updateTimeDisplay();
+            });
+            
+            audioPlayer.addEventListener('timeupdate', updateTimeDisplay);
+            
+            function updateTimeDisplay() {
+                const timeDisplay = document.getElementById('time-display');
+                if (timeDisplay && !isNaN(audioPlayer.duration)) {
+                    const currentMinutes = Math.floor(audioPlayer.currentTime / 60);
+                    const currentSeconds = Math.floor(audioPlayer.currentTime % 60);
+                    const durationMinutes = Math.floor(audioPlayer.duration / 60);
+                    const durationSeconds = Math.floor(audioPlayer.duration % 60);
+                    
+                    timeDisplay.textContent = `${currentMinutes}:${currentSeconds.toString().padStart(2, '0')} / ${durationMinutes}:${durationSeconds.toString().padStart(2, '0')}`;
+                }
+            }
+            
+            // Add keyboard shortcuts
+            document.addEventListener('keydown', function(e) {
+                // Only if audio player is in view
+                const rect = audioPlayer.getBoundingClientRect();
+                const isInView = (rect.top >= 0 && rect.bottom <= window.innerHeight);
+                
+                if (isInView) {
+                    // Right arrow - skip forward 30s
+                    if (e.key === 'ArrowRight') {
+                        audioPlayer.currentTime = Math.min(audioPlayer.currentTime + 30, audioPlayer.duration);
+                    }
+                    
+                    // Left arrow - skip backward 15s
+                    if (e.key === 'ArrowLeft') {
+                        audioPlayer.currentTime = Math.max(audioPlayer.currentTime - 15, 0);
+                    }
+                    
+                    // Space - play/pause (only if no input is focused)
+                    if (e.key === ' ' && document.activeElement.tagName !== 'INPUT' && 
+                        document.activeElement.tagName !== 'TEXTAREA' && 
+                        document.activeElement.tagName !== 'SELECT') {
+                        e.preventDefault();
+                        if (audioPlayer.paused) {
+                            audioPlayer.play();
+                        } else {
+                            audioPlayer.pause();
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Transcription functionality
+        const transcribeBtn = document.getElementById('transcribe-btn');
+        const transcriptionModal = new bootstrap.Modal(document.getElementById('transcriptionModal'));
+        const transcriptSection = document.getElementById('transcript-section');
+        const transcriptContent = document.getElementById('transcript-content');
+        const startTranscriptionBtn = document.getElementById('start-transcription-btn');
+        const transcriptionProgress = document.getElementById('transcription-progress');
+        const transcriptionForm = document.getElementById('transcription-form');
+        const transcriptionError = document.getElementById('transcription-error');
+        
+        if (transcribeBtn) {
+            transcribeBtn.addEventListener('click', function() {
+                // Reset modal state
+                transcriptionProgress.style.display = 'none';
+                transcriptionForm.style.display = 'block';
+                transcriptionError.style.display = 'none';
+                startTranscriptionBtn.disabled = false;
+                
+                // Show the modal
+                transcriptionModal.show();
+            });
+        }
+        
+        if (startTranscriptionBtn) {
+            startTranscriptionBtn.addEventListener('click', function() {
+                // Get form values
+                const language = document.getElementById('transcription-language').value;
+                const model = document.getElementById('transcription-model').value;
+                const overwrite = document.getElementById('overwrite-existing').checked;
+                
+                // Hide form, show progress
+                transcriptionForm.style.display = 'none';
+                transcriptionProgress.style.display = 'block';
+                startTranscriptionBtn.disabled = true;
+                
+                // Make API request to start transcription
+                fetch(`/api/transcribe/${spaceId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        language: language,
+                        model: model,
+                        overwrite: overwrite
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        // Show error
+                        transcriptionError.textContent = data.error;
+                        transcriptionError.style.display = 'block';
+                        transcriptionProgress.style.display = 'none';
+                        startTranscriptionBtn.disabled = false;
+                    } else {
+                        // Success - close modal and load transcript
+                        transcriptionModal.hide();
+                        
+                        // Show transcript section
+                        transcriptSection.style.display = 'block';
+                        
+                        // Show loader in transcript content
+                        transcriptContent.innerHTML = `
+                            <div class="transcript-loader text-center py-4">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="mt-2">Loading transcript...</p>
+                            </div>
+                        `;
+                        
+                        // Load transcript content
+                        loadTranscript(data.transcript_id);
+                        
+                        // Update language selector or add it if it doesn't exist
+                        if (data.transcript_id) {
+                            const langSelector = document.getElementById('language-selector');
+                            if (langSelector) {
+                                // Check if option already exists
+                                let optionExists = false;
+                                for (let i = 0; i < langSelector.options.length; i++) {
+                                    if (langSelector.options[i].value == data.transcript_id) {
+                                        optionExists = true;
+                                        langSelector.selectedIndex = i;
+                                        break;
+                                    }
+                                }
+                                
+                                if (!optionExists) {
+                                    // Add new option
+                                    const option = document.createElement('option');
+                                    option.value = data.transcript_id;
+                                    option.text = data.language;
+                                    option.selected = true;
+                                    langSelector.appendChild(option);
+                                }
+                            } else {
+                                // Create language selector
+                                const headerContent = document.querySelector('.card-header .d-flex .d-flex');
+                                if (headerContent) {
+                                    const select = document.createElement('select');
+                                    select.id = 'language-selector';
+                                    select.className = 'form-select form-select-sm ms-3';
+                                    select.style.width = 'auto';
+                                    
+                                    const option = document.createElement('option');
+                                    option.value = data.transcript_id;
+                                    option.text = data.language;
+                                    select.appendChild(option);
+                                    
+                                    headerContent.appendChild(select);
+                                    
+                                    // Add event listener
+                                    select.addEventListener('change', function() {
+                                        loadTranscript(this.value);
+                                    });
+                                }
+                            }
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    transcriptionError.textContent = 'An error occurred while processing your request.';
+                    transcriptionError.style.display = 'block';
+                    transcriptionProgress.style.display = 'none';
+                    startTranscriptionBtn.disabled = false;
+                });
+            });
+        }
+        
+        // Function to load transcript content
+        function loadTranscript(transcriptId) {
+            fetch(`/api/transcript/${transcriptId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        transcriptContent.innerHTML = `
+                            <div class="alert alert-danger">
+                                ${data.error}
+                            </div>
+                        `;
+                    } else {
+                        transcriptContent.innerHTML = `
+                            <div class="transcript-text">
+                                <p>${data.transcript.replace(/\n/g, '</p><p>')}</p>
+                            </div>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    transcriptContent.innerHTML = `
+                        <div class="alert alert-danger">
+                            An error occurred while loading the transcript.
+                        </div>
+                    `;
+                });
+        }
+        
+        // Set up language selector
+        const languageSelector = document.getElementById('language-selector');
+        if (languageSelector) {
+            languageSelector.addEventListener('change', function() {
+                loadTranscript(this.value);
+            });
+            
+            // Load initial transcript
+            if (languageSelector.options.length > 0) {
+                loadTranscript(languageSelector.value);
+            }
+        }
+        
+        // Set up transcript copy button
+        const copyBtn = document.getElementById('transcript-copy-btn');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', function() {
+                const text = transcriptContent.innerText;
+                navigator.clipboard.writeText(text).then(
+                    function() {
+                        // Temporarily change button text to show success
+                        const originalText = copyBtn.innerHTML;
+                        copyBtn.innerHTML = '<i class="bi bi-check"></i> Copied!';
+                        setTimeout(() => {
+                            copyBtn.innerHTML = originalText;
+                        }, 2000);
+                    },
+                    function(err) {
+                        console.error('Could not copy text: ', err);
+                        alert('Failed to copy transcript to clipboard');
+                    }
+                );
+            });
+        }
+        
+        // Set up transcript download button
+        const downloadBtn = document.getElementById('transcript-download-btn');
+        if (downloadBtn) {
+            downloadBtn.addEventListener('click', function() {
+                const text = transcriptContent.innerText;
+                const blob = new Blob([text], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `transcript_${spaceId}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            });
+        }
+        
+        // Download status tracking
+        if (spaceStatus === 'pending' || spaceStatus === 'downloading' || spaceStatus === 'in_progress') {
+            // Function to format file size
+            function formatBytes(bytes, decimals = 2) {
+                if (bytes === 0) return '0 Bytes';
+                
+                const k = 1024;
+                const dm = decimals < 0 ? 0 : decimals;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+                
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+            }
+            
+            // Function to update download status
+            function updateDownloadStatus() {
+                $.ajax({
+                    url: '/api/space_status/' + spaceId,
+                    type: 'GET',
+                    dataType: 'json',
+                    success: function(data) {
+                        // If file exists and status is completed, reload the page
+                        if (data.file_exists && data.status === 'completed') {
+                            window.location.reload();
+                            return;
+                        }
+                        
+                        // Update status based on job data
+                        if (data.job_status === 'in_progress' || data.job_status === 'downloading') {
+                            // Show progress container if it's hidden
+                            $('#progress-container').removeClass('d-none');
+                            
+                            // Update progress bar
+                            const percent = data.progress_in_percent || 0;
+                            $('#progress-bar').css('width', percent + '%');
+                            $('#progress-bar').attr('aria-valuenow', percent);
+                            $('#progress-bar').text(percent + '%');
+                            $('#progress-percent').text(percent);
+                            
+                            // Update download size
+                            if (data.progress_in_size) {
+                                const sizeMB = (data.progress_in_size / (1024*1024)).toFixed(2);
+                                $('#progress-size').text(`Downloaded ${formatBytes(data.progress_in_size)} (${sizeMB} MB)`);
+                            }
+                            
+                            // Update message
+                            $('#download-message').text('This space is currently being downloaded. You\'ll be able to listen to it once the download is complete.');
+                        } 
+                        else if (data.job_status === 'pending') {
+                            $('#download-message').text('This space is in the download queue. The download will start automatically.');
+                        }
+                        else if (data.job_status === 'failed') {
+                            // Update container class
+                            $('#download-status-container').removeClass('alert-info').addClass('alert-danger');
+                            
+                            // Basic message
+                            let errorMessage = 'The download for this space failed.';
+                            
+                            // Add specific error details if available
+                            if (data.error_message) {
+                                // Extract the most relevant part - remove technical details
+                                let userFriendlyError = data.error_message;
+                                
+                                // For "not found" errors, give more specific message
+                                if (data.error_message.includes('not found') || 
+                                    data.error_message.includes('404') ||
+                                    data.error_message.includes('unavailable')) {
+                                    userFriendlyError = 'This space seems to be unavailable or may no longer exist.';
+                                }
+                                // For network errors, simplify the message
+                                else if (data.error_message.includes('network error') || 
+                                         data.error_message.includes('connection')) {
+                                    userFriendlyError = 'There was a network issue while trying to download this space.';
+                                }
+                                
+                                errorMessage += ' Error: ' + userFriendlyError;
+                            }
+                            
+                            // Update the message
+                            $('#download-message').html(errorMessage + '<br><br>You can try downloading it again later.');
+                            
+                            // Show a try again button
+                            if (!$('#try-again-btn').length) {
+                                const tryAgainBtn = $('<a>', {
+                                    href: "{{ url_for('submit_space') }}?space_url={{ space.space_url|urlencode }}",
+                                    class: 'btn btn-primary mt-3',
+                                    id: 'try-again-btn',
+                                    text: 'Try Downloading Again'
+                                });
+                                $('#download-message').after(tryAgainBtn);
+                            }
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error fetching space status:', error);
+                    }
+                });
+            }
+            
+            // Update status when page loads
+            updateDownloadStatus();
+            
+            // Variable to store the interval ID so we can clear it
+            let statusInterval;
+            
+            // Function to check status and decide whether to continue polling
+            function checkStatusAndUpdate() {
+                $.ajax({
+                    url: '/api/space_status/' + spaceId,
+                    type: 'GET',
+                    dataType: 'json',
+                    success: function(data) {
+                        // If the download is complete or failed, stop polling
+                        if ((data.status === 'completed' || data.file_exists) || 
+                            data.status === 'failed' || 
+                            data.progress_in_percent >= 100) {
+                            console.log('Download complete or failed, stopping automatic updates');
+                            clearInterval(statusInterval);
+                            
+                            // Perform one final update
+                            updateDownloadStatus();
+                            
+                            // If file exists and status is completed, reload after a short delay
+                            if (data.file_exists && data.status === 'completed') {
+                                setTimeout(function() {
+                                    window.location.reload();
+                                }, 1000);
+                            }
+                        } else {
+                            // Still in progress, continue with normal updates
+                            updateDownloadStatus();
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error checking space status:', error);
+                        // Continue with normal updates even on error
+                        updateDownloadStatus();
+                    }
+                });
+            }
+            
+            // Set interval for updates (every 5 seconds)
+            statusInterval = setInterval(checkStatusAndUpdate, 5000);
+        }
+    });
+</script>
+{% endblock %}

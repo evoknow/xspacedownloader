@@ -1,0 +1,40 @@
+--- bg_downloader.py
++++ bg_downloader.py
+@@ -264,15 +264,33 @@
+                 space.update_download_progress_by_space(space_id, 0, 1, 'downloading')
+                 space.update_download_job(job_id, status='in_progress', process_id=os.getpid())
+                 
+-                print("Starting download with yt-dlp...")
++                print("Starting download...")
++                
++                # Find yt-dlp executable path
++                import shutil
++                yt_dlp_path = shutil.which('yt-dlp')
++                
++                if not yt_dlp_path:
++                    print("yt-dlp not found in PATH! Trying to install it...")
++                    try:
++                        # Try to install yt-dlp using pip
++                        subprocess.run([sys.executable, "-m", "pip", "install", "yt-dlp"], check=True)
++                        print("yt-dlp installation successful")
++                        # Check again for yt-dlp
++                        yt_dlp_path = shutil.which('yt-dlp')
++                        if not yt_dlp_path:
++                            raise Exception("yt-dlp still not found after installation")
++                    except Exception as e:
++                        print(f"Error installing yt-dlp: {e}")
++                        raise Exception(f"yt-dlp not found and installation failed: {e}")
++                
++                print(f"Using yt-dlp at: {yt_dlp_path}")
+                 
+                 # Prepare yt-dlp command
+                 yt_dlp_cmd = [
+-                    'yt-dlp',
++                    yt_dlp_path,
+                     '-f', 'bestaudio',
+                     '-o', str(output_file),
+-                    '--extract-audio',
++                    '--extract-audio', 
+                     '--audio-format', file_type,
+                     '--audio-quality', '0',  # Best quality
+                     space_url

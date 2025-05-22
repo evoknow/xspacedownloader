@@ -1,0 +1,28 @@
+{
+    "id": "e54ec9f8-2f52-45fc-a3d4-b9eedff55594",
+    "space_id": "1dRJZEpyjlNGB",
+    "file_path": "./downloads/1dRJZEpyjlNGB.mp3",
+    "language": "en",
+    "options": {
+        "model": "base",
+        "detect_language": false,
+        "translate_to": null,
+        "overwrite": true
+    },
+    "status": "completed",
+    "progress": 100,
+    "created_at": "2025-05-22T11:03:25.563473",
+    "updated_at": "2025-05-22T11:03:44.669839",
+    "result": {
+        "transcript_id": 22,
+        "space_id": "1dRJZEpyjlNGB",
+        "language": "en-EN",
+        "text_sample": " Hello and welcome to beer. I'm Esther. I'm behind the USA Biz Party tweets and we will be starting as soon as Anna jumps on as she is our hostess. So just wanted to jump in and say welcome and I will invite you to speak so that you are already for when Anna comes in. We're really excited to learn more about cyber security because as Anna just tweeted, it is a very timely topic because we have. So many spam emails coming through and so many spam messages on all platforms of people trying to stea...",
+        "audio_duration_minutes": 7.7,
+        "audio_duration_seconds": 461.8,
+        "detected_language": {
+            "code": "en",
+            "name": "english"
+        }
+    }
+}

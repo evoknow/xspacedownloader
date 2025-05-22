@@ -5,3 +5,5 @@ mysql-connector-python==8.0.32
 yt-dlp==2023.3.4
 requests==2.31.0
 libretranslatepy==2.1.1
+# Additional dependencies for translation
+six>=1.14.0

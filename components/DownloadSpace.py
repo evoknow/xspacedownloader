@@ -196,17 +196,17 @@ class DownloadSpace:
         space_details = self.space_component.get_space(space_id)
         
         if space_details and 'title' in space_details:
-            # Create a safe filename from title
+            # Create a safe filename from title with yt-dlp template
             title = space_details['title']
             safe_title = re.sub(r'[^\w\s-]', '', title)
             safe_title = re.sub(r'[\s-]+', '_', safe_title)
-            filename = f"{safe_title}_{space_id}.{file_type}"
+            filename_template = f"{safe_title}_{space_id}.%(ext)s"
         else:
-            # Use just the space_id if no title available
-            filename = f"{space_id}.{file_type}"
+            # Use just the space_id if no title available with yt-dlp template
+            filename_template = f"{space_id}.%(ext)s"
         
-        # Return the full path
-        return os.path.join(self.download_dir, filename)
+        # Return the full path template for yt-dlp
+        return os.path.join(self.download_dir, filename_template)
     
     def _progress_hook(self, d, job_id=None, space_id=None):
         """
@@ -313,22 +313,34 @@ class DownloadSpace:
             command = [
                 python_bin,
                 "-m", "yt_dlp",
+                "--verbose",
+                "--print-traffic",
                 "--extract-audio",
                 f"--audio-format={file_type}",
                 "--audio-quality=0",  # Best quality
                 "--continue",  # Resume partial downloads
                 "--no-warnings",
+                "--no-playlist",  # Only download single item
+                "--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "--add-header", "Accept:*/*",
+                "--add-header", "Accept-Language:en-US,en;q=0.9",
                 "-o", output_path
             ]
         else:
             # Use binary approach
             command = [
                 self.YT_DLP_BINARY,
+                "--verbose",
+                "--print-traffic",
                 "--extract-audio",
                 f"--audio-format={file_type}",
                 "--audio-quality=0",  # Best quality
                 "--continue",  # Resume partial downloads
                 "--no-warnings",
+                "--no-playlist",  # Only download single item
+                "--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "--add-header", "Accept:*/*",
+                "--add-header", "Accept-Language:en-US,en;q=0.9",
                 "-o", output_path
             ]
         
@@ -501,7 +513,12 @@ class DownloadSpace:
                 temp_output_path = os.path.join(temp_dir, f"{space_id}.%(ext)s")
                 command[command.index("-o") + 1] = temp_output_path
                 
-                # Run the command
+                # Run the command with enhanced debugging
+                print(f"Running yt-dlp command: {' '.join(command)}")
+                print(f"Working directory: {temp_dir}")
+                print(f"Space URL: {space_url}")
+                print("=" * 50)
+                
                 process = subprocess.Popen(
                     command,
                     stdout=subprocess.PIPE,
@@ -702,6 +719,12 @@ class DownloadSpace:
                         print(f"Running command: {' '.join(command if isinstance(command, list) else [command])}")
                         
                         # Run the command
+                        # Enhanced debugging for async download
+                        print(f"Async download - Running yt-dlp command: {' '.join(command)}")
+                        print(f"Working directory: {temp_dir}")
+                        print(f"Space URL: {space_url}")
+                        print("=" * 50)
+                        
                         process = subprocess.Popen(
                             command,
                             stdout=subprocess.PIPE,
@@ -719,8 +742,8 @@ class DownloadSpace:
                             if not line and process.poll() is not None:
                                 break
                             
-                            # Print the output to log
-                            print(line, end="")
+                            # Print the output to log with enhanced info
+                            print(f"[yt-dlp] {line}", end="")
                             
                             # Parse progress from yt-dlp output
                             if "[download]" in line and "%" in line:
@@ -772,17 +795,28 @@ class DownloadSpace:
                         # Get the return code
                         return_code = process.poll()
                         
-                        # Check for errors
+                        # Check for errors and capture all output
                         if return_code != 0:
-                            error_output = process.stderr.read()
-                            print(f"Error during download (exit code {return_code}): {error_output}")
+                            try:
+                                stdout_output = process.stdout.read() if process.stdout else ""
+                                stderr_output = process.stderr.read() if process.stderr else ""
+                            except Exception as e:
+                                stdout_output = f"Error reading stdout: {e}"
+                                stderr_output = f"Error reading stderr: {e}"
+                            
+                            print(f"yt-dlp failed with exit code {return_code}")
+                            print(f"STDOUT: {stdout_output}")
+                            print(f"STDERR: {stderr_output}")
+                            print("=" * 50)
+                            
+                            error_message = f"yt-dlp failed with return code {return_code}. Details: {stderr_output if stderr_output else stdout_output}"
                             
                             # Update job status to failed
                             try:
                                 child_space_component.update_download_job(
                                     job_id,
                                     status='failed',
-                                    error_message=f"yt-dlp exited with code {return_code}: {error_output}"
+                                    error_message=error_message
                                 )
                             except Exception as e:
                                 print(f"Error updating job status to failed: {e}")
