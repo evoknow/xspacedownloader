@@ -350,6 +350,64 @@ class DownloadSpace:
         print(f"Command: {' '.join(command)}")
         return command
     
+    def _create_user_friendly_error_message(self, stdout_output, stderr_output, return_code):
+        """
+        Create a user-friendly error message from yt-dlp output.
+        
+        Args:
+            stdout_output (str): Standard output from yt-dlp
+            stderr_output (str): Standard error from yt-dlp
+            return_code (int): Exit code from yt-dlp
+            
+        Returns:
+            str: User-friendly error message
+        """
+        combined_output = f"{stdout_output} {stderr_output}".lower()
+        
+        # Check for Twitter/X infrastructure issues
+        if any(indicator in combined_output for indicator in [
+            'http error 403', 'http error 500', 'http error 502', 'http error 503',
+            'client error accessing space', 'internal server error', 'over capacity',
+            'timeout', 'unable to download json metadata'
+        ]):
+            return ("X (Twitter) servers are currently experiencing issues or rate limiting. "
+                   "This is a temporary problem on X's side. Please try again in a few minutes or hours. "
+                   "You can also try a different space to see if the issue affects all spaces.")
+        
+        # Check for space-specific issues
+        if any(indicator in combined_output for indicator in [
+            'private', 'not found', '404', 'unavailable', 'deleted'
+        ]):
+            return ("This space may be private, deleted, or no longer available. "
+                   "Please check that the space URL is correct and the space is still accessible.")
+        
+        # Check for network connectivity issues
+        if any(indicator in combined_output for indicator in [
+            'connection refused', 'network unreachable', 'no route to host',
+            'connection timed out', 'dns'
+        ]):
+            return ("Network connectivity issue detected. Please check your internet connection and try again.")
+        
+        # Check for authentication issues
+        if any(indicator in combined_output for indicator in [
+            'unauthorized', 'authentication', 'login required'
+        ]):
+            return ("Authentication issue with X (Twitter). This may be due to API changes or access restrictions.")
+        
+        # Check for yt-dlp specific issues
+        if any(indicator in combined_output for indicator in [
+            'unsupported url', 'no video formats found', 'extractor'
+        ]):
+            return ("The space format is not supported or yt-dlp needs an update. Please try updating yt-dlp.")
+        
+        # For other errors, provide a generic but helpful message
+        if 'http error' in combined_output:
+            return ("X (Twitter) returned an error. This is usually temporary. Please try again later.")
+        
+        # Fallback for unknown errors - still more user-friendly than raw output
+        return (f"Download failed (error code {return_code}). This may be due to X (Twitter) server issues "
+               "or changes to their system. Please try again later or contact support if the problem persists.")
+    
     def download(self, space_url, file_type="mp3", async_mode=True, user_id=0):
         """
         Download X space audio.
@@ -582,14 +640,23 @@ class DownloadSpace:
                 
                 # Check for errors
                 if return_code != 0:
-                    error_output = process.stderr.read()
-                    print(f"Error during download (exit code {return_code}): {error_output}")
+                    try:
+                        stdout_output = process.stdout.read() if process.stdout else ""
+                        stderr_output = process.stderr.read() if process.stderr else ""
+                    except Exception as e:
+                        stdout_output = f"Error reading stdout: {e}"
+                        stderr_output = f"Error reading stderr: {e}"
+                    
+                    print(f"Error during download (exit code {return_code}): {stderr_output}")
+                    
+                    # Create user-friendly error message
+                    error_message = self._create_user_friendly_error_message(stdout_output, stderr_output, return_code)
                     
                     # Update job status to failed
                     self.space_component.update_download_job(
                         job_id,
                         status='failed',
-                        error_message=f"yt-dlp exited with code {return_code}: {error_output}"
+                        error_message=error_message
                     )
                     
                     return None
@@ -809,7 +876,8 @@ class DownloadSpace:
                             print(f"STDERR: {stderr_output}")
                             print("=" * 50)
                             
-                            error_message = f"yt-dlp failed with return code {return_code}. Details: {stderr_output if stderr_output else stdout_output}"
+                            # Create user-friendly error message
+                            error_message = self._create_user_friendly_error_message(stdout_output, stderr_output, return_code)
                             
                             # Update job status to failed
                             try:

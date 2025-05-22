@@ -13,19 +13,20 @@ logger = logging.getLogger(__name__)
 class OpenAI(AIProvider):
     """OpenAI implementation for AI services."""
     
-    def __init__(self, api_key: str, endpoint: str = None, model: str = "gpt-3.5-turbo"):
+    def __init__(self, api_key: str, endpoint: str = None, model: str = "gpt-4o"):
         """
         Initialize OpenAI provider.
         
         Args:
             api_key (str): OpenAI API key
             endpoint (str, optional): Custom endpoint (defaults to OpenAI's API)
-            model (str): Model to use (default: gpt-3.5-turbo)
+            model (str): Model to use (default: gpt-4o - latest GPT-4 model with 128K context)
         """
         super().__init__(api_key, endpoint, model)
         
         self.endpoint = endpoint or "https://api.openai.com/v1/chat/completions"
-        self.model = model or "gpt-3.5-turbo"
+        # Use GPT-4o as default - latest GPT-4 model with excellent performance and 128K context
+        self.model = model or "gpt-4o"
         
         # Initialize session with headers
         self.session = requests.Session()
@@ -63,6 +64,15 @@ class OpenAI(AIProvider):
             
             if response.status_code != 200:
                 logger.error(f"OpenAI API error: {response.status_code} - {response.text}")
+                
+                # Check for specific error types
+                if response.status_code == 400 and 'max_tokens is too large' in response.text:
+                    return False, {
+                        "error": "Content too long for OpenAI model - using chunked translation",
+                        "details": "The text is too long for a single API call, will be processed in chunks",
+                        "should_chunk": True
+                    }
+                
                 return False, {
                     "error": f"OpenAI API error: {response.status_code}",
                     "details": response.text
@@ -157,19 +167,43 @@ class OpenAI(AIProvider):
         # Calculate appropriate max_tokens based on content length
         # Rough estimate: 1 token ≈ 0.75 words, allow 1.5x for translation expansion
         content_tokens = len(content.split()) * 1.33  # Convert words to estimated tokens
-        max_tokens = max(4000, min(int(content_tokens * 1.5), 16000))  # Between 4K and 16K tokens
+        
+        # GPT-4o-mini has 128K context window, much more generous limits
+        if "gpt-4" in self.model.lower():
+            # GPT-4 models have much larger context windows
+            max_tokens = max(4000, min(int(content_tokens * 1.5), 16000))  # Between 4K and 16K tokens
+        else:
+            # Fallback for GPT-3.5 or other models
+            max_tokens = max(2000, min(int(content_tokens * 1.5), 4000))  # Between 2K and 4K tokens
         
         logger.info(f"Translation request - Content tokens estimate: {content_tokens}, Max tokens: {max_tokens}")
         
         # For very long content or complex languages, use chunking strategy
-        if content_tokens > 10000 or (is_complex_target and content_tokens > 3000):  # Lower threshold for complex languages
+        # Use higher thresholds for GPT-4 models with larger context windows
+        if "gpt-4" in self.model.lower():
+            # GPT-4 can handle much larger content before chunking
+            chunk_threshold = 50000  # 50K tokens for GPT-4 models
+            complex_threshold = 30000  # 30K tokens for complex languages
+        else:
+            # Conservative thresholds for GPT-3.5
+            chunk_threshold = 2500
+            complex_threshold = 1500
+        
+        if content_tokens > chunk_threshold or (is_complex_target and content_tokens > complex_threshold):
             return self._translate_in_chunks(content, from_language, to_language, is_complex_target)
         
         # Use different parameters for complex languages
         if is_complex_target:
-            return self._make_request(messages, max_tokens=max_tokens, temperature=0.0, frequency_penalty=0.7, presence_penalty=0.5)
+            success, result = self._make_request(messages, max_tokens=max_tokens, temperature=0.0, frequency_penalty=0.7, presence_penalty=0.5)
         else:
-            return self._make_request(messages, max_tokens=max_tokens, temperature=0.1, frequency_penalty=0.5, presence_penalty=0.3)
+            success, result = self._make_request(messages, max_tokens=max_tokens, temperature=0.1, frequency_penalty=0.5, presence_penalty=0.3)
+        
+        # If we get a token limit error, automatically chunk the content
+        if not success and isinstance(result, dict) and result.get('should_chunk'):
+            logger.info("Auto-chunking due to token limit exceeded")
+            return self._translate_in_chunks(content, from_language, to_language, is_complex_target)
+        
+        return success, result
     
     def _translate_in_chunks(self, content: str, from_language: str, to_language: str, is_complex: bool = False) -> Tuple[bool, Union[str, Dict]]:
         """
@@ -188,8 +222,11 @@ class OpenAI(AIProvider):
         chunks = []
         current_chunk = ""
         
-        # Group sentences into chunks - smaller chunks for complex languages
-        chunk_size = 1000 if is_complex else 2000
+        # Group sentences into chunks - larger chunks for GPT-4 models
+        if "gpt-4" in self.model.lower():
+            chunk_size = 3000 if is_complex else 5000  # Much larger chunks for GPT-4
+        else:
+            chunk_size = 1000 if is_complex else 2000  # Conservative for other models
         for sentence in sentences:
             if len(current_chunk.split()) + len(sentence.split()) > chunk_size:
                 if current_chunk:
@@ -231,7 +268,9 @@ class OpenAI(AIProvider):
                 }
             ]
             
-            success, result = self._make_request(messages, max_tokens=4000, temperature=temp, frequency_penalty=freq_pen, presence_penalty=pres_pen)
+            # Use larger max_tokens for GPT-4 models in chunking
+            chunk_max_tokens = 8000 if "gpt-4" in self.model.lower() else 3000
+            success, result = self._make_request(messages, max_tokens=chunk_max_tokens, temperature=temp, frequency_penalty=freq_pen, presence_penalty=pres_pen)
             
             if not success:
                 return False, result
@@ -339,7 +378,7 @@ If you use ANY English words, you have FAILED."""
                     {"role": "system", "content": f"Translate ONLY to {to_language}. Use NO English words."},
                     {"role": "user", "content": stricter_prompt}
                 ]
-                success, result = self._make_request(stricter_messages, max_tokens=1500, temperature=0.0, frequency_penalty=0.9, presence_penalty=0.7)
+                success, result = self._make_request(stricter_messages, max_tokens=1000, temperature=0.0, frequency_penalty=0.9, presence_penalty=0.7)
                 if not success:
                     return False, result
             

@@ -669,13 +669,23 @@
                         // Check for common error patterns
                         if (errorMessage.includes('API key required') || errorMessage.includes('Authentication') || 
                             errorMessage.includes('authentication') || errorMessage.includes('requires API key')) {
-                            errorMessage = 'Translation API key is required or self-hosted setup needed';
-                            helpText = `
-                                <p class="mt-2 mb-0">
-                                    <strong>Quick Fix:</strong> Run <code>./setup_libretranslate_no_docker.sh</code> in your terminal
-                                    to set up a free local translation server (no Docker required).
-                                </p>
-                            `;
+                            // Only show LibreTranslate setup if we're actually in self-hosted mode
+                            if (info && info.self_hosted && info.provider === "None") {
+                                errorMessage = 'Translation API key is required or self-hosted setup needed';
+                                helpText = `
+                                    <p class="mt-2 mb-0">
+                                        <strong>Quick Fix:</strong> Run <code>./setup_libretranslate_no_docker.sh</code> in your terminal
+                                        to set up a free local translation server (no Docker required).
+                                    </p>
+                                `;
+                            } else {
+                                errorMessage = 'Translation failed due to API configuration';
+                                helpText = `
+                                    <p class="mt-2 mb-0">
+                                        The AI translation service encountered an error. This may be temporary.
+                                    </p>
+                                `;
+                            }
                         } else if (errorMessage.includes('connection refused') || errorMessage.includes('not found') || 
                                   errorMessage.includes('unreachable') || errorMessage.includes('unavailable')) {
                             errorMessage = 'Translation service is not available';
@@ -1024,28 +1034,8 @@
                             // Update container class
                             $('#download-status-container').removeClass('alert-info').addClass('alert-danger');
                             
-                            // Basic message
-                            let errorMessage = 'The download for this space failed.';
-                            
-                            // Add specific error details if available
-                            if (data.error_message) {
-                                // Extract the most relevant part - remove technical details
-                                let userFriendlyError = data.error_message;
-                                
-                                // For "not found" errors, give more specific message
-                                if (data.error_message.includes('not found') || 
-                                    data.error_message.includes('404') ||
-                                    data.error_message.includes('unavailable')) {
-                                    userFriendlyError = 'This space seems to be unavailable or may no longer exist.';
-                                }
-                                // For network errors, simplify the message
-                                else if (data.error_message.includes('network error') || 
-                                         data.error_message.includes('connection')) {
-                                    userFriendlyError = 'There was a network issue while trying to download this space.';
-                                }
-                                
-                                errorMessage += ' Error: ' + userFriendlyError;
-                            }
+                            // Use the user-friendly error message from the backend
+                            let errorMessage = data.error_message || 'The download for this space failed for an unknown reason.';
                             
                             // Update the message
                             $('#download-message').html(errorMessage + '<br><br>You can try downloading it again later.');

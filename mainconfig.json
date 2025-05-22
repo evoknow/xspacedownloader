@@ -26,7 +26,8 @@
         "comment": "AI provider: 'openai' or 'claude'. API keys are read from environment variables: OPENAI_API_KEY or ANTHROPIC_API_KEY",
         "openai": {
             "endpoint": "https://api.openai.com/v1/chat/completions",
-            "model": "gpt-3.5-turbo"
+            "model": "gpt-4o",
+            "comment": "gpt-4o is the latest GPT-4 model with 128K context window and excellent performance for all tasks"
         },
         "claude": {
             "endpoint": "https://api.anthropic.com/v1/messages",

@@ -5,5 +5,7 @@ mysql-connector-python==8.0.32
 yt-dlp==2023.3.4
 requests==2.31.0
 libretranslatepy==2.1.1
+pydub>=0.25.1
+audioop-lts>=0.2.1; python_version >= '3.13'
 # Additional dependencies for translation
 six>=1.14.0

@@ -134,7 +134,7 @@ class AI:
             self.provider = OpenAI(
                 api_key=api_key,
                 endpoint=openai_config.get('endpoint'),
-                model=openai_config.get('model', 'gpt-3.5-turbo')
+                model=openai_config.get('model', 'gpt-4o-mini')  # Default to GPT-4o-mini for better translation
             )
         elif provider_name == 'claude':
             from .Claude import Claude

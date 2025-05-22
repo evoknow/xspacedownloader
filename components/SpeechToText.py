@@ -8,6 +8,9 @@ import whisper
 import warnings
 from datetime import datetime
 from pathlib import Path
+from pydub import AudioSegment
+from pydub.utils import make_chunks
+import tempfile
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -17,7 +20,7 @@ class SpeechToText:
     Class for converting speech audio files to text using OpenAI's Whisper model.
     """
     
-    def __init__(self, model_name='base', device=None):
+    def __init__(self, model_name='base', device=None, chunk_length_ms=30000):
         """
         Initialize the SpeechToText component.
         
@@ -25,13 +28,15 @@ class SpeechToText:
             model_name (str): The Whisper model to use ('tiny', 'base', 'small', 'medium', 'large').
                               Default is 'base' which offers a good balance of accuracy and speed.
             device (str): Device to run the model on ('cpu', 'cuda', etc.). Default is None (auto-detect).
+            chunk_length_ms (int): Length of audio chunks in milliseconds for large files. Default is 30000 (30 seconds).
         """
         self.model_name = model_name
         self.device = device
         self.model = None
+        self.chunk_length_ms = chunk_length_ms
         
         # Log initialization
-        logger.info(f"Initializing SpeechToText with model: {model_name}")
+        logger.info(f"Initializing SpeechToText with model: {model_name}, chunk length: {chunk_length_ms}ms")
     
     def load_model(self):
         """
@@ -163,8 +168,14 @@ class SpeechToText:
             transcribe_options["task"] = current_task
             logger.info(f"Using task: {current_task}")
             
-            # Perform transcription
-            result = self.model.transcribe(str(audio_path), **transcribe_options)
+            # Check if we should chunk the audio file
+            audio_duration = self._get_audio_duration(str(audio_path))
+            if audio_duration and audio_duration > 600:  # 10 minutes threshold for chunking
+                logger.info(f"Audio duration {audio_duration:.1f}s exceeds threshold, using chunked transcription")
+                result = self._transcribe_chunked(str(audio_path), transcribe_options)
+            else:
+                # Perform single transcription for shorter files
+                result = self.model.transcribe(str(audio_path), **transcribe_options)
             
             # Store the original transcript
             original_transcript = result["text"]
@@ -447,3 +458,96 @@ class SpeechToText:
                 
         logger.info(f"Batch transcription completed. Processed {len(results)} files.")
         return results
+    
+    def _get_audio_duration(self, audio_file):
+        """
+        Get the duration of an audio file using pydub.
+        
+        Args:
+            audio_file (str): Path to the audio file
+            
+        Returns:
+            float: Duration in seconds, or None if unable to determine
+        """
+        try:
+            audio = AudioSegment.from_file(audio_file)
+            return len(audio) / 1000.0  # Convert milliseconds to seconds
+        except Exception as e:
+            logger.warning(f"Could not determine audio duration for {audio_file}: {e}")
+            return None
+    
+    def _transcribe_chunked(self, audio_file, transcribe_options):
+        """
+        Transcribe a large audio file by splitting it into chunks using pydub.
+        This prevents context loss that can occur with simple text chunking.
+        
+        Args:
+            audio_file (str): Path to the audio file
+            transcribe_options (dict): Options for transcription
+            
+        Returns:
+            dict: Combined transcription result
+        """
+        try:
+            logger.info(f"Loading audio file for chunking: {audio_file}")
+            audio = AudioSegment.from_file(audio_file)
+            
+            # Create chunks using pydub - this preserves audio boundaries
+            chunks = make_chunks(audio, self.chunk_length_ms)
+            logger.info(f"Split audio into {len(chunks)} chunks of {self.chunk_length_ms/1000:.1f}s each")
+            
+            all_segments = []
+            full_text_parts = []
+            total_duration = 0
+            
+            # Process each chunk
+            with tempfile.TemporaryDirectory() as temp_dir:
+                for i, chunk in enumerate(chunks):
+                    chunk_start_time = i * (self.chunk_length_ms / 1000.0)
+                    
+                    # Export chunk to temporary file
+                    chunk_file = os.path.join(temp_dir, f"chunk_{i:03d}.wav")
+                    chunk.export(chunk_file, format="wav")
+                    
+                    logger.info(f"Transcribing chunk {i+1}/{len(chunks)} (start: {chunk_start_time:.1f}s)")
+                    
+                    # Transcribe the chunk
+                    chunk_result = self.model.transcribe(chunk_file, **transcribe_options)
+                    
+                    # Adjust segment timestamps to account for chunk position
+                    if "segments" in chunk_result:
+                        for segment in chunk_result["segments"]:
+                            segment["start"] += chunk_start_time
+                            segment["end"] += chunk_start_time
+                            all_segments.append(segment)
+                    
+                    # Collect text
+                    if "text" in chunk_result and chunk_result["text"].strip():
+                        full_text_parts.append(chunk_result["text"].strip())
+                    
+                    total_duration += len(chunk) / 1000.0
+            
+            # Combine results
+            combined_result = {
+                "text": " ".join(full_text_parts),
+                "segments": all_segments,
+                "duration": total_duration,
+                "language": transcribe_options.get("language", "unknown")
+            }
+            
+            # Try to get language from first chunk if not specified
+            if combined_result["language"] == "unknown" and all_segments:
+                # Use the language detected in the first chunk
+                first_chunk_file = os.path.join(temp_dir, "chunk_000.wav")
+                if os.path.exists(first_chunk_file):
+                    detection_result = self.model.transcribe(first_chunk_file, task="transcribe")
+                    combined_result["language"] = detection_result.get("language", "unknown")
+            
+            logger.info(f"Chunked transcription completed: {len(all_segments)} segments, {total_duration:.1f}s total")
+            return combined_result
+            
+        except Exception as e:
+            logger.error(f"Error in chunked transcription: {e}")
+            # Fallback to regular transcription
+            logger.info("Falling back to regular transcription")
+            return self.model.transcribe(audio_file, **transcribe_options)
