@@ -1093,6 +1093,104 @@ def api_summary():
         logger.error(f"Error generating summary: {e}", exc_info=True)
         return jsonify({'error': 'An unexpected error occurred'}), 500
 
+@app.route('/api/transcript/<transcript_id>/summary', methods=['POST'])
+def api_transcript_summary(transcript_id):
+    """API endpoint to generate or retrieve summary for a specific transcript."""
+    if not TRANSLATE_AVAILABLE:
+        return jsonify({'error': 'AI service is not available'}), 503
+        
+    try:
+        # Validate transcript_id is a valid integer
+        try:
+            transcript_id = int(transcript_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid transcript ID format'}), 400
+        
+        # Get request data
+        data = request.json if request.is_json else {}
+        max_length = data.get('max_length', 200)  # Default to 200 words
+        force_regenerate = data.get('force_regenerate', False)
+        
+        # Get Space component
+        space = get_space_component()
+        
+        # STEP 1: Check database for existing summary
+        logger.info(f"Checking database for existing summary for transcript {transcript_id}")
+        try:
+            cursor = space.connection.cursor(dictionary=True)
+            query = "SELECT * FROM space_transcripts WHERE id = %s"
+            cursor.execute(query, (transcript_id,))
+            transcript_record = cursor.fetchone()
+            cursor.close()
+            
+            if not transcript_record:
+                return jsonify({'error': 'Transcript not found'}), 404
+            
+            # Check if summary already exists and force_regenerate is False
+            if transcript_record.get('summary') and not force_regenerate:
+                logger.info(f"Found existing summary for transcript {transcript_id}")
+                return jsonify({
+                    'success': True,
+                    'summary': transcript_record['summary'],
+                    'from_database': True,
+                    'transcript_id': transcript_id,
+                    'space_id': transcript_record['space_id'],
+                    'language': transcript_record['language'],
+                    'original_length': len(transcript_record.get('transcript', '')),
+                    'summary_length': len(transcript_record['summary'])
+                })
+                
+        except Exception as db_err:
+            logger.warning(f"Error checking existing summary: {db_err}")
+            return jsonify({'error': 'Database error'}), 500
+        
+        # STEP 2: Generate new summary using AI
+        transcript_text = transcript_record.get('transcript', '')
+        if not transcript_text:
+            return jsonify({'error': 'No transcript text found'}), 400
+        
+        logger.info(f"Generating new summary for transcript {transcript_id} (length: {len(transcript_text)})")
+        
+        # Get Translate component (which includes AI functionality)
+        translator = get_translate_component()
+        if not translator:
+            return jsonify({'error': 'Could not initialize AI service'}), 500
+            
+        # Generate summary
+        success, result = translator.summary(transcript_text, max_length)
+        
+        if not success:
+            return jsonify({'error': 'Summary generation failed', 'details': result}), 400
+        
+        # STEP 3: Store summary in database
+        try:
+            cursor = space.connection.cursor()
+            update_query = "UPDATE space_transcripts SET summary = %s, updated_at = NOW() WHERE id = %s"
+            cursor.execute(update_query, (result, transcript_id))
+            space.connection.commit()
+            cursor.close()
+            logger.info(f"Stored summary for transcript {transcript_id}")
+        except Exception as db_err:
+            logger.warning(f"Error storing summary in database: {db_err}")
+            # Continue even if database storage fails
+            
+        # Return summary
+        return jsonify({
+            'success': True,
+            'summary': result,
+            'from_database': False,
+            'transcript_id': transcript_id,
+            'space_id': transcript_record['space_id'],
+            'language': transcript_record['language'],
+            'original_length': len(transcript_text),
+            'summary_length': len(result),
+            'max_length': max_length
+        })
+        
+    except Exception as e:
+        logger.error(f"Error generating transcript summary: {e}", exc_info=True)
+        return jsonify({'error': 'An unexpected error occurred'}), 500
+
 @app.route('/api/transcript/<transcript_id>', methods=['GET'])
 def api_get_transcript(transcript_id):
     """API endpoint to get transcript content."""
@@ -1303,6 +1401,23 @@ def transcribe_space(space_id):
                 })
             flash('Transcript already exists for this language', 'info')
             return redirect(url_for('space_page', space_id=space_id))
+        
+        # ENHANCEMENT: Even if overwrite is True, check for database transcript and return it immediately 
+        # if it exists to save AI processing time, unless user explicitly wants to regenerate
+        if existing_transcript and overwrite:
+            if request.is_json:
+                # For API requests, give user option by returning existing transcript
+                # but allowing them to specify force_regenerate=true to actually regenerate
+                force_regenerate = request.json.get('force_regenerate', False)
+                if not force_regenerate:
+                    logger.info(f"Returning existing transcript for space {space_id} (overwrite=true but force_regenerate=false)")
+                    return jsonify({
+                        'message': 'Transcript loaded from database',
+                        'transcript_id': existing_transcript['id'],
+                        'language': existing_transcript['language'],
+                        'created_at': existing_transcript['created_at'].isoformat() if existing_transcript['created_at'] else None,
+                        'from_database': True
+                    })
             
         # Create transcription job with additional parameters
         options = {

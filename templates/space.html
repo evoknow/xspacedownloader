@@ -148,6 +148,9 @@
                                             <i class="bi bi-translate"></i> Translate
                                         </button>
                                     </div>
+                                    <button id="summarize-btn" class="btn btn-sm btn-outline-warning me-2">
+                                        <i class="bi bi-file-earmark-text"></i> Summarize
+                                    </button>
                                     <button id="transcript-copy-btn" class="btn btn-sm btn-outline-secondary">
                                         <i class="bi bi-clipboard"></i> Copy
                                     </button>
@@ -437,8 +440,33 @@
         const transcriptSection = document.getElementById('transcript-section');
         const transcriptContent = document.getElementById('transcript-content');
         
+        // Summary functionality
+        const summarizeBtn = document.getElementById('summarize-btn');
+        
         // Store the full transcript text in JavaScript variable (more reliable than HTML attributes)
         let fullTranscriptText = '';
+        
+        // Simple toast notification function
+        function showToast(message, type = 'info') {
+            // Create toast element
+            const toast = document.createElement('div');
+            toast.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+            toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; max-width: 350px;';
+            toast.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            `;
+            
+            // Add to body
+            document.body.appendChild(toast);
+            
+            // Auto-remove after 4 seconds
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.remove();
+                }
+            }, 4000);
+        }
         
         if (transcribeBtn) {
             transcribeBtn.addEventListener('click', function() {
@@ -476,12 +504,35 @@
                         return;
                     }
                     
-                    if (data.job_id) {
-                        // Start polling for progress
+                    if (data.from_database && data.transcript_id) {
+                        // Transcript already exists in database - show it immediately
+                        console.log('Using existing transcript from database (transcript_id:', data.transcript_id, ')');
+                        transcribeBtn.disabled = false;
+                        transcribeBtn.innerHTML = '<i class="bi bi-mic"></i> Transcribe';
+                        
+                        // Load and show the transcript
+                        loadTranscript(data.transcript_id);
+                        transcriptSection.style.display = 'block';
+                        
+                        // Show success notification for database retrieval
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            new Notification('Transcript Loaded', {
+                                body: 'Existing transcript loaded from database',
+                                icon: '/static/favicon.ico'
+                            });
+                        }
+                        
+                        // Show toast/alert for immediate feedback
+                        showToast('Transcript loaded from database', 'success');
+                        
+                    } else if (data.job_id) {
+                        // Start polling for progress - new transcription
+                        console.log('Starting new transcription with job ID:', data.job_id);
                         const jobId = data.job_id;
                         pollTranscriptionProgress(jobId);
+                        
                     } else if (data.transcript_id) {
-                        // Transcription completed immediately (existing transcript)
+                        // Fallback: transcription completed immediately (shouldn't happen with new flow)
                         transcribeBtn.disabled = false;
                         transcribeBtn.innerHTML = '<i class="bi bi-mic"></i> Transcribe';
                         
@@ -959,6 +1010,796 @@
         function performTranslation(sourceText, sourceLang, targetLang) {
             // Call translation function
             translateTranscript(sourceText, sourceLang, targetLang);
+        }
+        
+        // Set up summarize button
+        if (summarizeBtn) {
+            summarizeBtn.addEventListener('click', function() {
+                // Get the current transcript ID from the language selector
+                const languageSelector = document.getElementById('language-selector');
+                if (!languageSelector || !languageSelector.value) {
+                    showToast('Please select a transcript first', 'warning');
+                    return;
+                }
+                
+                const transcriptId = languageSelector.value;
+                
+                // Disable button and show loading state
+                summarizeBtn.disabled = true;
+                summarizeBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Summarizing...';
+                
+                // Make API request to get or generate summary
+                fetch(`/api/transcript/${transcriptId}/summary`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        max_length: 200,  // Default to 200 words
+                        force_regenerate: false
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Reset button
+                    summarizeBtn.disabled = false;
+                    summarizeBtn.innerHTML = '<i class="bi bi-file-earmark-text"></i> Summarize';
+                    
+                    if (data.success) {
+                        // Show summary in a modal or alert
+                        showSummaryModal(data);
+                        
+                        // Show appropriate toast message
+                        if (data.from_database) {
+                            showToast('Summary loaded from database', 'success');
+                        } else {
+                            showToast('Summary generated successfully', 'success');
+                        }
+                        
+                    } else {
+                        console.error('Summary failed:', data.error);
+                        showToast('Summary failed: ' + (data.error || 'Unknown error'), 'danger');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    // Reset button
+                    summarizeBtn.disabled = false;
+                    summarizeBtn.innerHTML = '<i class="bi bi-file-earmark-text"></i> Summarize';
+                    showToast('Error generating summary: ' + error.message, 'danger');
+                });
+            });
+        }
+        
+        // Function to show summary as slideshow
+        function showSummaryModal(data) {
+            // Parse summary into bullet points or sentences
+            const summaryPoints = parseSummaryIntoPoints(data.summary);
+            
+            // Store summary data globally
+            window.currentSummaryData = data;
+            window.summaryPoints = summaryPoints;
+            window.currentSlide = 0;
+            
+            // Create slideshow HTML
+            const slideshowHtml = `
+                <div id="summarySlideshow" class="summary-slideshow">
+                    <!-- Overlay background -->
+                    <div class="slideshow-overlay" id="slideshow-overlay"></div>
+                    
+                    <!-- Main slideshow container -->
+                    <div class="slideshow-container">
+                        <!-- Header -->
+                        <div class="slideshow-header">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5 class="mb-1">
+                                        <i class="bi bi-file-earmark-text"></i> Transcript Summary
+                                        ${data.from_database ? '<span class="badge bg-success ms-2">From Database</span>' : '<span class="badge bg-primary ms-2">AI Generated</span>'}
+                                    </h5>
+                                    <small class="text-muted">
+                                        Language: ${data.language} | 
+                                        ${summaryPoints.length} points |
+                                        ${data.summary_length.toLocaleString()} chars
+                                    </small>
+                                </div>
+                                <button class="btn btn-sm btn-outline-secondary" id="close-slideshow-btn">
+                                    <i class="bi bi-x-lg"></i> Close
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Slide content -->
+                        <div class="slideshow-content">
+                            <div class="slide-counter">
+                                <span id="slide-counter-text">1 / ${summaryPoints.length}</span>
+                            </div>
+                            
+                            <div class="slide-area" id="slide-area">
+                                <!-- Slides will be populated here -->
+                            </div>
+                        </div>
+                        
+                        <!-- Navigation -->
+                        <div class="slideshow-navigation">
+                            <button class="btn btn-outline-primary" id="prev-slide">
+                                <i class="bi bi-chevron-left"></i> Previous
+                            </button>
+                            
+                            <div class="slide-indicators" id="slide-indicators">
+                                <!-- Indicators will be populated here -->
+                            </div>
+                            
+                            <button class="btn btn-outline-primary" id="next-slide">
+                                Next <i class="bi bi-chevron-right"></i>
+                            </button>
+                        </div>
+                        
+                        <!-- Actions -->
+                        <div class="slideshow-actions">
+                            <button class="btn btn-sm btn-outline-secondary" id="copy-summary-btn">
+                                <i class="bi bi-clipboard"></i> Copy All
+                            </button>
+                            <button class="btn btn-sm btn-outline-primary" id="download-summary-btn">
+                                <i class="bi bi-download"></i> Download
+                            </button>
+                            <button class="btn btn-sm btn-outline-info" id="autoplay-btn">
+                                <i class="bi bi-play"></i> <span id="autoplay-text">Auto Play</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Add CSS for slideshow
+            const slideshowCSS = `
+                <style>
+                .summary-slideshow {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    z-index: 9999;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                
+                .slideshow-overlay {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0, 0, 0, 0.8);
+                    backdrop-filter: blur(5px);
+                }
+                
+                .slideshow-container {
+                    position: relative;
+                    width: 90%;
+                    max-width: 800px;
+                    height: 80%;
+                    background: white;
+                    border-radius: 15px;
+                    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+                    display: flex;
+                    flex-direction: column;
+                    overflow: hidden;
+                }
+                
+                .slideshow-header {
+                    padding: 20px 25px 15px;
+                    border-bottom: 1px solid #dee2e6;
+                    background: #f8f9fa;
+                }
+                
+                .slideshow-content {
+                    flex: 1;
+                    display: flex;
+                    flex-direction: column;
+                    min-height: 0;
+                }
+                
+                .slide-counter {
+                    padding: 15px 25px 10px;
+                    text-align: center;
+                    font-size: 0.9rem;
+                    color: #6c757d;
+                    border-bottom: 1px solid #e9ecef;
+                }
+                
+                .slide-area {
+                    flex: 1;
+                    padding: 20px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    text-align: center;
+                    overflow-y: auto;
+                    background: linear-gradient(45deg, #f0f2f5 0%, #e8ebf0 100%);
+                }
+                
+                .slide {
+                    display: none;
+                    font-size: 1.4rem;
+                    line-height: 1.8;
+                    font-weight: 500;
+                    text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    animation: slideIn 0.6s ease-in-out;
+                    max-width: 90%;
+                    min-height: 200px;
+                    align-items: center;
+                    justify-content: center;
+                    text-align: center;
+                    position: relative;
+                    backdrop-filter: blur(10px);
+                    border: 1px solid rgba(255,255,255,0.2);
+                }
+                
+                .slide.active {
+                    display: flex;
+                }
+                
+                .slide::before {
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: inherit;
+                    border-radius: inherit;
+                    filter: blur(20px);
+                    opacity: 0.3;
+                    z-index: -1;
+                }
+                
+                @keyframes slideIn {
+                    from {
+                        opacity: 0;
+                        transform: translateY(30px) scale(0.95);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0) scale(1);
+                    }
+                }
+                
+                .slideshow-navigation {
+                    padding: 15px 25px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    border-top: 1px solid #dee2e6;
+                    background: #f8f9fa;
+                }
+                
+                .slide-indicators {
+                    display: flex;
+                    gap: 8px;
+                }
+                
+                .slide-indicator {
+                    width: 12px;
+                    height: 12px;
+                    border-radius: 50%;
+                    background: #dee2e6;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                }
+                
+                .slide-indicator.active {
+                    background: #007bff;
+                    transform: scale(1.2);
+                }
+                
+                .slideshow-actions {
+                    padding: 15px 25px;
+                    display: flex;
+                    justify-content: center;
+                    gap: 10px;
+                    border-top: 1px solid #dee2e6;
+                }
+                
+                @media (max-width: 768px) {
+                    .slideshow-container {
+                        width: 95%;
+                        height: 85%;
+                    }
+                    
+                    .slide-area {
+                        padding: 20px 20px;
+                        font-size: 1.1rem;
+                    }
+                    
+                    .slideshow-navigation {
+                        flex-direction: column;
+                        gap: 15px;
+                    }
+                    
+                    .slideshow-actions {
+                        flex-wrap: wrap;
+                        gap: 8px;
+                    }
+                }
+                </style>
+            `;
+            
+            // Remove any existing slideshow
+            const existingSlideshow = document.getElementById('summarySlideshow');
+            if (existingSlideshow) {
+                existingSlideshow.remove();
+            }
+            
+            // Add CSS and slideshow to body
+            document.head.insertAdjacentHTML('beforeend', slideshowCSS);
+            document.body.insertAdjacentHTML('beforeend', slideshowHtml);
+            
+            // Initialize slideshow
+            initializeSlideshow();
+            
+            // Add keyboard navigation
+            document.addEventListener('keydown', handleSlideshowKeyboard);
+            
+            // Make sure functions are globally available for any inline calls
+            window.toggleAutoplay = toggleAutoplay;
+            window.copySummaryToClipboard = copySummaryToClipboard;
+            window.downloadSummary = downloadSummary;
+            window.changeSlide = changeSlide;
+            window.goToSlide = goToSlide;
+            window.closeSummarySlideshow = closeSummarySlideshow;
+        }
+        
+        // Function to parse summary into individual points
+        function parseSummaryIntoPoints(summary) {
+            // Split by bullet points, numbered lists, or sentences
+            let points = [];
+            
+            // First, try to split by bullet points or numbered lists
+            if (summary.includes('•') || summary.includes('*') || summary.includes('-')) {
+                points = summary.split(/[•*-]\s+/).filter(point => point.trim().length > 0);
+            } else if (/^\d+\./.test(summary)) {
+                points = summary.split(/\d+\.\s+/).filter(point => point.trim().length > 0);
+            } else {
+                // Fall back to sentences
+                points = summary.split(/[.!?]+/).filter(point => point.trim().length > 20);
+            }
+            
+            // Clean up points and ensure each is substantial
+            points = points.map(point => point.trim().replace(/\n+/g, ' '))
+                          .filter(point => point.length > 10)
+                          .map(point => {
+                              // Add period if missing
+                              if (!point.match(/[.!?]$/)) {
+                                  point += '.';
+                              }
+                              return point;
+                          });
+            
+            // If we have too few points, create them artificially
+            if (points.length < 3) {
+                const sentences = summary.split(/[.!?]+/).filter(s => s.trim().length > 15);
+                if (sentences.length > 1) {
+                    points = sentences.map(s => s.trim()).filter(s => s.length > 0);
+                } else {
+                    // Single block - split into chunks
+                    const words = summary.trim().split(' ');
+                    const chunkSize = Math.ceil(words.length / 3);
+                    points = [];
+                    for (let i = 0; i < words.length; i += chunkSize) {
+                        const chunk = words.slice(i, i + chunkSize).join(' ');
+                        if (chunk.trim().length > 10) {
+                            points.push(chunk.trim() + (chunk.match(/[.!?]$/) ? '' : '.'));
+                        }
+                    }
+                }
+            }
+            
+            return points.length > 0 ? points : [summary];
+        }
+        
+        // Initialize slideshow functionality
+        function initializeSlideshow() {
+            console.log('Initializing slideshow with', window.summaryPoints.length, 'points');
+            
+            const slideArea = document.getElementById('slide-area');
+            const slideIndicators = document.getElementById('slide-indicators');
+            
+            if (!slideArea || !slideIndicators) {
+                console.error('Slide area or indicators not found');
+                return;
+            }
+            
+            // Clear existing content
+            slideArea.innerHTML = '';
+            slideIndicators.innerHTML = '';
+            
+            // Create slides with background themes
+            window.summaryPoints.forEach((point, index) => {
+                console.log('Creating slide', index, 'with content:', point.substring(0, 50) + '...');
+                // Create slide
+                const slide = document.createElement('div');
+                slide.className = `slide ${index === 0 ? 'active' : ''}`;
+                slide.innerHTML = point;
+                
+                // Add background gradient based on slide index
+                const backgroundStyle = getSlideBackground(index);
+                slide.style.background = backgroundStyle;
+                slide.style.borderRadius = '15px';
+                slide.style.padding = '40px';
+                slide.style.margin = '20px';
+                slide.style.boxShadow = '0 8px 32px rgba(0,0,0,0.1)';
+                slide.style.color = getTextColorForBackground(index);
+                
+                slideArea.appendChild(slide);
+                
+                // Create indicator
+                const indicator = document.createElement('div');
+                indicator.className = `slide-indicator ${index === 0 ? 'active' : ''}`;
+                indicator.addEventListener('click', () => {
+                    console.log('Indicator clicked for slide', index);
+                    goToSlide(index);
+                });
+                slideIndicators.appendChild(indicator);
+            });
+            
+            // Add event listeners to all buttons
+            setTimeout(() => {
+                const prevBtn = document.getElementById('prev-slide');
+                const nextBtn = document.getElementById('next-slide');
+                const copyBtn = document.getElementById('copy-summary-btn');
+                const downloadBtn = document.getElementById('download-summary-btn');
+                const autoplayBtn = document.getElementById('autoplay-btn');
+                
+                if (prevBtn) {
+                    prevBtn.removeAttribute('onclick'); // Remove any inline onclick
+                    prevBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        changeSlide(-1);
+                    });
+                }
+                if (nextBtn) {
+                    nextBtn.removeAttribute('onclick');
+                    nextBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        changeSlide(1);
+                    });
+                }
+                if (copyBtn) {
+                    copyBtn.removeAttribute('onclick');
+                    copyBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        copySummaryToClipboard();
+                    });
+                }
+                if (downloadBtn) {
+                    downloadBtn.removeAttribute('onclick');
+                    downloadBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        downloadSummary();
+                    });
+                }
+                if (autoplayBtn) {
+                    autoplayBtn.removeAttribute('onclick');
+                    autoplayBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleAutoplay();
+                    });
+                }
+                
+                // Add overlay click handler
+                const overlay = document.getElementById('slideshow-overlay');
+                if (overlay) {
+                    overlay.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        closeSummarySlideshow();
+                    });
+                }
+                
+                // Add close button handler
+                const closeBtn = document.getElementById('close-slideshow-btn');
+                if (closeBtn) {
+                    closeBtn.removeAttribute('onclick');
+                    closeBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        closeSummarySlideshow();
+                    });
+                }
+            }, 100); // Small delay to ensure DOM is ready
+            
+            // Update navigation buttons
+            updateNavigationButtons();
+        }
+        
+        // Get background gradient for slide based on content
+        function getSlideBackground(index) {
+            // Analyze the content to determine theme
+            const slideContent = window.summaryPoints[index].toLowerCase();
+            const themeBackgrounds = getThemeBasedBackground(slideContent);
+            
+            if (themeBackgrounds.length > 0) {
+                return themeBackgrounds[index % themeBackgrounds.length];
+            }
+            
+            // Fallback to beautiful gradient collection
+            const backgrounds = [
+                'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', // Purple-Blue (Tech)
+                'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', // Pink-Red (Creative)
+                'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', // Blue (Business)
+                'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', // Green (Health/Nature)
+                'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', // Pink-Yellow (Energy)
+                'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)', // Mint-Pink (Soft)
+                'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)', // Coral-Pink (Warm)
+                'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)', // Peach (Friendly)
+                'linear-gradient(135deg, #ff8177 0%, #ff867a 0%, #ff8c7f 21%, #f99185 52%, #cf556c 78%, #b12a5b 100%)', // Sunset
+                'linear-gradient(135deg, #ebbba7 0%, #cfc7f8 100%)', // Lavender
+                'linear-gradient(135deg, #fff1eb 0%, #ace0f9 100%)', // Cloud-Sky
+                'linear-gradient(135deg, #74b9ff 0%, #0984e3 100%)', // Ocean Blue
+                'linear-gradient(135deg, #fd79a8 0%, #e84393 100%)', // Magenta
+                'linear-gradient(135deg, #fdcb6e 0%, #e17055 100%)', // Orange-Red
+                'linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%)' // Purple
+            ];
+            
+            return backgrounds[index % backgrounds.length];
+        }
+        
+        // Get theme-based backgrounds based on content analysis
+        function getThemeBasedBackground(content) {
+            // Technology themes
+            if (content.match(/\b(technology|tech|software|app|digital|AI|artificial intelligence|machine learning|coding|programming|data|algorithm|computer|internet|web|mobile|startup|innovation)\b/i)) {
+                return [
+                    'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+                    'linear-gradient(135deg, #74b9ff 0%, #0984e3 100%)',
+                    'linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%)'
+                ];
+            }
+            
+            // Business/Finance themes
+            if (content.match(/\b(business|finance|money|investment|market|economy|profit|revenue|growth|strategy|company|corporate|leadership|management|sales)\b/i)) {
+                return [
+                    'linear-gradient(135deg, #2d3436 0%, #636e72 100%)',
+                    'linear-gradient(135deg, #74b9ff 0%, #0984e3 100%)',
+                    'linear-gradient(135deg, #00b894 0%, #00cec9 100%)',
+                    'linear-gradient(135deg, #fdcb6e 0%, #e17055 100%)'
+                ];
+            }
+            
+            // Health/Wellness themes
+            if (content.match(/\b(health|wellness|fitness|medical|doctor|hospital|therapy|nutrition|exercise|mental|physical|healing|medicine|treatment)\b/i)) {
+                return [
+                    'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+                    'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
+                    'linear-gradient(135deg, #81ecec 0%, #74b9ff 100%)',
+                    'linear-gradient(135deg, #55efc4 0%, #81ecec 100%)'
+                ];
+            }
+            
+            // Creative/Art themes
+            if (content.match(/\b(art|creative|design|music|painting|drawing|photography|writing|artist|creative|aesthetic|beauty|color|visual)\b/i)) {
+                return [
+                    'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                    'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+                    'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)',
+                    'linear-gradient(135deg, #fd79a8 0%, #e84393 100%)'
+                ];
+            }
+            
+            // Education/Learning themes
+            if (content.match(/\b(education|learning|school|university|student|teacher|knowledge|study|research|academic|science|discovery|book|reading)\b/i)) {
+                return [
+                    'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
+                    'linear-gradient(135deg, #fff1eb 0%, #ace0f9 100%)',
+                    'linear-gradient(135deg, #ebbba7 0%, #cfc7f8 100%)',
+                    'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)'
+                ];
+            }
+            
+            // Travel/Adventure themes
+            if (content.match(/\b(travel|adventure|journey|explore|destination|vacation|trip|world|country|culture|experience|discover)\b/i)) {
+                return [
+                    'linear-gradient(135deg, #ff8177 0%, #ff867a 0%, #ff8c7f 21%, #f99185 52%, #cf556c 78%, #b12a5b 100%)',
+                    'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+                    'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+                    'linear-gradient(135deg, #74b9ff 0%, #0984e3 100%)'
+                ];
+            }
+            
+            // Food/Cooking themes
+            if (content.match(/\b(food|cooking|recipe|restaurant|chef|cuisine|meal|delicious|flavor|taste|kitchen|dining|ingredient)\b/i)) {
+                return [
+                    'linear-gradient(135deg, #fdcb6e 0%, #e17055 100%)',
+                    'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
+                    'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+                    'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)'
+                ];
+            }
+            
+            return []; // Return empty array if no theme matches
+        }
+        
+        // Get appropriate text color for background
+        function getTextColorForBackground(index) {
+            // Alternate between white and dark text based on background
+            const lightBackgrounds = [5, 6, 7, 10]; // Indices of lighter backgrounds
+            
+            if (lightBackgrounds.includes(index % 15)) {
+                return '#2d3436'; // Dark text for light backgrounds
+            } else {
+                return '#ffffff'; // White text for dark backgrounds
+            }
+        }
+        
+        // Change slide function
+        function changeSlide(direction) {
+            console.log('changeSlide called with direction:', direction, 'current slide:', window.currentSlide);
+            const newSlide = window.currentSlide + direction;
+            
+            if (newSlide >= 0 && newSlide < window.summaryPoints.length) {
+                goToSlide(newSlide);
+            } else {
+                console.log('Cannot change slide - out of bounds:', newSlide, 'max:', window.summaryPoints.length - 1);
+            }
+        }
+        
+        // Go to specific slide
+        function goToSlide(slideIndex) {
+            console.log('goToSlide called with index:', slideIndex);
+            
+            // Update current slide
+            window.currentSlide = slideIndex;
+            
+            // Update slides
+            const slides = document.querySelectorAll('#summarySlideshow .slide');
+            const indicators = document.querySelectorAll('#summarySlideshow .slide-indicator');
+            
+            console.log('Found slides:', slides.length, 'indicators:', indicators.length);
+            
+            slides.forEach((slide, index) => {
+                if (index === slideIndex) {
+                    slide.classList.add('active');
+                    console.log('Activated slide', index);
+                } else {
+                    slide.classList.remove('active');
+                }
+            });
+            
+            indicators.forEach((indicator, index) => {
+                if (index === slideIndex) {
+                    indicator.classList.add('active');
+                } else {
+                    indicator.classList.remove('active');
+                }
+            });
+            
+            // Update counter
+            const counterElement = document.getElementById('slide-counter-text');
+            if (counterElement) {
+                counterElement.textContent = `${slideIndex + 1} / ${window.summaryPoints.length}`;
+            }
+            
+            // Update navigation buttons
+            updateNavigationButtons();
+        }
+        
+        // Update navigation button states
+        function updateNavigationButtons() {
+            const prevBtn = document.getElementById('prev-slide');
+            const nextBtn = document.getElementById('next-slide');
+            
+            if (prevBtn) prevBtn.disabled = window.currentSlide === 0;
+            if (nextBtn) nextBtn.disabled = window.currentSlide === window.summaryPoints.length - 1;
+        }
+        
+        // Handle keyboard navigation
+        function handleSlideshowKeyboard(event) {
+            if (!document.getElementById('summarySlideshow')) return;
+            
+            switch(event.key) {
+                case 'ArrowLeft':
+                case 'ArrowUp':
+                    event.preventDefault();
+                    changeSlide(-1);
+                    break;
+                case 'ArrowRight':
+                case 'ArrowDown':
+                case ' ':
+                    event.preventDefault();
+                    changeSlide(1);
+                    break;
+                case 'Escape':
+                    event.preventDefault();
+                    closeSummarySlideshow();
+                    break;
+                case 'Home':
+                    event.preventDefault();
+                    goToSlide(0);
+                    break;
+                case 'End':
+                    event.preventDefault();
+                    goToSlide(window.summaryPoints.length - 1);
+                    break;
+            }
+        }
+        
+        // Close slideshow
+        function closeSummarySlideshow() {
+            const slideshow = document.getElementById('summarySlideshow');
+            if (slideshow) {
+                slideshow.remove();
+            }
+            
+            // Remove keyboard listener
+            document.removeEventListener('keydown', handleSlideshowKeyboard);
+            
+            // Clean up global variables
+            delete window.currentSummaryData;
+            delete window.summaryPoints;
+            delete window.currentSlide;
+            delete window.autoplayInterval;
+        }
+        
+        // Autoplay functionality
+        function toggleAutoplay() {
+            const autoplayText = document.querySelector('#autoplay-text');
+            const autoplayIcon = document.querySelector('#autoplay-btn i');
+            
+            if (window.autoplayInterval) {
+                // Stop autoplay
+                clearInterval(window.autoplayInterval);
+                delete window.autoplayInterval;
+                if (autoplayText) autoplayText.textContent = 'Auto Play';
+                if (autoplayIcon) autoplayIcon.className = 'bi bi-play';
+            } else {
+                // Start autoplay
+                window.autoplayInterval = setInterval(() => {
+                    if (window.currentSlide < window.summaryPoints.length - 1) {
+                        changeSlide(1);
+                    } else {
+                        // Loop back to start
+                        goToSlide(0);
+                    }
+                }, 4000); // 4 seconds per slide
+                
+                if (autoplayText) autoplayText.textContent = 'Stop';
+                if (autoplayIcon) autoplayIcon.className = 'bi bi-pause';
+            }
+        }
+        
+        // Function to copy summary to clipboard
+        function copySummaryToClipboard() {
+            if (window.currentSummaryData) {
+                navigator.clipboard.writeText(window.currentSummaryData.summary).then(() => {
+                    showToast('Summary copied to clipboard', 'success');
+                }).catch(err => {
+                    console.error('Failed to copy: ', err);
+                    showToast('Failed to copy summary', 'danger');
+                });
+            }
+        }
+        
+        // Function to download summary
+        function downloadSummary() {
+            if (window.currentSummaryData) {
+                const blob = new Blob([window.currentSummaryData.summary], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `summary_${window.currentSummaryData.space_id}_${window.currentSummaryData.language}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
         }
         
         // Set up transcript download button
