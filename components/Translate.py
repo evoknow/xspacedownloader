@@ -208,13 +208,14 @@ class Translate:
             logger.error(f"Language detection error: {e}")
             return False, {"error": f"Language detection error: {str(e)}"}
     
-    def summary(self, content: str, max_length: int = None) -> Tuple[bool, Union[str, Dict]]:
+    def summary(self, content: str, max_length: int = None, language: str = None) -> Tuple[bool, Union[str, Dict]]:
         """
         Generate a summary of the given content using AI.
         
         Args:
             content (str): Content to summarize
             max_length (int, optional): Maximum length of summary in words
+            language (str, optional): Language for the summary output
             
         Returns:
             Tuple[bool, Union[str, Dict]]: Success flag and summary or error dict
@@ -229,7 +230,7 @@ class Translate:
             return False, {"error": "No content provided for summarization"}
         
         try:
-            return self.ai.summary(content, max_length)
+            return self.ai.summary(content, max_length, language)
         except Exception as e:
             logger.error(f"Summarization error: {e}")
             return False, {"error": f"Summarization error: {str(e)}"}

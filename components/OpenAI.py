@@ -426,19 +426,31 @@ If you use ANY English words, you have FAILED."""
             
         return True
     
-    def summary(self, content: str, max_length: int = None) -> Tuple[bool, Union[str, Dict]]:
+    def summary(self, content: str, max_length: int = None, language: str = None) -> Tuple[bool, Union[str, Dict]]:
         """
         Generate a summary using OpenAI.
         
         Args:
             content (str): Content to summarize
             max_length (int, optional): Maximum length of summary in words
+            language (str, optional): Language for the summary output
             
         Returns:
             Tuple[bool, Union[str, Dict]]: Success flag and summary or error dict
         """
         if not content:
             return False, {"error": "No content provided for summarization"}
+        
+        # Map language codes to full names
+        lang_map = {
+            'en': 'English', 'es': 'Spanish', 'fr': 'French', 'de': 'German',
+            'it': 'Italian', 'pt': 'Portuguese', 'ru': 'Russian', 'zh': 'Chinese',
+            'ja': 'Japanese', 'ar': 'Arabic', 'bn': 'Bengali', 'hi': 'Hindi',
+            'ko': 'Korean', 'nl': 'Dutch', 'sv': 'Swedish', 'tr': 'Turkish'
+        }
+        
+        # Determine output language
+        output_language = lang_map.get(language.lower() if language else 'en', language or 'English')
         
         # Determine max_tokens based on max_length
         if max_length:
@@ -448,14 +460,14 @@ If you use ANY English words, you have FAILED."""
             max_tokens = 500
             length_instruction = "concisely"
         
-        prompt = f"""Summarize the following content {length_instruction}. Focus on the key points and main ideas:
+        prompt = f"""Summarize the following content {length_instruction} in {output_language}. Focus on the key points and main ideas:
 
 {content}"""
         
         messages = [
             {
                 "role": "system",
-                "content": "You are a professional content summarizer. Provide clear, concise summaries that capture the essential information and main points. Use bullet points or paragraphs as appropriate."
+                "content": f"You are a professional content summarizer. Provide clear, concise summaries that capture the essential information and main points. Use bullet points or paragraphs as appropriate. Always provide the summary in {output_language}."
             },
             {
                 "role": "user",

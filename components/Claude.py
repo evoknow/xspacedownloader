@@ -142,13 +142,14 @@ class Claude(AIProvider):
         
         return self._make_request(system_prompt, user_prompt, max_tokens=max_tokens, temperature=0.1)
     
-    def summary(self, content: str, max_length: int = None) -> Tuple[bool, Union[str, Dict]]:
+    def summary(self, content: str, max_length: int = None, language: str = None) -> Tuple[bool, Union[str, Dict]]:
         """
         Generate a summary using Claude.
         
         Args:
             content (str): Content to summarize
             max_length (int, optional): Maximum length of summary in words
+            language (str, optional): Language for the summary output
             
         Returns:
             Tuple[bool, Union[str, Dict]]: Success flag and summary or error dict
@@ -164,9 +165,20 @@ class Claude(AIProvider):
             max_tokens = 500
             length_instruction = "concisely"
         
-        system_prompt = "You are a professional content summarizer. Provide clear, concise summaries that capture the essential information and main points. Focus on accuracy and clarity."
+        # Map language codes to full names
+        lang_map = {
+            'en': 'English', 'es': 'Spanish', 'fr': 'French', 'de': 'German',
+            'it': 'Italian', 'pt': 'Portuguese', 'ru': 'Russian', 'zh': 'Chinese',
+            'ja': 'Japanese', 'ar': 'Arabic', 'bn': 'Bengali', 'hi': 'Hindi',
+            'ko': 'Korean', 'nl': 'Dutch', 'sv': 'Swedish', 'tr': 'Turkish'
+        }
         
-        user_prompt = f"""Summarize the following content {length_instruction}. Focus on the key points and main ideas:
+        # Determine output language
+        output_language = lang_map.get(language.lower() if language else 'en', language or 'English')
+        
+        system_prompt = f"You are a professional content summarizer. Provide clear, concise summaries that capture the essential information and main points. Focus on accuracy and clarity. Always provide the summary in {output_language}."
+        
+        user_prompt = f"""Summarize the following content {length_instruction} in {output_language}. Focus on the key points and main ideas:
 
 {content}"""
         

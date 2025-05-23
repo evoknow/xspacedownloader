@@ -11,44 +11,28 @@
                 <a href="{{ url_for('index') }}" class="btn btn-outline-primary btn-sm">Back to Home</a>
             </div>
             <div class="card-body">
-                <div class="space-details mb-4">
-                    <h5>Space Details</h5>
-                    <ul class="list-group list-group-flush">
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span>Space ID:</span>
-                            <span class="badge bg-secondary rounded-pill">{{ space.space_id }}</span>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span>Space URL:</span>
-                            <a href="{{ space.space_url }}" target="_blank" rel="noopener" class="text-truncate ms-2" 
-                               style="max-width: 400px; display: inline-block;">{{ space.space_url }}</a>
-                        </li>
-                        {% if space.created_at %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span>Added on:</span>
-                            <span>{{ space.created_at }}</span>
-                        </li>
-                        {% endif %}
+                <div class="space-details mb-3">
+                    <div class="d-flex align-items-center gap-3 flex-wrap">
+                        <a href="{{ space.space_url }}" target="_blank" rel="noopener" class="text-decoration-none">
+                            <code>{{ space.space_id }}</code> <i class="bi bi-box-arrow-up-right small"></i>
+                        </a>
                         {% if space.status %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span>Status:</span>
-                            <span class="badge 
-                                {% if space.status == 'completed' %}bg-success
-                                {% elif space.status == 'downloading' %}bg-info
-                                {% elif space.status == 'pending' %}bg-warning
-                                {% elif space.status == 'failed' %}bg-danger
-                                {% else %}bg-secondary{% endif %}">
-                                {{ space.status|title }}
-                            </span>
-                        </li>
+                        <span class="badge 
+                            {% if space.status == 'completed' %}bg-success
+                            {% elif space.status == 'downloading' %}bg-info
+                            {% elif space.status == 'pending' %}bg-warning
+                            {% elif space.status == 'failed' %}bg-danger
+                            {% else %}bg-secondary{% endif %}">
+                            {{ space.status|title }}
+                        </span>
                         {% endif %}
-                        {% if file_path %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span>File Size:</span>
-                            <span>{{ file_size|filesizeformat }}</span>
-                        </li>
+                        {% if file_path and file_size %}
+                        <span class="text-muted">{{ (file_size / 1048576)|round(1) }} MB</span>
                         {% endif %}
-                    </ul>
+                        {% if space.created_at %}
+                        <span class="text-muted">{{ space.created_at }}</span>
+                        {% endif %}
+                    </div>
                 </div>
                 
                 {# Check if file exists, regardless of status #}
@@ -60,8 +44,8 @@
                             <div class="d-flex justify-content-between align-items-center">
                                 <span>{{ space.title if space.title else "Space " + space.space_id }}</span>
                                 <div>
-                                    <button id="transcribe-btn" class="btn btn-info btn-sm me-2" {% if space.transcripts %}data-has-transcript="true"{% endif %}>
-                                        <i class="bi bi-file-earmark-text"></i> Transcribe
+                                    <button id="transcribe-btn" class="btn btn-info btn-sm me-2" {% if space.transcripts %}data-has-transcript="true"{% endif %} data-bs-toggle="tooltip" data-bs-placement="top" title="Generate transcript from audio">
+                                        <i class="bi bi-mic"></i> Transcribe
                                     </button>
                                     <a href="/download/{{ space.space_id }}?attachment=1" class="btn btn-primary btn-sm">
                                         <i class="bi bi-download"></i> Download
@@ -124,14 +108,14 @@
                                     {% if space.transcripts %}
                                     <select id="language-selector" class="form-select form-select-sm ms-3" style="width: auto;">
                                         {% for transcript in space.transcripts %}
-                                        <option value="{{ transcript.id }}">{{ transcript.language }}</option>
+                                        <option value="{{ transcript.id }}" data-language="{{ transcript.language }}">{{ transcript.language }}</option>
                                         {% endfor %}
                                     </select>
                                     {% endif %}
                                 </div>
-                                <div>
-                                    <div class="input-group me-2 d-inline-flex" style="width: auto;">
-                                        <select id="translate-target-lang" class="form-select form-select-sm">
+                                <div class="transcript-actions">
+                                    <div class="btn-group" role="group">
+                                        <select id="translate-target-lang" class="form-select form-select-sm" style="max-width: 150px;" data-bs-toggle="tooltip" data-bs-placement="top" title="Select target language">
                                             <option value="" selected>Translate to...</option>
                                             <option value="en">English</option>
                                             <option value="es">Spanish</option>
@@ -144,18 +128,18 @@
                                             <option value="ja">Japanese</option>
                                             <option value="ru">Russian</option>
                                         </select>
-                                        <button id="translate-btn" class="btn btn-sm btn-outline-info">
-                                            <i class="bi bi-translate"></i> Translate
+                                        <button id="translate-btn" class="btn btn-sm btn-outline-info" data-bs-toggle="tooltip" data-bs-placement="top" title="Translate transcript">
+                                            <i class="bi bi-translate"></i>
                                         </button>
                                     </div>
-                                    <button id="summarize-btn" class="btn btn-sm btn-outline-warning me-2">
-                                        <i class="bi bi-file-earmark-text"></i> Summarize
+                                    <button id="summarize-btn" class="btn btn-sm btn-outline-warning" data-bs-toggle="tooltip" data-bs-placement="top" title="Generate AI summary">
+                                        <i class="bi bi-lightbulb"></i>
                                     </button>
-                                    <button id="transcript-copy-btn" class="btn btn-sm btn-outline-secondary">
-                                        <i class="bi bi-clipboard"></i> Copy
+                                    <button id="transcript-copy-btn" class="btn btn-sm btn-outline-secondary" data-bs-toggle="tooltip" data-bs-placement="top" title="Copy transcript to clipboard">
+                                        <i class="bi bi-clipboard"></i>
                                     </button>
-                                    <button id="transcript-download-btn" class="btn btn-sm btn-outline-primary">
-                                        <i class="bi bi-download"></i> Download
+                                    <button id="transcript-download-btn" class="btn btn-sm btn-outline-primary" data-bs-toggle="tooltip" data-bs-placement="top" title="Download transcript as text file">
+                                        <i class="bi bi-download"></i>
                                     </button>
                                 </div>
                             </div>
@@ -249,35 +233,24 @@
                 </div>
                 {% endif %}
                 
-                {% if job %}
-                <div class="job-details mt-4">
-                    <h5>Download Job Details</h5>
-                    <ul class="list-group list-group-flush">
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span>Job ID:</span>
-                            <span class="badge bg-secondary rounded-pill">{{ job.id }}</span>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span>Started:</span>
-                            <span>{{ job.start_time }}</span>
-                        </li>
-                        {% if job.end_time %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span>Completed:</span>
-                            <span>{{ job.end_time }}</span>
-                        </li>
+                {% if job and (job.file_type or (job.start_time and job.end_time)) %}
+                <div class="job-details mt-3">
+                    <h6 class="text-muted mb-2">Job Info</h6>
+                    <div class="d-flex flex-wrap gap-3">
+                        <small class="text-muted">
+                            <i class="bi bi-hash"></i> Job #{{ job.id }}
+                        </small>
+                        {% if job.file_type %}
+                        <small class="text-muted">
+                            <i class="bi bi-file-earmark"></i> {{ job.file_type|upper }}
+                        </small>
                         {% endif %}
-                        {% if job.progress_in_size %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span>Download Size:</span>
-                            <span>{{ job.progress_in_size|filesizeformat }} ({{ (job.progress_in_size / 1048576)|round(2) }} MB)</span>
-                        </li>
+                        {% if job.start_time and job.end_time %}
+                        <small class="text-muted">
+                            <i class="bi bi-clock"></i> Duration: {{ ((job.end_time|default(job.start_time) - job.start_time).total_seconds() / 60)|round(1) }} min
+                        </small>
                         {% endif %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span>File Type:</span>
-                            <span>{{ job.file_type }}</span>
-                        </li>
-                    </ul>
+                    </div>
                 </div>
                 {% endif %}
             </div>
@@ -286,34 +259,171 @@
 </div>
 {% endblock %}
 
+{% block styles %}
+<style>
+    /* Transcript actions styling */
+    .transcript-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+    
+    .transcript-actions .btn-group {
+        display: flex;
+        align-items: center;
+    }
+    
+    .transcript-actions .form-select {
+        border-top-right-radius: 0;
+        border-bottom-right-radius: 0;
+        border-right: none;
+    }
+    
+    .transcript-actions #translate-btn {
+        border-top-left-radius: 0;
+        border-bottom-left-radius: 0;
+    }
+    
+    /* Make buttons more spacious on mobile */
+    @media (max-width: 768px) {
+        .transcript-actions {
+            justify-content: center;
+            gap: 4px;
+        }
+        
+        .transcript-actions .btn {
+            padding: 0.375rem 0.75rem;
+        }
+        
+        .transcript-actions .form-select {
+            max-width: 120px !important;
+            font-size: 0.875rem;
+        }
+    }
+    
+    /* Improve card header layout on mobile */
+    @media (max-width: 576px) {
+        .card-header .d-flex {
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .transcript-actions {
+            width: 100%;
+            justify-content: center;
+        }
+    }
+    
+    /* Add subtle hover effects */
+    .transcript-actions .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        transition: all 0.2s ease;
+    }
+    
+    /* Language selector styling */
+    #language-selector {
+        min-width: 120px;
+    }
+    
+    /* Compact space details styling */
+    .space-details {
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    }
+    
+    .space-details code {
+        font-size: 0.9rem;
+        background-color: rgba(0, 0, 0, 0.05);
+        padding: 2px 6px;
+        border-radius: 4px;
+    }
+    
+    .space-details a:hover code {
+        background-color: rgba(0, 0, 0, 0.1);
+    }
+    
+    .job-details {
+        background-color: rgba(0, 0, 0, 0.02);
+        padding: 12px 15px;
+        border-radius: 8px;
+        border: 1px solid rgba(0, 0, 0, 0.05);
+    }
+    
+    .job-details h6 {
+        font-size: 0.875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    /* Dark mode support */
+    @media (prefers-color-scheme: dark) {
+        .space-details {
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+        
+        .space-details code {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+        
+        .space-details a:hover code {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        
+        .job-details {
+            background-color: rgba(255, 255, 255, 0.02);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+    }
+</style>
+{% endblock %}
+
 {% block scripts %}
 <script>
+    // Language code to name mapping - define globally for template access
+    const languageNames = {
+        'en': 'English',
+        'es': 'Spanish', 
+        'fr': 'French',
+        'de': 'German',
+        'it': 'Italian',
+        'pt': 'Portuguese',
+        'hi': 'Hindi',
+        'bn': 'Bengali',
+        'ar': 'Arabic',
+        'zh': 'Chinese',
+        'ja': 'Japanese',
+        'ko': 'Korean',
+        'ru': 'Russian',
+        'nl': 'Dutch',
+        'pl': 'Polish',
+        'tr': 'Turkish',
+        'vi': 'Vietnamese',
+        'id': 'Indonesian',
+        'th': 'Thai',
+        'sv': 'Swedish',
+        'da': 'Danish',
+        'no': 'Norwegian',
+        'fi': 'Finnish'
+    };
+    
+    // Function to get language name from code
+    function getLanguageName(code) {
+        // Handle language codes with country (e.g., 'en-US' -> 'en')
+        const langCode = code.split('-')[0].toLowerCase();
+        return languageNames[langCode] || code;
+    }
+    
     document.addEventListener('DOMContentLoaded', function() {
         const audioPlayer = document.getElementById('audio-player');
         const spaceId = '{{ space.space_id }}';
         const spaceStatus = '{{ space.status }}';
         
-        // Language code to name mapping
-        const languageNames = {
-            'en': 'English',
-            'es': 'Spanish', 
-            'fr': 'French',
-            'de': 'German',
-            'it': 'Italian',
-            'pt': 'Portuguese',
-            'hi': 'Hindi',
-            'bn': 'Bengali',
-            'ar': 'Arabic',
-            'zh': 'Chinese',
-            'ja': 'Japanese',
-            'ko': 'Korean',
-            'ru': 'Russian'
-        };
-        
-        // Function to get language name from code
-        function getLanguageName(code) {
-            return languageNames[code] || code;
-        }
+        // Initialize Bootstrap tooltips
+        const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+        const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
         
         // Audio player setup
         if (audioPlayer) {
@@ -469,6 +579,18 @@
         }
         
         if (transcribeBtn) {
+            // Check if transcript already exists and disable button if so
+            if (transcribeBtn.getAttribute('data-has-transcript') === 'true') {
+                transcribeBtn.disabled = true;
+                transcribeBtn.innerHTML = '<i class="bi bi-check-circle"></i> Transcribed';
+                transcribeBtn.setAttribute('title', 'Transcript already exists');
+                // Update tooltip if it exists
+                const tooltip = bootstrap.Tooltip.getInstance(transcribeBtn);
+                if (tooltip) {
+                    tooltip.setContent({ '.tooltip-inner': 'Transcript already exists' });
+                }
+            }
+            
             transcribeBtn.addEventListener('click', function() {
                 // Disable button during transcription
                 transcribeBtn.disabled = true;
@@ -507,8 +629,9 @@
                     if (data.from_database && data.transcript_id) {
                         // Transcript already exists in database - show it immediately
                         console.log('Using existing transcript from database (transcript_id:', data.transcript_id, ')');
-                        transcribeBtn.disabled = false;
-                        transcribeBtn.innerHTML = '<i class="bi bi-mic"></i> Transcribe';
+                        transcribeBtn.disabled = true;
+                        transcribeBtn.innerHTML = '<i class="bi bi-check-circle"></i> Transcribed';
+                        transcribeBtn.setAttribute('data-has-transcript', 'true');
                         
                         // Load and show the transcript
                         loadTranscript(data.transcript_id);
@@ -533,8 +656,9 @@
                         
                     } else if (data.transcript_id) {
                         // Fallback: transcription completed immediately (shouldn't happen with new flow)
-                        transcribeBtn.disabled = false;
-                        transcribeBtn.innerHTML = '<i class="bi bi-mic"></i> Transcribe';
+                        transcribeBtn.disabled = true;
+                        transcribeBtn.innerHTML = '<i class="bi bi-check-circle"></i> Transcribed';
+                        transcribeBtn.setAttribute('data-has-transcript', 'true');
                         
                         // Load and show the transcript
                         loadTranscript(data.transcript_id);
@@ -552,9 +676,14 @@
                 .catch(error => {
                     console.error('Error:', error);
                     alert('An error occurred while starting transcription.');
-                    // Reset button
-                    transcribeBtn.disabled = false;
-                    transcribeBtn.innerHTML = '<i class="bi bi-mic"></i> Transcribe';
+                    // Reset button only if no transcript exists
+                    if (transcribeBtn.getAttribute('data-has-transcript') !== 'true') {
+                        transcribeBtn.disabled = false;
+                        transcribeBtn.innerHTML = '<i class="bi bi-mic"></i> Transcribe';
+                    } else {
+                        transcribeBtn.disabled = true;
+                        transcribeBtn.innerHTML = '<i class="bi bi-check-circle"></i> Transcribed';
+                    }
                 });
             });
         }
@@ -818,6 +947,13 @@
         // Set up language selector
         const languageSelector = document.getElementById('language-selector');
         if (languageSelector) {
+            // Update option text to show full language names
+            for (let i = 0; i < languageSelector.options.length; i++) {
+                const option = languageSelector.options[i];
+                const langCode = option.getAttribute('data-language') || option.text;
+                option.text = getLanguageName(langCode);
+            }
+            
             languageSelector.addEventListener('change', function() {
                 loadTranscript(this.value);
             });
@@ -865,9 +1001,10 @@
                             // Stop polling
                             clearInterval(pollInterval);
                             
-                            // Reset button
-                            transcribeBtn.disabled = false;
-                            transcribeBtn.innerHTML = '<i class="bi bi-mic"></i> Transcribe';
+                            // Update button to show transcription complete
+                            transcribeBtn.disabled = true;
+                            transcribeBtn.innerHTML = '<i class="bi bi-check-circle"></i> Transcribed';
+                            transcribeBtn.setAttribute('data-has-transcript', 'true');
                             
                             // Show transcript section
                             transcriptSection.style.display = 'block';
@@ -893,7 +1030,8 @@
                                         // Add new option
                                         const option = document.createElement('option');
                                         option.value = jobData.result.transcript_id;
-                                        option.text = jobData.result.language;
+                                        option.setAttribute('data-language', jobData.result.language);
+                                        option.text = getLanguageName(jobData.result.language);
                                         option.selected = true;
                                         langSelector.appendChild(option);
                                     }
@@ -911,9 +1049,14 @@
                             // Stop polling
                             clearInterval(pollInterval);
                             
-                            // Reset button
-                            transcribeBtn.disabled = false;
-                            transcribeBtn.innerHTML = '<i class="bi bi-mic"></i> Transcribe';
+                            // Reset button only if no existing transcript
+                            if (transcribeBtn.getAttribute('data-has-transcript') !== 'true') {
+                                transcribeBtn.disabled = false;
+                                transcribeBtn.innerHTML = '<i class="bi bi-mic"></i> Transcribe';
+                            } else {
+                                transcribeBtn.disabled = true;
+                                transcribeBtn.innerHTML = '<i class="bi bi-check-circle"></i> Transcribed';
+                            }
                             
                             // Show error
                             alert('Transcription failed: ' + (jobData.error || 'Unknown error occurred'));
@@ -1015,59 +1158,130 @@
         // Set up summarize button
         if (summarizeBtn) {
             summarizeBtn.addEventListener('click', function() {
-                // Get the current transcript ID from the language selector
-                const languageSelector = document.getElementById('language-selector');
-                if (!languageSelector || !languageSelector.value) {
-                    showToast('Please select a transcript first', 'warning');
+                // Check if there's any transcript content
+                if (!transcriptContent || !transcriptContent.innerText.trim()) {
+                    showToast('No transcript content to summarize', 'warning');
                     return;
                 }
                 
-                const transcriptId = languageSelector.value;
+                // Get current displayed text and determine if it's translated
+                const currentText = transcriptContent.innerText.trim();
+                const isTranslated = transcriptContent.querySelector('.transcript-text.translated') !== null;
                 
-                // Disable button and show loading state
-                summarizeBtn.disabled = true;
-                summarizeBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Summarizing...';
+                // Determine the language of current content
+                let contentLanguage = 'en'; // default
                 
-                // Make API request to get or generate summary
-                fetch(`/api/transcript/${transcriptId}/summary`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        max_length: 200,  // Default to 200 words
-                        force_regenerate: false
-                    })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    // Reset button
-                    summarizeBtn.disabled = false;
-                    summarizeBtn.innerHTML = '<i class="bi bi-file-earmark-text"></i> Summarize';
-                    
-                    if (data.success) {
-                        // Show summary in a modal or alert
-                        showSummaryModal(data);
-                        
-                        // Show appropriate toast message
-                        if (data.from_database) {
-                            showToast('Summary loaded from database', 'success');
-                        } else {
-                            showToast('Summary generated successfully', 'success');
-                        }
-                        
-                    } else {
-                        console.error('Summary failed:', data.error);
-                        showToast('Summary failed: ' + (data.error || 'Unknown error'), 'danger');
+                if (isTranslated) {
+                    // If showing translated text, use the general summary API with the translated text
+                    const translateSelect = document.getElementById('translate-target-lang');
+                    if (translateSelect && translateSelect.value) {
+                        contentLanguage = translateSelect.value;
                     }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    // Reset button
-                    summarizeBtn.disabled = false;
-                    summarizeBtn.innerHTML = '<i class="bi bi-file-earmark-text"></i> Summarize';
-                    showToast('Error generating summary: ' + error.message, 'danger');
-                });
+                    
+                    // Disable button and show loading state
+                    summarizeBtn.disabled = true;
+                    summarizeBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Summarizing...';
+                    
+                    // Use the general summary API for translated text
+                    console.log('Summarizing translated text in language:', contentLanguage);
+                    console.log('Text preview:', currentText.substring(0, 200) + '...');
+                    
+                    fetch('/api/summary', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            text: currentText,
+                            max_length: 200,
+                            language: contentLanguage
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        // Reset button
+                        summarizeBtn.disabled = false;
+                        summarizeBtn.innerHTML = '<i class="bi bi-lightbulb"></i>';
+                        
+                        if (data.success) {
+                            // Format data to match transcript summary format
+                            const formattedData = {
+                                success: true,
+                                summary: data.summary,
+                                language: contentLanguage,
+                                space_id: spaceId,
+                                summary_length: data.summary_length,
+                                from_database: false
+                            };
+                            showSummaryModal(formattedData);
+                            showToast('Summary generated successfully', 'success');
+                        } else {
+                            console.error('Summary failed:', data.error);
+                            showToast('Summary failed: ' + (data.error || 'Unknown error'), 'danger');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        summarizeBtn.disabled = false;
+                        summarizeBtn.innerHTML = '<i class="bi bi-lightbulb"></i>';
+                        showToast('Error generating summary: ' + error.message, 'danger');
+                    });
+                    
+                } else {
+                    // If showing original transcript, use the transcript summary API
+                    const languageSelector = document.getElementById('language-selector');
+                    if (!languageSelector || !languageSelector.value) {
+                        showToast('Please select a transcript first', 'warning');
+                        return;
+                    }
+                    
+                    const transcriptId = languageSelector.value;
+                    
+                    // Disable button and show loading state
+                    summarizeBtn.disabled = true;
+                    summarizeBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Summarizing...';
+                    
+                    // Make API request to get or generate summary
+                    fetch(`/api/transcript/${transcriptId}/summary`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            max_length: 200,  // Default to 200 words
+                            force_regenerate: false
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        // Reset button
+                        summarizeBtn.disabled = false;
+                        summarizeBtn.innerHTML = '<i class="bi bi-lightbulb"></i>';
+                        
+                        if (data.success) {
+                            // Show summary in a modal or alert
+                            showSummaryModal(data);
+                            
+                            // Show appropriate toast message
+                            if (data.from_database) {
+                                showToast('Summary loaded from database', 'success');
+                            } else {
+                                showToast('Summary generated successfully', 'success');
+                            }
+                            
+                        } else {
+                            console.error('Summary failed:', data.error);
+                            showToast('Summary failed: ' + (data.error || 'Unknown error'), 'danger');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        // Reset button
+                        summarizeBtn.disabled = false;
+                        summarizeBtn.innerHTML = '<i class="bi bi-lightbulb"></i>';
+                        showToast('Error generating summary: ' + error.message, 'danger');
+                    });
+                }
             });
         }
         
@@ -1642,6 +1856,19 @@
         // Change slide function
         function changeSlide(direction) {
             console.log('changeSlide called with direction:', direction, 'current slide:', window.currentSlide);
+            
+            // Safety checks
+            if (!window.summaryPoints || !Array.isArray(window.summaryPoints)) {
+                console.error('Cannot change slide: summaryPoints not available');
+                return;
+            }
+            
+            if (typeof window.currentSlide === 'undefined') {
+                console.error('Cannot change slide: currentSlide not defined');
+                window.currentSlide = 0; // Reset to first slide
+                return;
+            }
+            
             const newSlide = window.currentSlide + direction;
             
             if (newSlide >= 0 && newSlide < window.summaryPoints.length) {
@@ -1654,6 +1881,17 @@
         // Go to specific slide
         function goToSlide(slideIndex) {
             console.log('goToSlide called with index:', slideIndex);
+            
+            // Safety checks
+            if (!window.summaryPoints || !Array.isArray(window.summaryPoints)) {
+                console.error('Cannot go to slide: summaryPoints not available');
+                return;
+            }
+            
+            if (slideIndex < 0 || slideIndex >= window.summaryPoints.length) {
+                console.error('Cannot go to slide: index out of bounds', slideIndex);
+                return;
+            }
             
             // Update current slide
             window.currentSlide = slideIndex;
@@ -1683,7 +1921,7 @@
             
             // Update counter
             const counterElement = document.getElementById('slide-counter-text');
-            if (counterElement) {
+            if (counterElement && window.summaryPoints) {
                 counterElement.textContent = `${slideIndex + 1} / ${window.summaryPoints.length}`;
             }
             
@@ -1696,6 +1934,13 @@
             const prevBtn = document.getElementById('prev-slide');
             const nextBtn = document.getElementById('next-slide');
             
+            // Safety checks
+            if (!window.summaryPoints || typeof window.currentSlide === 'undefined') {
+                if (prevBtn) prevBtn.disabled = true;
+                if (nextBtn) nextBtn.disabled = true;
+                return;
+            }
+            
             if (prevBtn) prevBtn.disabled = window.currentSlide === 0;
             if (nextBtn) nextBtn.disabled = window.currentSlide === window.summaryPoints.length - 1;
         }
@@ -1703,6 +1948,12 @@
         // Handle keyboard navigation
         function handleSlideshowKeyboard(event) {
             if (!document.getElementById('summarySlideshow')) return;
+            
+            // Safety check for summaryPoints
+            if (!window.summaryPoints || !Array.isArray(window.summaryPoints)) {
+                console.warn('Keyboard navigation disabled: summaryPoints not available');
+                return;
+            }
             
             switch(event.key) {
                 case 'ArrowLeft':
@@ -1753,15 +2004,30 @@
             const autoplayText = document.querySelector('#autoplay-text');
             const autoplayIcon = document.querySelector('#autoplay-btn i');
             
+            // Safety check - ensure we have the required data
+            if (!window.summaryPoints || !Array.isArray(window.summaryPoints) || window.summaryPoints.length === 0) {
+                console.error('Cannot start autoplay: summaryPoints not available');
+                return;
+            }
+            
             if (window.autoplayInterval) {
                 // Stop autoplay
                 clearInterval(window.autoplayInterval);
                 delete window.autoplayInterval;
                 if (autoplayText) autoplayText.textContent = 'Auto Play';
                 if (autoplayIcon) autoplayIcon.className = 'bi bi-play';
+                console.log('Autoplay stopped');
             } else {
                 // Start autoplay
                 window.autoplayInterval = setInterval(() => {
+                    // Additional safety check inside the interval
+                    if (!window.summaryPoints || typeof window.currentSlide === 'undefined') {
+                        console.error('Autoplay stopped: missing data');
+                        clearInterval(window.autoplayInterval);
+                        delete window.autoplayInterval;
+                        return;
+                    }
+                    
                     if (window.currentSlide < window.summaryPoints.length - 1) {
                         changeSlide(1);
                     } else {
@@ -1772,6 +2038,7 @@
                 
                 if (autoplayText) autoplayText.textContent = 'Stop';
                 if (autoplayIcon) autoplayIcon.className = 'bi bi-pause';
+                console.log('Autoplay started');
             }
         }
         
