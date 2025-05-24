@@ -714,6 +714,115 @@ class Space:
             if cursor:
                 cursor.close()
     
+    def create_clip(self, space_id, clip_title, start_time, end_time, filename, created_by=None):
+        """
+        Create a new clip record.
+        
+        Args:
+            space_id (str): The space ID
+            clip_title (str): Title of the clip
+            start_time (float): Start time in seconds
+            end_time (float): End time in seconds
+            filename (str): Filename of the generated clip
+            created_by (str, optional): User or session identifier
+            
+        Returns:
+            int: The clip ID if successful, None otherwise
+        """
+        cursor = None
+        try:
+            cursor = self.connection.cursor()
+            query = """
+            INSERT INTO space_clips (space_id, clip_title, start_time, end_time, filename, created_by)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """
+            cursor.execute(query, (space_id, clip_title, start_time, end_time, filename, created_by))
+            self.connection.commit()
+            return cursor.lastrowid
+        except Error as e:
+            logger.error(f"Error creating clip: {e}")
+            self.connection.rollback()
+            return None
+        finally:
+            if cursor:
+                cursor.close()
+    
+    def list_clips(self, space_id):
+        """
+        List all clips for a space.
+        
+        Args:
+            space_id (str): The space ID
+            
+        Returns:
+            list: List of clip dictionaries
+        """
+        cursor = None
+        try:
+            cursor = self.connection.cursor(dictionary=True)
+            query = """
+            SELECT id, clip_title, start_time, end_time, duration, filename, created_at, download_count
+            FROM space_clips
+            WHERE space_id = %s
+            ORDER BY created_at DESC
+            """
+            cursor.execute(query, (space_id,))
+            return cursor.fetchall()
+        except Error as e:
+            logger.error(f"Error listing clips: {e}")
+            return []
+        finally:
+            if cursor:
+                cursor.close()
+    
+    def get_clip(self, clip_id):
+        """
+        Get a specific clip by ID.
+        
+        Args:
+            clip_id (int): The clip ID
+            
+        Returns:
+            dict: Clip details or None if not found
+        """
+        cursor = None
+        try:
+            cursor = self.connection.cursor(dictionary=True)
+            query = "SELECT * FROM space_clips WHERE id = %s"
+            cursor.execute(query, (clip_id,))
+            return cursor.fetchone()
+        except Error as e:
+            logger.error(f"Error getting clip: {e}")
+            return None
+        finally:
+            if cursor:
+                cursor.close()
+    
+    def increment_clip_download_count(self, clip_id):
+        """
+        Increment the download count for a clip.
+        
+        Args:
+            clip_id (int): The clip ID
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        cursor = None
+        try:
+            cursor = self.connection.cursor()
+            query = "UPDATE space_clips SET download_count = download_count + 1 WHERE id = %s"
+            cursor.execute(query, (clip_id,))
+            self.connection.commit()
+            return cursor.rowcount > 0
+        except Error as e:
+            logger.error(f"Error incrementing clip download count: {e}")
+            self.connection.rollback()
+            return False
+        finally:
+            if cursor:
+                cursor.close()
+    
     def list_spaces(self, user_id=None, visitor_id=None, status=None, search_term=None, limit=10, offset=0):
         """
         List spaces with optional filtering.

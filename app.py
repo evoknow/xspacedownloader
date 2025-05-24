@@ -387,6 +387,154 @@ def track_play(space_id):
         logger.error(f"Error tracking play: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/spaces/<space_id>/clips', methods=['GET'])
+def get_space_clips(space_id):
+    """Get all clips for a space."""
+    try:
+        space = get_space_component()
+        clips = space.list_clips(space_id)
+        return jsonify({'success': True, 'clips': clips})
+    except Exception as e:
+        logger.error(f"Error getting clips: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/spaces/<space_id>/clips', methods=['POST'])
+def create_space_clip(space_id):
+    """Create a new clip from a space."""
+    try:
+        import subprocess
+        
+        # Get request data
+        data = request.json
+        clip_title = data.get('title', '').strip()
+        start_time = float(data.get('start_time', 0))
+        end_time = float(data.get('end_time', 0))
+        
+        # Validate inputs
+        if not clip_title:
+            return jsonify({'success': False, 'error': 'Clip title is required'}), 400
+        
+        if start_time >= end_time:
+            return jsonify({'success': False, 'error': 'End time must be after start time'}), 400
+        
+        duration = end_time - start_time
+        if duration <= 0:
+            return jsonify({'success': False, 'error': 'Invalid clip duration'}), 400
+            
+        if duration > 300:  # 5 minutes max
+            return jsonify({'success': False, 'error': 'Clip duration cannot exceed 5 minutes'}), 400
+        
+        # Get space component
+        space = get_space_component()
+        
+        # Find the source file
+        download_dir = app.config['DOWNLOAD_DIR']
+        source_file = None
+        for ext in ['mp3', 'm4a', 'wav']:
+            path = os.path.join(download_dir, f"{space_id}.{ext}")
+            if os.path.exists(path):
+                source_file = path
+                break
+                
+        if not source_file:
+            return jsonify({'success': False, 'error': 'Source audio file not found'}), 404
+        
+        # Create clips directory if it doesn't exist
+        clips_dir = os.path.join(download_dir, 'clips')
+        os.makedirs(clips_dir, exist_ok=True)
+        
+        # Generate clip filename
+        import time
+        timestamp = int(time.time())
+        safe_title = re.sub(r'[^\w\s-]', '', clip_title).strip().replace(' ', '_')[:50]
+        clip_filename = f"{space_id}_{safe_title}_{timestamp}.mp3"
+        clip_path = os.path.join(clips_dir, clip_filename)
+        
+        # Use ffmpeg to create the clip
+        try:
+            cmd = [
+                'ffmpeg',
+                '-i', source_file,
+                '-ss', str(start_time),
+                '-t', str(duration),
+                '-acodec', 'libmp3lame',
+                '-ab', '192k',
+                '-y',  # Overwrite output file
+                clip_path
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                logger.error(f"FFmpeg error: {result.stderr}")
+                return jsonify({'success': False, 'error': 'Failed to create clip'}), 500
+                
+        except FileNotFoundError:
+            return jsonify({'success': False, 'error': 'FFmpeg not installed'}), 500
+        except Exception as e:
+            logger.error(f"Error running ffmpeg: {e}")
+            return jsonify({'success': False, 'error': 'Failed to create clip'}), 500
+        
+        # Save clip to database
+        clip_id = space.create_clip(
+            space_id=space_id,
+            clip_title=clip_title,
+            start_time=start_time,
+            end_time=end_time,
+            filename=clip_filename,
+            created_by=request.remote_addr
+        )
+        
+        if not clip_id:
+            # Clean up file if database save failed
+            try:
+                os.remove(clip_path)
+            except:
+                pass
+            return jsonify({'success': False, 'error': 'Failed to save clip'}), 500
+        
+        return jsonify({
+            'success': True,
+            'clip_id': clip_id,
+            'filename': clip_filename
+        })
+        
+    except Exception as e:
+        logger.error(f"Error creating clip: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/clips/<int:clip_id>/download', methods=['GET'])
+def download_clip(clip_id):
+    """Download a clip."""
+    try:
+        space = get_space_component()
+        clip = space.get_clip(clip_id)
+        
+        if not clip:
+            return jsonify({'success': False, 'error': 'Clip not found'}), 404
+        
+        # Build file path
+        download_dir = app.config['DOWNLOAD_DIR']
+        clip_path = os.path.join(download_dir, 'clips', clip['filename'])
+        
+        if not os.path.exists(clip_path):
+            return jsonify({'success': False, 'error': 'Clip file not found'}), 404
+        
+        # Increment download count
+        space.increment_clip_download_count(clip_id)
+        
+        # Return file
+        return send_file(
+            clip_path,
+            mimetype='audio/mpeg',
+            as_attachment=True,
+            download_name=f"{clip['clip_title']}.mp3"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error downloading clip: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 def is_valid_space_url(url):
     """Check if a given URL appears to be a valid X space URL."""
     # This pattern matches URLs like https://x.com/i/spaces/1dRJZEpyjlNGB
@@ -506,13 +654,21 @@ def space_page(space_id):
             # Default to MP3 if no extension is found
             content_type = 'audio/mpeg'
             
+        # Get clips for this space
+        clips = []
+        try:
+            clips = space.list_clips(space_id)
+        except Exception as e:
+            logger.error(f"Error getting clips: {e}")
+            
         return render_template('space.html', 
                                space=space_details, 
                                file_path=file_path, 
                                file_size=file_size, 
                                file_extension=file_extension,
                                content_type=content_type,
-                               job=job)
+                               job=job,
+                               clips=clips)
         
     except Exception as e:
         logger.error(f"Error displaying space page: {e}", exc_info=True)

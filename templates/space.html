@@ -95,6 +95,75 @@
                             </div>
                         </div>
                     </div>
+                    
+                    <!-- Clipping Controls -->
+                    <div class="card mt-3">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0"><i class="bi bi-scissors"></i> Create Audio Clip</h6>
+                            <button class="btn btn-link btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#clipping-controls">
+                                <i class="bi bi-chevron-down"></i>
+                            </button>
+                        </div>
+                        <div class="collapse" id="clipping-controls">
+                            <div class="card-body">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <button id="mark-start" class="btn btn-sm btn-outline-success">
+                                                <i class="bi bi-play-circle"></i> Mark Start
+                                            </button>
+                                            <span id="start-time-display" class="text-muted">--:--</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <button id="mark-end" class="btn btn-sm btn-outline-danger">
+                                                <i class="bi bi-stop-circle"></i> Mark End
+                                            </button>
+                                            <span id="end-time-display" class="text-muted">--:--</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="input-group">
+                                            <input type="text" id="clip-title" class="form-control" placeholder="Enter clip title..." maxlength="255">
+                                            <button id="create-clip" class="btn btn-primary" disabled>
+                                                <i class="bi bi-scissors"></i> Create Clip
+                                            </button>
+                                        </div>
+                                        <small class="text-muted">Duration: <span id="clip-duration">--:--</span></small>
+                                    </div>
+                                </div>
+                                
+                                {% if clips %}
+                                <hr>
+                                <h6>Existing Clips</h6>
+                                <div class="list-group">
+                                    {% for clip in clips %}
+                                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong>{{ clip.clip_title }}</strong>
+                                            <br>
+                                            <small class="text-muted">
+                                                {{ (clip.start_time // 60)|int }}:{{ '%02d'|format((clip.start_time % 60)|int) }} - 
+                                                {{ (clip.end_time // 60)|int }}:{{ '%02d'|format((clip.end_time % 60)|int) }}
+                                                ({{ (clip.duration // 60)|int }}:{{ '%02d'|format((clip.duration % 60)|int) }})
+                                            </small>
+                                        </div>
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-success play-clip" data-clip-id="{{ clip.id }}" data-start="{{ clip.start_time }}" data-end="{{ clip.end_time }}">
+                                                <i class="bi bi-play-circle"></i>
+                                            </button>
+                                            <a href="/api/clips/{{ clip.id }}/download" class="btn btn-outline-primary">
+                                                <i class="bi bi-download"></i>
+                                            </a>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 
                 <!-- Transcript Section -->
@@ -564,6 +633,172 @@
                         }
                     }
                 }
+            });
+            
+            // Clipping functionality
+            setupClippingControls();
+        }
+        
+        // Setup clipping controls
+        function setupClippingControls() {
+            const markStartBtn = document.getElementById('mark-start');
+            const markEndBtn = document.getElementById('mark-end');
+            const createClipBtn = document.getElementById('create-clip');
+            const clipTitleInput = document.getElementById('clip-title');
+            const startTimeDisplay = document.getElementById('start-time-display');
+            const endTimeDisplay = document.getElementById('end-time-display');
+            const clipDurationDisplay = document.getElementById('clip-duration');
+            
+            let clipStartTime = null;
+            let clipEndTime = null;
+            
+            // Format time for display
+            function formatTime(seconds) {
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60);
+                return `${mins}:${secs.toString().padStart(2, '0')}`;
+            }
+            
+            // Update clip duration display
+            function updateClipDuration() {
+                if (clipStartTime !== null && clipEndTime !== null && clipEndTime > clipStartTime) {
+                    const duration = clipEndTime - clipStartTime;
+                    clipDurationDisplay.textContent = formatTime(duration);
+                    
+                    // Enable create button if we have a title
+                    createClipBtn.disabled = !clipTitleInput.value.trim() || duration > 300;
+                    
+                    if (duration > 300) {
+                        clipDurationDisplay.innerHTML = formatTime(duration) + ' <span class="text-danger">(max 5 min)</span>';
+                    }
+                } else {
+                    clipDurationDisplay.textContent = '--:--';
+                    createClipBtn.disabled = true;
+                }
+            }
+            
+            // Mark start time
+            if (markStartBtn) {
+                markStartBtn.addEventListener('click', function() {
+                    if (audioPlayer && !isNaN(audioPlayer.currentTime)) {
+                        clipStartTime = audioPlayer.currentTime;
+                        startTimeDisplay.textContent = formatTime(clipStartTime);
+                        updateClipDuration();
+                    }
+                });
+            }
+            
+            // Mark end time
+            if (markEndBtn) {
+                markEndBtn.addEventListener('click', function() {
+                    if (audioPlayer && !isNaN(audioPlayer.currentTime)) {
+                        clipEndTime = audioPlayer.currentTime;
+                        endTimeDisplay.textContent = formatTime(clipEndTime);
+                        updateClipDuration();
+                    }
+                });
+            }
+            
+            // Update button state when title changes
+            if (clipTitleInput) {
+                clipTitleInput.addEventListener('input', updateClipDuration);
+            }
+            
+            // Create clip
+            if (createClipBtn) {
+                createClipBtn.addEventListener('click', function() {
+                    const title = clipTitleInput.value.trim();
+                    
+                    if (!title) {
+                        showToast('Please enter a clip title', 'warning');
+                        return;
+                    }
+                    
+                    if (clipStartTime === null || clipEndTime === null) {
+                        showToast('Please mark both start and end times', 'warning');
+                        return;
+                    }
+                    
+                    if (clipEndTime <= clipStartTime) {
+                        showToast('End time must be after start time', 'warning');
+                        return;
+                    }
+                    
+                    const duration = clipEndTime - clipStartTime;
+                    if (duration > 300) {
+                        showToast('Clip duration cannot exceed 5 minutes', 'warning');
+                        return;
+                    }
+                    
+                    // Disable button and show loading
+                    createClipBtn.disabled = true;
+                    createClipBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Creating...';
+                    
+                    // Create the clip
+                    fetch(`/api/spaces/${spaceId}/clips`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            title: title,
+                            start_time: clipStartTime,
+                            end_time: clipEndTime
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            showToast('Clip created successfully!', 'success');
+                            
+                            // Reset form
+                            clipTitleInput.value = '';
+                            clipStartTime = null;
+                            clipEndTime = null;
+                            startTimeDisplay.textContent = '--:--';
+                            endTimeDisplay.textContent = '--:--';
+                            clipDurationDisplay.textContent = '--:--';
+                            
+                            // Reload page to show new clip
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 1500);
+                        } else {
+                            showToast('Failed to create clip: ' + (data.error || 'Unknown error'), 'danger');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error creating clip:', error);
+                        showToast('Error creating clip', 'danger');
+                    })
+                    .finally(() => {
+                        createClipBtn.disabled = false;
+                        createClipBtn.innerHTML = '<i class="bi bi-scissors"></i> Create Clip';
+                        updateClipDuration();
+                    });
+                });
+            }
+            
+            // Play clip buttons
+            document.querySelectorAll('.play-clip').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const startTime = parseFloat(this.getAttribute('data-start'));
+                    const endTime = parseFloat(this.getAttribute('data-end'));
+                    
+                    if (audioPlayer) {
+                        // Set current time to start
+                        audioPlayer.currentTime = startTime;
+                        audioPlayer.play();
+                        
+                        // Stop at end time
+                        const checkEnd = setInterval(() => {
+                            if (audioPlayer.currentTime >= endTime || audioPlayer.paused) {
+                                audioPlayer.pause();
+                                clearInterval(checkEnd);
+                            }
+                        }, 100);
+                    }
+                });
             });
         }
         
