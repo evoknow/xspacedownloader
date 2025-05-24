@@ -288,7 +288,7 @@ def all_spaces():
         # Get all completed downloads
         completed_spaces = space.list_download_jobs(status='completed')
         
-        # Check which files actually exist
+        # Check which files actually exist and add metadata
         download_dir = app.config['DOWNLOAD_DIR']
         for job in completed_spaces:
             file_exists = False
@@ -303,6 +303,24 @@ def all_spaces():
             
             if not file_exists:
                 job['file_exists'] = False
+            
+            # Add transcript/translation/summary metadata
+            try:
+                space_details = space.get_space(job['space_id'], include_transcript=True)
+                if space_details:
+                    job['has_transcript'] = bool(space_details.get('transcripts'))
+                    job['transcript_count'] = len(space_details.get('transcripts', []))
+                    transcripts = space_details.get('transcripts', [])
+                    job['has_translation'] = len(transcripts) > 1 if transcripts else False
+                    job['has_summary'] = any(t.get('summary') for t in transcripts)
+                    job['title'] = space_details.get('title', '')
+            except Exception as e:
+                logger.warning(f"Error getting metadata for space {job.get('space_id')}: {e}")
+                job['has_transcript'] = False
+                job['has_translation'] = False
+                job['has_summary'] = False
+                job['transcript_count'] = 0
+                job['title'] = ''
         
         return render_template('all_spaces.html', spaces=completed_spaces)
         
@@ -318,6 +336,34 @@ def index():
     try:
         space = get_space_component()
         completed_spaces = space.list_download_jobs(status='completed', limit=5)
+        
+        # Enhance each space with additional metadata
+        for job in completed_spaces:
+            try:
+                # Get space details including transcripts
+                space_details = space.get_space(job['space_id'], include_transcript=True)
+                if space_details:
+                    # Check for transcripts
+                    job['has_transcript'] = bool(space_details.get('transcripts'))
+                    job['transcript_count'] = len(space_details.get('transcripts', []))
+                    
+                    # Check for translations (transcripts in languages other than original)
+                    transcripts = space_details.get('transcripts', [])
+                    job['has_translation'] = len(transcripts) > 1 if transcripts else False
+                    
+                    # Check for summaries
+                    job['has_summary'] = any(t.get('summary') for t in transcripts)
+                    
+                    # Add title if available
+                    job['title'] = space_details.get('title', '')
+            except Exception as e:
+                logger.warning(f"Error enhancing space {job.get('space_id')}: {e}")
+                job['has_transcript'] = False
+                job['has_translation'] = False
+                job['has_summary'] = False
+                job['transcript_count'] = 0
+                job['title'] = ''
+        
         return render_template('index.html', completed_spaces=completed_spaces)
     except Exception as e:
         logger.error(f"Error loading completed spaces: {e}", exc_info=True)
@@ -329,6 +375,17 @@ def check_url():
     url = request.json.get('url', '')
     valid = is_valid_space_url(url)
     return jsonify({'valid': valid})
+
+@app.route('/api/track_play/<space_id>', methods=['POST'])
+def track_play(space_id):
+    """API endpoint to track when a space is played."""
+    try:
+        space = get_space_component()
+        success = space.increment_play_count(space_id)
+        return jsonify({'success': success})
+    except Exception as e:
+        logger.error(f"Error tracking play: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 def is_valid_space_url(url):
     """Check if a given URL appears to be a valid X space URL."""
@@ -680,13 +737,9 @@ def download_space(space_id):
         # Get space details to use for filename
         space_details = space.get_space(space_id)
         
-        # Count the download
+        # Increment download count
         try:
-            cursor = space.connection.cursor()
-            update_query = "UPDATE spaces SET download_cnt = download_cnt + 1 WHERE space_id = %s"
-            cursor.execute(update_query, (space_id,))
-            space.connection.commit()
-            cursor.close()
+            space.increment_download_count(space_id)
         except Exception as e:
             logger.error(f"Error updating download count: {e}")
         

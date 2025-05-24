@@ -427,6 +427,28 @@
         
         // Audio player setup
         if (audioPlayer) {
+            // Track play count
+            let hasTrackedPlay = false;
+            audioPlayer.addEventListener('play', function() {
+                if (!hasTrackedPlay) {
+                    hasTrackedPlay = true;
+                    // Track the play
+                    fetch(`/api/track_play/${spaceId}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    }).catch(error => {
+                        console.error('Error tracking play:', error);
+                    });
+                }
+            });
+            
+            // Reset tracking flag when audio ends or is paused and rewound
+            audioPlayer.addEventListener('ended', function() {
+                hasTrackedPlay = false;
+            });
+            
             // Playback speed control
             const playbackSpeed = document.getElementById('playback-speed');
             playbackSpeed.addEventListener('change', function() {

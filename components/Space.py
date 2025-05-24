@@ -664,6 +664,56 @@ class Space:
             if cursor:
                 cursor.close()
     
+    def increment_play_count(self, space_id):
+        """
+        Increment the play count for a space.
+        
+        Args:
+            space_id (str): The space ID
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        cursor = None
+        try:
+            cursor = self.connection.cursor()
+            query = "UPDATE spaces SET play_count = play_count + 1 WHERE space_id = %s"
+            cursor.execute(query, (space_id,))
+            self.connection.commit()
+            return cursor.rowcount > 0
+        except Error as e:
+            logger.error(f"Error incrementing play count: {e}")
+            self.connection.rollback()
+            return False
+        finally:
+            if cursor:
+                cursor.close()
+    
+    def increment_download_count(self, space_id):
+        """
+        Increment the download count for a space.
+        
+        Args:
+            space_id (str): The space ID
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        cursor = None
+        try:
+            cursor = self.connection.cursor()
+            query = "UPDATE spaces SET download_count = download_count + 1 WHERE space_id = %s"
+            cursor.execute(query, (space_id,))
+            self.connection.commit()
+            return cursor.rowcount > 0
+        except Error as e:
+            logger.error(f"Error incrementing download count: {e}")
+            self.connection.rollback()
+            return False
+        finally:
+            if cursor:
+                cursor.close()
+    
     def list_spaces(self, user_id=None, visitor_id=None, status=None, search_term=None, limit=10, offset=0):
         """
         List spaces with optional filtering.
@@ -1263,7 +1313,18 @@ class Space:
                 return []
             
             # Build and execute main query
-            query = "SELECT * FROM space_download_scheduler WHERE 1=1"
+            # Join with spaces table to get play_count and download_count
+            if status == 'completed':
+                query = """
+                    SELECT sds.*, s.play_count, s.download_count, s.title,
+                           (COALESCE(s.play_count, 0) * 1.5 + COALESCE(s.download_count, 0)) as popularity_score
+                    FROM space_download_scheduler sds
+                    LEFT JOIN spaces s ON sds.space_id = s.space_id
+                    WHERE 1=1
+                """
+            else:
+                query = "SELECT * FROM space_download_scheduler WHERE 1=1"
+            
             params = []
             
             if user_id is not None:
@@ -1271,10 +1332,17 @@ class Space:
                 params.append(user_id)
                 
             if status is not None:
-                query += " AND status = %s"
+                if status == 'completed':
+                    query += " AND sds.status = %s"
+                else:
+                    query += " AND status = %s"
                 params.append(status)
                 
-            query += " ORDER BY id DESC LIMIT %s OFFSET %s"  # Sort by ID to get newest first
+            # Sort by popularity for completed spaces, otherwise by ID
+            if status == 'completed':
+                query += " ORDER BY popularity_score DESC, sds.id DESC LIMIT %s OFFSET %s"
+            else:
+                query += " ORDER BY id DESC LIMIT %s OFFSET %s"
             params.extend([limit, offset])
             
             logger.info(f"Executing query: {query} with params: {params}")
