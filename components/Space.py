@@ -823,6 +823,47 @@ class Space:
             if cursor:
                 cursor.close()
     
+    def delete_clip(self, clip_id):
+        """
+        Delete a clip and its associated file.
+        
+        Args:
+            clip_id (int): The clip ID
+            
+        Returns:
+            dict: Contains success status and deleted filename
+        """
+        cursor = None
+        try:
+            cursor = self.connection.cursor(dictionary=True)
+            
+            # First get the clip info to delete the file
+            query = "SELECT filename, space_id FROM space_clips WHERE id = %s"
+            cursor.execute(query, (clip_id,))
+            clip = cursor.fetchone()
+            
+            if not clip:
+                return {'success': False, 'error': 'Clip not found'}
+            
+            # Delete from database
+            delete_query = "DELETE FROM space_clips WHERE id = %s"
+            cursor.execute(delete_query, (clip_id,))
+            self.connection.commit()
+            
+            return {
+                'success': True,
+                'filename': clip['filename'],
+                'space_id': clip['space_id']
+            }
+            
+        except Error as e:
+            logger.error(f"Error deleting clip: {e}")
+            self.connection.rollback()
+            return {'success': False, 'error': str(e)}
+        finally:
+            if cursor:
+                cursor.close()
+    
     def list_spaces(self, user_id=None, visitor_id=None, status=None, search_term=None, limit=10, offset=0):
         """
         List spaces with optional filtering.

@@ -535,6 +535,40 @@ def download_clip(clip_id):
         logger.error(f"Error downloading clip: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/clips/<int:clip_id>', methods=['DELETE'])
+def delete_clip(clip_id):
+    """Delete a clip."""
+    try:
+        space = get_space_component()
+        
+        # Delete from database (returns clip info)
+        result = space.delete_clip(clip_id)
+        
+        if not result['success']:
+            return jsonify(result), 404
+        
+        # Delete the physical file
+        if result.get('filename'):
+            download_dir = app.config['DOWNLOAD_DIR']
+            clip_path = os.path.join(download_dir, 'clips', result['filename'])
+            
+            try:
+                if os.path.exists(clip_path):
+                    os.remove(clip_path)
+                    logger.info(f"Deleted clip file: {clip_path}")
+            except Exception as e:
+                logger.error(f"Error deleting clip file: {e}")
+                # Continue even if file deletion fails
+        
+        return jsonify({
+            'success': True,
+            'message': 'Clip deleted successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error deleting clip: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 def is_valid_space_url(url):
     """Check if a given URL appears to be a valid X space URL."""
     # This pattern matches URLs like https://x.com/i/spaces/1dRJZEpyjlNGB
