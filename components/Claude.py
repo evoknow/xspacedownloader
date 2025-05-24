@@ -176,9 +176,9 @@ class Claude(AIProvider):
         # Determine output language
         output_language = lang_map.get(language.lower() if language else 'en', language or 'English')
         
-        system_prompt = f"You are a professional content summarizer. Provide clear, concise summaries that capture the essential information and main points. Focus on accuracy and clarity. Always provide the summary in {output_language}."
+        system_prompt = "You are a professional content summarizer. Provide clear, concise summaries that capture the essential information and main points. Focus on accuracy and clarity. Maintain the same language as the input content."
         
-        user_prompt = f"""Summarize the following content {length_instruction} in {output_language}. Focus on the key points and main ideas:
+        user_prompt = f"""Summarize the following content {length_instruction}. Focus on the key points and main ideas:
 
 {content}"""
         

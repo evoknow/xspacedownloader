@@ -1308,7 +1308,7 @@ def api_summary():
         data = request.json
         text = data.get('text')
         max_length = data.get('max_length')  # Optional parameter
-        language = data.get('language')  # Optional language parameter
+        language = data.get('language')  # Optional language parameter (now ignored)
         
         # Validate required fields
         if not text:
@@ -1326,14 +1326,15 @@ def api_summary():
             return jsonify({'error': 'Summary generation failed', 'details': result}), 400
             
         # Return summary
-        return jsonify({
+        response_data = {
             'success': True,
             'summary': result,
             'original_length': len(text),
             'summary_length': len(result),
             'max_length': max_length,
-            'language': language or 'en'
-        })
+            'language': 'auto'  # AI detects language from input
+        }
+        return jsonify(response_data)
         
     except Exception as e:
         logger.error(f"Error generating summary: {e}", exc_info=True)

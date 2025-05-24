@@ -59,8 +59,12 @@ class OpenAI(AIProvider):
                 "presence_penalty": presence_penalty
             }
             
-            logger.info(f"Making request to OpenAI API with model {self.model}")
-            response = self.session.post(self.endpoint, json=payload, timeout=60)
+            # Calculate timeout based on expected response size
+            # Base timeout of 120 seconds, plus additional time for larger responses
+            timeout = max(120, 120 + (max_tokens / 100))  # Add 1 second per 100 tokens
+            
+            logger.info(f"Making request to OpenAI API with model {self.model}, timeout={timeout}s")
+            response = self.session.post(self.endpoint, json=payload, timeout=timeout)
             
             if response.status_code != 200:
                 logger.error(f"OpenAI API error: {response.status_code} - {response.text}")
@@ -449,8 +453,8 @@ If you use ANY English words, you have FAILED."""
             'ko': 'Korean', 'nl': 'Dutch', 'sv': 'Swedish', 'tr': 'Turkish'
         }
         
-        # Determine output language
-        output_language = lang_map.get(language.lower() if language else 'en', language or 'English')
+        # Language parameter is now ignored - AI will use the language of the input text
+        # Keeping the parameter for backward compatibility
         
         # Determine max_tokens based on max_length
         if max_length:
@@ -460,14 +464,14 @@ If you use ANY English words, you have FAILED."""
             max_tokens = 500
             length_instruction = "concisely"
         
-        prompt = f"""Summarize the following content {length_instruction} in {output_language}. Focus on the key points and main ideas:
+        prompt = f"""Summarize the following content {length_instruction}. Focus on the key points and main ideas:
 
 {content}"""
         
         messages = [
             {
                 "role": "system",
-                "content": f"You are a professional content summarizer. Provide clear, concise summaries that capture the essential information and main points. Use bullet points or paragraphs as appropriate. Always provide the summary in {output_language}."
+                "content": "You are a professional content summarizer. Provide clear, concise summaries that capture the essential information and main points. Use bullet points or paragraphs as appropriate. Maintain the same language as the input content."
             },
             {
                 "role": "user",

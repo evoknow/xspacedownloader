@@ -230,7 +230,18 @@ class Translate:
             return False, {"error": "No content provided for summarization"}
         
         try:
-            return self.ai.summary(content, max_length, language)
+            # Pass language parameter if AI provider supports it
+            # Check if the AI provider's summary method accepts language parameter
+            import inspect
+            sig = inspect.signature(self.ai.summary)
+            params = sig.parameters
+            
+            if 'language' in params:
+                # AI provider supports language parameter
+                return self.ai.summary(content, max_length, language)
+            else:
+                # Fallback to basic summary without language
+                return self.ai.summary(content, max_length)
         except Exception as e:
             logger.error(f"Summarization error: {e}")
             return False, {"error": f"Summarization error: {str(e)}"}

@@ -1,0 +1,246 @@
+-- MySQL Schema for xspacedownloader database
+-- Generated with Python on 2025-05-24 10:38:53
+-- This file contains the database schema (without data)
+
+-- Create the database if it doesn't exist
+CREATE DATABASE IF NOT EXISTS `xspacedownloader` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE `xspacedownloader`;
+
+-- Table structure for table `api_keys`
+DROP TABLE IF EXISTS `api_keys`;
+CREATE TABLE `api_keys` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL COMMENT 'User ID that owns this API key',
+  `key` varchar(255) NOT NULL COMMENT 'The API key string',
+  `name` varchar(255) NOT NULL COMMENT 'Descriptive name for this API key',
+  `permissions` json DEFAULT NULL COMMENT 'List of permissions granted to this key',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'When the key was created',
+  `last_used_at` timestamp NULL DEFAULT NULL COMMENT 'When the key was last used',
+  `expires_at` timestamp NULL DEFAULT NULL COMMENT 'When the key expires (NULL = no expiration)',
+  `is_active` tinyint(1) NOT NULL DEFAULT '1' COMMENT 'Whether the key is active',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `key` (`key`),
+  KEY `idx_user_id` (`user_id`),
+  CONSTRAINT `api_keys_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='API keys for external application access';
+
+-- Table structure for table `email_config`
+DROP TABLE IF EXISTS `email_config`;
+CREATE TABLE `email_config` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `provider` varchar(50) NOT NULL COMMENT 'Provider type (sendgrid, mailgun, default-smtp)',
+  `api_key` varchar(255) DEFAULT NULL COMMENT 'API key for the email service provider',
+  `from_email` varchar(100) DEFAULT NULL COMMENT 'From email address',
+  `from_name` varchar(100) DEFAULT NULL COMMENT 'From name to display',
+  `server` varchar(100) DEFAULT NULL COMMENT 'SMTP server address',
+  `port` int DEFAULT NULL COMMENT 'SMTP server port',
+  `username` varchar(100) DEFAULT NULL COMMENT 'SMTP username',
+  `password` varchar(255) DEFAULT NULL COMMENT 'SMTP password',
+  `use_tls` tinyint(1) DEFAULT '1' COMMENT 'Whether to use TLS for SMTP',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `status` int DEFAULT '0' COMMENT 'Status: 0 - disabled, 1 - enabled',
+  `templates` json DEFAULT NULL COMMENT 'JSON field for email templates',
+  `testers` json DEFAULT NULL COMMENT 'JSON field for email testers',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Table structure for table `space_clips`
+DROP TABLE IF EXISTS `space_clips`;
+CREATE TABLE `space_clips` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `space_id` varchar(255) NOT NULL,
+  `clip_title` varchar(255) NOT NULL,
+  `start_time` float NOT NULL,
+  `end_time` float NOT NULL,
+  `duration` float GENERATED ALWAYS AS ((`end_time` - `start_time`)) STORED,
+  `filename` varchar(255) NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `created_by` varchar(100) DEFAULT NULL,
+  `download_count` int DEFAULT '0',
+  PRIMARY KEY (`id`),
+  KEY `idx_space_id` (`space_id`),
+  KEY `idx_created_at` (`created_at`),
+  CONSTRAINT `space_clips_ibfk_1` FOREIGN KEY (`space_id`) REFERENCES `spaces` (`space_id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Table structure for table `space_download_scheduler`
+DROP TABLE IF EXISTS `space_download_scheduler`;
+CREATE TABLE `space_download_scheduler` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `space_id` varchar(255) NOT NULL COMMENT 'Space ID extracted from the URL',
+  `user_id` int NOT NULL DEFAULT '0' COMMENT 'User ID who initiated the download',
+  `start_time` datetime NOT NULL COMMENT 'Time when download started',
+  `end_time` datetime DEFAULT NULL COMMENT 'Time when download completed (NULL if in progress)',
+  `file_type` varchar(10) NOT NULL DEFAULT 'mp3' COMMENT 'Output file type (mp3, wav, etc)',
+  `progress_in_size` int NOT NULL DEFAULT '0' COMMENT 'Download progress in MB',
+  `progress_in_percent` tinyint NOT NULL DEFAULT '0' COMMENT 'Download progress as percentage (0-100)',
+  `process_id` int DEFAULT NULL COMMENT 'Process ID of the forked process',
+  `status` char(20) NOT NULL DEFAULT 'pending',
+  `error_message` text COMMENT 'Error message if download failed',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_space_id` (`space_id`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB AUTO_INCREMENT=137 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Table to track Space audio download progress';
+
+-- Table structure for table `space_metadata`
+DROP TABLE IF EXISTS `space_metadata`;
+CREATE TABLE `space_metadata` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `space_id` varchar(255) NOT NULL,
+  `title` varchar(512) DEFAULT NULL,
+  `host` varchar(255) DEFAULT NULL,
+  `co_hosts` text,
+  `speakers` text,
+  `speaker_images` text,
+  `scheduled_start` varchar(255) DEFAULT NULL,
+  `duration` int DEFAULT NULL,
+  `fetched_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `space_id` (`space_id`),
+  KEY `idx_metadata_space_id` (`space_id`),
+  CONSTRAINT `space_metadata_ibfk_1` FOREIGN KEY (`space_id`) REFERENCES `spaces` (`space_id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=21 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Table structure for table `space_notes`
+DROP TABLE IF EXISTS `space_notes`;
+CREATE TABLE `space_notes` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `space_id` varchar(255) NOT NULL,
+  `notes` text,
+  `user_id` int NOT NULL DEFAULT '0',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_space_user` (`space_id`,`user_id`),
+  KEY `idx_notes_space_id` (`space_id`),
+  KEY `idx_notes_user_id` (`user_id`),
+  CONSTRAINT `space_notes_ibfk_1` FOREIGN KEY (`space_id`) REFERENCES `spaces` (`space_id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=92 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Table structure for table `space_tags`
+DROP TABLE IF EXISTS `space_tags`;
+CREATE TABLE `space_tags` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `space_id` varchar(255) NOT NULL,
+  `tag_id` int NOT NULL,
+  `user_id` int NOT NULL DEFAULT '0',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_space_tag_user` (`space_id`,`tag_id`,`user_id`),
+  KEY `idx_space_tags_space_id` (`space_id`),
+  KEY `idx_space_tags_tag_id` (`tag_id`),
+  KEY `idx_space_tags_user_id` (`user_id`),
+  CONSTRAINT `space_tags_ibfk_1` FOREIGN KEY (`space_id`) REFERENCES `spaces` (`space_id`) ON DELETE CASCADE,
+  CONSTRAINT `space_tags_ibfk_2` FOREIGN KEY (`tag_id`) REFERENCES `tags` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=637 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Table structure for table `space_transcripts`
+DROP TABLE IF EXISTS `space_transcripts`;
+CREATE TABLE `space_transcripts` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `space_id` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Space ID that matches spaces.space_id',
+  `language` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'en-US' COMMENT 'Language code for transcript (e.g. en-US, bn-BD)',
+  `transcript` text COLLATE utf8mb4_unicode_ci COMMENT 'Full text transcript of the space audio',
+  `summary` text COLLATE utf8mb4_unicode_ci,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `space_id_language` (`space_id`,`language`)
+) ENGINE=InnoDB AUTO_INCREMENT=35 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Table structure for table `spaces`
+DROP TABLE IF EXISTS `spaces`;
+CREATE TABLE `spaces` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `space_id` varchar(255) NOT NULL,
+  `space_url` varchar(512) NOT NULL,
+  `filename` varchar(255) NOT NULL,
+  `format` varchar(10) NOT NULL,
+  `notes` text,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `downloaded_at` timestamp NULL DEFAULT NULL,
+  `download_cnt` int DEFAULT '0',
+  `playback_cnt` int DEFAULT '0',
+  `user_id` int DEFAULT '0',
+  `browser_id` varchar(32) DEFAULT NULL,
+  `status` varchar(20) DEFAULT 'completed',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `space_id` (`space_id`),
+  KEY `idx_spaces_space_id` (`space_id`),
+  KEY `idx_spaces_filename` (`filename`),
+  KEY `idx_spaces_downloaded_at` (`downloaded_at`),
+  KEY `idx_spaces_user_id` (`user_id`),
+  KEY `idx_spaces_browser_id` (`browser_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=371 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Table structure for table `tags`
+DROP TABLE IF EXISTS `tags`;
+CREATE TABLE `tags` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `name` (`name`),
+  KEY `idx_tags_name` (`name`)
+) ENGINE=InnoDB AUTO_INCREMENT=593 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Table structure for table `users`
+DROP TABLE IF EXISTS `users`;
+CREATE TABLE `users` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `email` varchar(200) NOT NULL,
+  `password` varchar(255) NOT NULL,
+  `status` int DEFAULT '0',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `email` (`email`),
+  KEY `idx_users_email` (`email`),
+  KEY `idx_users_status` (`status`)
+) ENGINE=InnoDB AUTO_INCREMENT=929 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Table structure for table `verification_tokens`
+DROP TABLE IF EXISTS `verification_tokens`;
+CREATE TABLE `verification_tokens` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `token` varchar(255) NOT NULL,
+  `expiry` double NOT NULL,
+  `token_type` varchar(50) DEFAULT 'verification',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `token` (`token`),
+  KEY `idx_tokens_user_id` (`user_id`),
+  KEY `idx_tokens_token` (`token`),
+  KEY `idx_tokens_type` (`token_type`),
+  CONSTRAINT `verification_tokens_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Add default admin user if it doesn't exist
+INSERT INTO `users` (`email`, `password`, `status`)
+SELECT 'admin@xspacedownload.com', '$2b$10$VGm5DFCi/zXlCH7qeP5m0.WGM/WHxfHEA8lBZ1DC3HqZUi0L.oEUG', 'active'
+WHERE NOT EXISTS (SELECT 1 FROM `users` WHERE `email` = 'admin@xspacedownload.com');
+
+-- Insert a default admin API key
+INSERT INTO `api_keys` (`user_id`, `key`, `name`, `permissions`, `created_at`, `expires_at`, `is_active`)
+SELECT
+    (SELECT `id` FROM `users` WHERE `email` = 'admin@xspacedownload.com' LIMIT 1),
+    'DEV_API_KEY_DO_NOT_USE_IN_PRODUCTION',
+    'Default Admin API Key',
+    JSON_ARRAY(
+        'view_users', 'manage_users',
+        'view_spaces', 'create_spaces', 'edit_spaces', 'delete_spaces', 'view_all_spaces', 'edit_all_spaces', 'delete_all_spaces',
+        'download_spaces', 'download_all_spaces', 'view_downloads', 'manage_downloads', 'view_all_downloads', 'manage_all_downloads',
+        'view_tags', 'manage_tags',
+        'manage_api_keys',
+        'view_stats'
+    ),
+    NOW(),
+    DATE_ADD(NOW(), INTERVAL 1 YEAR),
+    1
+WHERE EXISTS (SELECT 1 FROM `users` WHERE `email` = 'admin@xspacedownload.com')
+AND NOT EXISTS (SELECT 1 FROM `api_keys` WHERE `name` = 'Default Admin API Key');
