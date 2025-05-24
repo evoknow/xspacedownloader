@@ -1,7 +1,7 @@
 -- Create space_clips table for storing audio clips
 CREATE TABLE IF NOT EXISTS space_clips (
     id INT PRIMARY KEY AUTO_INCREMENT,
-    space_id VARCHAR(50) NOT NULL,
+    space_id VARCHAR(255) NOT NULL,  -- Must match spaces.space_id type
     clip_title VARCHAR(255) NOT NULL,
     start_time FLOAT NOT NULL,
     end_time FLOAT NOT NULL,
