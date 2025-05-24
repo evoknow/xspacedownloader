@@ -69,10 +69,10 @@
                             </a>
                             <div class="d-flex align-items-center gap-2">
                                 <small class="text-muted">{{ job.updated_at }}</small>
-                                {% if job.play_count or job.download_count %}
+                                {% if job.playback_cnt or job.download_cnt %}
                                 <small class="text-muted">
-                                    {% if job.play_count %}<i class="bi bi-play-circle" title="Plays"></i> {{ job.play_count }}{% endif %}
-                                    {% if job.download_count %}<i class="bi bi-download" title="Downloads"></i> {{ job.download_count }}{% endif %}
+                                    {% if job.playback_cnt %}<i class="bi bi-play-circle" title="Plays"></i> {{ job.playback_cnt }}{% endif %}
+                                    {% if job.download_cnt %}<i class="bi bi-download" title="Downloads"></i> {{ job.download_cnt }}{% endif %}
                                 </small>
                                 {% endif %}
                                 <div class="d-flex gap-1">

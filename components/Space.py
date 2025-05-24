@@ -677,7 +677,7 @@ class Space:
         cursor = None
         try:
             cursor = self.connection.cursor()
-            query = "UPDATE spaces SET play_count = play_count + 1 WHERE space_id = %s"
+            query = "UPDATE spaces SET playback_cnt = playback_cnt + 1 WHERE space_id = %s"
             cursor.execute(query, (space_id,))
             self.connection.commit()
             return cursor.rowcount > 0
@@ -702,7 +702,7 @@ class Space:
         cursor = None
         try:
             cursor = self.connection.cursor()
-            query = "UPDATE spaces SET download_count = download_count + 1 WHERE space_id = %s"
+            query = "UPDATE spaces SET download_cnt = download_cnt + 1 WHERE space_id = %s"
             cursor.execute(query, (space_id,))
             self.connection.commit()
             return cursor.rowcount > 0
@@ -1422,11 +1422,11 @@ class Space:
                 return []
             
             # Build and execute main query
-            # Join with spaces table to get play_count and download_count
+            # Join with spaces table to get playback_cnt and download_cnt
             if status == 'completed':
                 query = """
-                    SELECT sds.*, s.play_count, s.download_count, s.title,
-                           (COALESCE(s.play_count, 0) * 1.5 + COALESCE(s.download_count, 0)) as popularity_score
+                    SELECT sds.*, s.playback_cnt, s.download_cnt, s.title,
+                           (COALESCE(s.playback_cnt, 0) * 1.5 + COALESCE(s.download_cnt, 0)) as popularity_score
                     FROM space_download_scheduler sds
                     LEFT JOIN spaces s ON sds.space_id = s.space_id
                     WHERE 1=1

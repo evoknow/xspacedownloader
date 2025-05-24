@@ -41,14 +41,14 @@
                                         <small>{{ space.file_size|filesizeformat }}</small>
                                         {% endif %}
                                         <div class="text-nowrap">
-                                            {% if space.play_count %}
+                                            {% if space.playback_cnt %}
                                             <small class="text-muted" data-bs-toggle="tooltip" data-bs-placement="top" title="Plays">
-                                                <i class="bi bi-play-circle-fill"></i> {{ space.play_count }}
+                                                <i class="bi bi-play-circle-fill"></i> {{ space.playback_cnt }}
                                             </small>
                                             {% endif %}
-                                            {% if space.download_count %}
+                                            {% if space.download_cnt %}
                                             <small class="text-muted ms-2" data-bs-toggle="tooltip" data-bs-placement="top" title="Downloads">
-                                                <i class="bi bi-download"></i> {{ space.download_count }}
+                                                <i class="bi bi-download"></i> {{ space.download_cnt }}
                                             </small>
                                             {% endif %}
                                         </div>
