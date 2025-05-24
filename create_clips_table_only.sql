@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS space_clips (
     INDEX idx_space_id (space_id),
     INDEX idx_created_at (created_at),
     FOREIGN KEY (space_id) REFERENCES spaces(space_id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Verify it was created
 DESCRIBE space_clips;
