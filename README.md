@@ -17,7 +17,7 @@ Handles downloading X space audio using yt-dlp with progress tracking.
 Handles transcription of audio files using Whisper with progress tracking.
 
 ### Translate Component
-Handles translation of text between languages using LibreTranslate API.
+Handles translation of text between languages using AI providers (OpenAI or Claude).
 
 ## Installation
 
@@ -55,39 +55,34 @@ Create a `db_config.json` file with your MySQL connection details:
 
 ## Translation Configuration
 
-Configure LibreTranslate API settings in `mainconfig.json`:
+Translation uses the same AI provider configuration as transcription. Configure in `mainconfig.json`:
 
 ```json
 {
     "translate": {
-        "api_url": "https://libretranslate.com/translate",
-        "api_key": "your-api-key-from-libretranslate",
-        "self_hosted": false,
-        "self_hosted_url": "http://localhost:5000/translate"
+        "enable": true,
+        "provider": "openai",  // or "claude"
+        "openai": {
+            "api_key": "your-openai-api-key",
+            "model": "gpt-4o"
+        },
+        "claude": {
+            "api_key": "your-anthropic-api-key",
+            "model": "claude-3-sonnet-20240229"
+        }
     }
 }
 ```
 
-You have two options for using the translation functionality:
+You can use either:
 
-1. **Use LibreTranslate's hosted service**:
-   - Get an API key from [LibreTranslate Portal](https://portal.libretranslate.com/)
-   - Add the API key to the `api_key` field in the config
+1. **OpenAI**:
+   - Get an API key from [OpenAI Platform](https://platform.openai.com/)
+   - Add the API key to the `openai.api_key` field
 
-2. **Set up a self-hosted LibreTranslate instance**:
-   - Run the provided setup script to install LibreTranslate:
-     ```bash
-     ./setup_libretranslate_no_docker.sh
-     ```
-   - Start the LibreTranslate server:
-     ```bash
-     cd libretranslate
-     source venv/bin/activate
-     libretranslate --host localhost --port 5000
-     ```
-   - Set `self_hosted` to `true` in mainconfig.json (default setting)
-   - Configure the `self_hosted_url` to point to your local instance (default: http://localhost:5000/translate)
-   - No API key is required for self-hosted mode
+2. **Claude**:
+   - Get an API key from [Anthropic Console](https://console.anthropic.com/)
+   - Add the API key to the `claude.api_key` field
 
 ## Usage
 

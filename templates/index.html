@@ -31,21 +31,6 @@
     </div>
 </div>
 
-<div class="row mt-4">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header">
-                <h4>Download Queue Status</h4>
-            </div>
-            <div class="card-body">
-                <div id="queue-status">
-                    <p>Loading queue status...</p>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
 {% if completed_spaces %}
 <div class="row mt-4">
     <div class="col-md-12">
@@ -114,31 +99,6 @@
 
 {% block scripts %}
 <script>
-    // Function to update the queue status
-    function updateQueueStatus() {
-        fetch('/api/queue')
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    document.getElementById('queue-status').innerHTML = 
-                        `<div class="alert alert-danger">Error loading queue status: ${data.error}</div>`;
-                    return;
-                }
-                
-                const statusHtml = `
-                    <p>Currently <strong>${data.active}</strong> active downloads out of maximum ${data.max_concurrent}.</p>
-                    <p>There are <strong>${data.pending}</strong> pending downloads in the queue.</p>
-                `;
-                
-                document.getElementById('queue-status').innerHTML = statusHtml;
-            })
-            .catch(error => {
-                console.error('Error fetching queue status:', error);
-                document.getElementById('queue-status').innerHTML = 
-                    `<div class="alert alert-danger">Error loading queue status. Please try again later.</div>`;
-            });
-    }
-    
     // Function to convert datetime to relative time
     function timeAgo(datetime) {
         const date = new Date(datetime);
@@ -179,13 +139,8 @@
         });
     }
     
-    // Update status when page loads
+    // Update when page loads
     document.addEventListener('DOMContentLoaded', () => {
-        updateQueueStatus();
-        
-        // Update every 30 seconds
-        setInterval(updateQueueStatus, 30000);
-        
         // Update relative times
         updateRelativeTimes();
         

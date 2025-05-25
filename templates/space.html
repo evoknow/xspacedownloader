@@ -40,6 +40,69 @@
                     </div>
                 </div>
                 
+                {# Metadata section #}
+                <div class="metadata-section mb-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <button id="fetch-metadata-btn" class="btn {% if space.metadata %}btn-success{% else %}btn-info{% endif %} btn-sm" {% if space.metadata %}disabled{% endif %} data-bs-toggle="tooltip" data-bs-placement="top" title="{% if space.metadata %}Metadata already fetched{% else %}Fetch metadata from spacesdashboard.com{% endif %}">
+                            <i class="bi bi-{% if space.metadata %}check-circle{% else %}cloud-download{% endif %}"></i> {% if space.metadata %}Metadata Fetched{% else %}Fetch Metadata{% endif %}
+                        </button>
+                    </div>
+                    
+                    {# Display metadata if available #}
+                    {% if space.metadata %}
+                    <div class="metadata-display mt-3">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title">Space Metadata</h6>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        {% if space.metadata.scraped_title %}
+                                        <p class="mb-1"><strong>Title:</strong> {{ space.metadata.scraped_title }}</p>
+                                        {% endif %}
+                                        {% if space.metadata.host %}
+                                        <p class="mb-1"><strong>Host:</strong> {{ space.metadata.host }} {% if space.metadata.host_handle %}({{ space.metadata.host_handle }}){% endif %}</p>
+                                        {% endif %}
+                                        {% if space.metadata.participants_count %}
+                                        <p class="mb-1"><strong>Participants:</strong> {{ space.metadata.participants_count }}</p>
+                                        {% endif %}
+                                        {% if space.metadata.status %}
+                                        <p class="mb-1"><strong>Status:</strong> {{ space.metadata.status|title }}</p>
+                                        {% endif %}
+                                    </div>
+                                    <div class="col-md-6">
+                                        {% if space.metadata.speakers %}
+                                        <p class="mb-1"><strong>Speakers:</strong> {{ space.metadata.speakers|join(', ') }}</p>
+                                        {% endif %}
+                                        {% if space.metadata.tags %}
+                                        <p class="mb-1"><strong>Tags:</strong> 
+                                            {% for tag in space.metadata.tags %}
+                                            <span class="badge bg-secondary">#{{ tag }}</span>
+                                            {% endfor %}
+                                        </p>
+                                        {% endif %}
+                                        {% if space.metadata.duration %}
+                                        <p class="mb-1"><strong>Duration:</strong> {{ space.metadata.duration }}</p>
+                                        {% endif %}
+                                        {% if space.metadata.is_recorded %}
+                                        <p class="mb-1"><strong>Recording:</strong> <span class="text-success">Available</span></p>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                {% if space.metadata.description %}
+                                <div class="mt-2">
+                                    <strong>Description:</strong>
+                                    <p class="mb-0">{{ space.metadata.description }}</p>
+                                </div>
+                                {% endif %}
+                                <div class="mt-2">
+                                    <small class="text-muted">Scraped at: {{ space.metadata.scraped_at }}</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                
                 {# Check if file exists, regardless of status #}
                 {% if file_path is defined and file_path %}
                 <div class="audio-player mb-4">
@@ -2712,6 +2775,52 @@
                         e.preventDefault();
                         cancelEdit();
                     }
+                });
+            });
+        }
+        
+        // Fetch metadata functionality
+        const fetchMetadataBtn = document.getElementById('fetch-metadata-btn');
+        if (fetchMetadataBtn && !fetchMetadataBtn.disabled) {
+            fetchMetadataBtn.addEventListener('click', function() {
+                // Check if already disabled (metadata exists)
+                if (fetchMetadataBtn.disabled) {
+                    return;
+                }
+                
+                // Disable button and show loading state
+                fetchMetadataBtn.disabled = true;
+                const originalHTML = fetchMetadataBtn.innerHTML;
+                fetchMetadataBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Fetching...';
+                
+                // Make API request to fetch metadata
+                fetch(`/api/space/${spaceId}/metadata`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showToast('Metadata fetched successfully', 'success');
+                        // Reload page to show the new metadata
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1000);
+                    } else {
+                        showToast('Failed to fetch metadata: ' + (data.error || 'Unknown error'), 'danger');
+                        // Reset button
+                        fetchMetadataBtn.disabled = false;
+                        fetchMetadataBtn.innerHTML = originalHTML;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching metadata:', error);
+                    showToast('Error fetching metadata', 'danger');
+                    // Reset button
+                    fetchMetadataBtn.disabled = false;
+                    fetchMetadataBtn.innerHTML = originalHTML;
                 });
             });
         }

@@ -165,6 +165,11 @@ class Space:
                             if content_result:
                                 transcript['content'] = content_result['transcript']
             
+            # Get metadata if available
+            metadata = self.get_metadata(space_id)
+            if metadata:
+                space['metadata'] = metadata
+            
             return space
             
         except Exception as e:
@@ -1590,3 +1595,178 @@ class Space:
             except Exception as close_err:
                 logger.error(f"Error closing cursor: {close_err}")
                 # Continue execution
+    
+    def save_metadata(self, space_id, metadata):
+        """
+        Save scraped metadata to the database.
+        
+        Args:
+            space_id (str): The space ID
+            metadata (dict): Metadata dictionary from SpaceScraper
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            cursor = self.connection.cursor()
+            
+            # Prepare data for insertion
+            query = """
+                INSERT INTO space_metadata (
+                    space_id, scraped_title, host, host_handle, 
+                    speakers, tags, participants_count,
+                    start_time, end_time, duration,
+                    description, status, is_recorded, raw_metadata
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                ) ON DUPLICATE KEY UPDATE
+                    scraped_title = VALUES(scraped_title),
+                    host = VALUES(host),
+                    host_handle = VALUES(host_handle),
+                    speakers = VALUES(speakers),
+                    tags = VALUES(tags),
+                    participants_count = VALUES(participants_count),
+                    start_time = VALUES(start_time),
+                    end_time = VALUES(end_time),
+                    duration = VALUES(duration),
+                    description = VALUES(description),
+                    status = VALUES(status),
+                    is_recorded = VALUES(is_recorded),
+                    raw_metadata = VALUES(raw_metadata),
+                    updated_at = CURRENT_TIMESTAMP
+            """
+            
+            # Convert lists to JSON strings
+            import json
+            speakers_json = json.dumps(metadata.get('speakers', []))
+            tags_json = json.dumps(metadata.get('tags', []))
+            raw_metadata_json = json.dumps(metadata)
+            
+            values = (
+                space_id,
+                metadata.get('title'),
+                metadata.get('host'),
+                metadata.get('host_handle'),
+                speakers_json,
+                tags_json,
+                metadata.get('participants_count'),
+                metadata.get('start_time'),
+                metadata.get('end_time'),
+                metadata.get('duration'),
+                metadata.get('description'),
+                metadata.get('status'),
+                metadata.get('is_recorded', False),
+                raw_metadata_json
+            )
+            
+            cursor.execute(query, values)
+            self.connection.commit()
+            cursor.close()
+            
+            logger.info(f"Saved metadata for space {space_id}")
+            return True
+            
+        except Error as e:
+            logger.error(f"Error saving metadata: {e}")
+            if self.connection.is_connected():
+                self.connection.rollback()
+            return False
+    
+    def get_metadata(self, space_id):
+        """
+        Retrieve metadata for a space.
+        
+        Args:
+            space_id (str): The space ID
+            
+        Returns:
+            dict: Metadata dictionary or None if not found
+        """
+        try:
+            cursor = self.connection.cursor(dictionary=True)
+            
+            query = """
+                SELECT * FROM space_metadata 
+                WHERE space_id = %s
+                LIMIT 1
+            """
+            
+            cursor.execute(query, (space_id,))
+            result = cursor.fetchone()
+            cursor.close()
+            
+            if result:
+                # Parse JSON fields
+                import json
+                if result.get('speakers'):
+                    result['speakers'] = json.loads(result['speakers'])
+                if result.get('tags'):
+                    result['tags'] = json.loads(result['tags'])
+                if result.get('raw_metadata'):
+                    result['raw_metadata'] = json.loads(result['raw_metadata'])
+                    
+            return result
+            
+        except Error as e:
+            logger.error(f"Error retrieving metadata: {e}")
+            return None
+    
+    def fetch_and_save_metadata(self, space_id):
+        """
+        Fetch metadata using SpaceScraper and save to database.
+        
+        Args:
+            space_id (str): The space ID
+            
+        Returns:
+            dict: Result dictionary with success status and metadata or error
+        """
+        try:
+            from components.SpaceScraper import SpaceScraper
+            
+            # Create scraper instance
+            scraper = SpaceScraper()
+            
+            # Scrape metadata
+            metadata = scraper.scrape(space_id)
+            
+            # Check for scraping errors
+            if "error" in metadata:
+                return {
+                    "success": False,
+                    "error": metadata["error"]
+                }
+            
+            # Save to database
+            if self.save_metadata(space_id, metadata):
+                # Update space title if appropriate
+                if metadata.get('title'):
+                    # Get current space to check existing title
+                    current_space = self.get_space(space_id)
+                    if current_space:
+                        current_title = current_space.get('title', '')
+                        # Update title if it's empty or matches the space_id
+                        if not current_title or current_title == space_id:
+                            if self.update_title(space_id, metadata['title']):
+                                logger.info(f"Updated space title to scraped title: {metadata['title']}")
+                            else:
+                                logger.warning(f"Failed to update space title for {space_id}")
+                        else:
+                            logger.info(f"Keeping existing custom title: {current_title}")
+                
+                return {
+                    "success": True,
+                    "metadata": metadata
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "Failed to save metadata to database"
+                }
+                
+        except Exception as e:
+            logger.error(f"Error fetching metadata: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }

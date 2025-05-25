@@ -10,6 +10,7 @@
 #   ./test.sh daemon     - Run only background downloader daemon test
 #   ./test.sh audio      - Run only audio processing tests
 #   ./test.sh speech     - Run only speech-to-text tests
+#   ./test.sh scraper    - Run only space scraper tests
 #
 # Environment variables:
 #   NO_TEST_EMAIL=1   - Set this to disable sending test emails
@@ -52,6 +53,7 @@ RUN_CORE_ONLY=0
 RUN_DAEMON_ONLY=0
 RUN_AUDIO_ONLY=0
 RUN_SPEECH_ONLY=0
+RUN_SCRAPER_ONLY=0
 RUN_ALL=1
 
 if [ $# -ge 1 ]; then
@@ -86,13 +88,18 @@ if [ $# -ge 1 ]; then
       RUN_ALL=0
       echo -e "${BLUE}Running speech-to-text tests...${RESET}"
       ;;
+    "scraper")
+      RUN_SCRAPER_ONLY=1
+      RUN_ALL=0
+      echo -e "${BLUE}Running space scraper tests...${RESET}"
+      ;;
     "all")
       RUN_ALL=1
       echo -e "${BLUE}Running all tests...${RESET}"
       ;;
     *)
       echo -e "${RED}Unknown test mode: $1${RESET}"
-      echo -e "Usage: ./test.sh [all|api|email|core|daemon|audio|speech]"
+      echo -e "Usage: ./test.sh [all|api|email|core|daemon|audio|speech|scraper]"
       exit 1
       ;;
   esac
@@ -1086,6 +1093,69 @@ if [ $RUN_SPEECH_ONLY -eq 1 ] || [ $RUN_ALL -eq 1 ]; then
   
   # Clean up - our new test script handles the transcribe.py testing internally
   rm -f speech_test.log
+fi
+
+# Run space scraper tests if in scraper mode or all mode
+if [ $RUN_SCRAPER_ONLY -eq 1 ] || [ $RUN_ALL -eq 1 ]; then
+  echo -e "\n${BOLD}Testing Space Scraper Component${RESET}"
+  
+  # Make sure the required Python modules are installed in the virtual environment
+  pip install -q beautifulsoup4 requests 2>/dev/null
+  
+  # Check if test script exists
+  if [ ! -f "test_space_scraper.py" ]; then
+    echo -e "  ${RED}✗${RESET} test_space_scraper.py not found"
+    ((TEST_FAILED++))
+    ((TEST_TOTAL++))
+  else
+    echo -e "  ${GREEN}✓${RESET} Found test_space_scraper.py"
+    ((TEST_PASSED++))
+    ((TEST_TOTAL++))
+    
+    # Run the scraper test
+    echo -e "  ${BLUE}Running space scraper tests...${RESET}"
+    python test_space_scraper.py > scraper_test.log 2>&1
+    SCRAPER_TEST_STATUS=$?
+    
+    if [ $SCRAPER_TEST_STATUS -eq 0 ]; then
+      # Extract test results from output
+      if grep -q "Successful: " scraper_test.log; then
+        SCRAPER_SUCCESS=$(grep "Successful: " scraper_test.log | tail -1 | awk '{print $2}')
+        SCRAPER_FAILED=$(grep "Failed: " scraper_test.log | tail -1 | awk '{print $2}')
+        SCRAPER_TOTAL=$(grep "Total tests: " scraper_test.log | tail -1 | awk '{print $3}')
+        
+        echo -e "  ${GREEN}✓${RESET} Space scraper tests completed: $SCRAPER_SUCCESS/$SCRAPER_TOTAL passed"
+        
+        # Update overall counters
+        TEST_PASSED=$((TEST_PASSED + SCRAPER_SUCCESS))
+        TEST_FAILED=$((TEST_FAILED + SCRAPER_FAILED))
+        TEST_TOTAL=$((TEST_TOTAL + SCRAPER_TOTAL))
+        
+        # Show details of scraped data
+        echo -e "  ${BLUE}Test results:${RESET}"
+        grep -E "Test [0-9]+:|Space ID:|Title:|Host:|Speakers:|Tags:|✅|❌" scraper_test.log | head -20 | sed 's/^/    /'
+        
+        # If any tests failed, show the errors
+        if [ "$SCRAPER_FAILED" -gt 0 ]; then
+          echo -e "  ${RED}Failed tests:${RESET}"
+          grep -A2 "❌" scraper_test.log | sed 's/^/    /'
+        fi
+      else
+        echo -e "  ${RED}✗${RESET} Could not parse scraper test results"
+        cat scraper_test.log | head -20
+        ((TEST_FAILED++))
+        ((TEST_TOTAL++))
+      fi
+    else
+      echo -e "  ${RED}✗${RESET} Space scraper tests failed with status $SCRAPER_TEST_STATUS"
+      cat scraper_test.log | head -20
+      ((TEST_FAILED++))
+      ((TEST_TOTAL++))
+    fi
+    
+    # Clean up test output files
+    rm -f test_space_*.json test_space_scraper_results.json scraper_test.log
+  fi
 fi
 
 # Print summary

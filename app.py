@@ -815,6 +815,58 @@ def update_space_title(space_id):
         logger.error(f"Error updating space title: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/space/<space_id>/metadata', methods=['POST'])
+def fetch_space_metadata(space_id):
+    """API endpoint to fetch and save space metadata."""
+    try:
+        # Get Space component
+        space = get_space_component()
+        
+        # Fetch and save metadata
+        result = space.fetch_and_save_metadata(space_id)
+        
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'space_id': space_id,
+                'metadata': result['metadata']
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': result.get('error', 'Failed to fetch metadata')
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"Error fetching space metadata: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/space/<space_id>/metadata', methods=['GET'])
+def get_space_metadata(space_id):
+    """API endpoint to get existing space metadata."""
+    try:
+        # Get Space component
+        space = get_space_component()
+        
+        # Get metadata from database
+        metadata = space.get_metadata(space_id)
+        
+        if metadata:
+            return jsonify({
+                'success': True,
+                'space_id': space_id,
+                'metadata': metadata
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'No metadata found for this space'
+            }), 404
+            
+    except Exception as e:
+        logger.error(f"Error getting space metadata: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/space_status/<space_id>', methods=['GET'])
 def api_space_status(space_id):
     """API endpoint to get space download status."""
@@ -1060,11 +1112,7 @@ def api_translate_info():
     if not TRANSLATE_AVAILABLE:
         return jsonify({
             'available': False,
-            'error': 'Translation service is not available',
-            'setup_options': {
-                'self_hosted': './setup_libretranslate_no_docker.sh',
-                'api_key': 'https://portal.libretranslate.com/'
-            }
+            'error': 'Translation service is not available. Please configure an AI provider (OpenAI or Claude) in mainconfig.json'
         }), 503
         
     # Get Translate component
@@ -1072,11 +1120,7 @@ def api_translate_info():
     if not translator:
         return jsonify({
             'available': False,
-            'error': 'Could not initialize translation service',
-            'setup_options': {
-                'self_hosted': './setup_libretranslate_no_docker.sh',
-                'api_key': 'https://portal.libretranslate.com/'
-            }
+            'error': 'Could not initialize translation service. Please check your AI provider configuration.'
         }), 503
     
     # Check if AI component is available
@@ -1220,18 +1264,15 @@ def api_translate():
                         'option3': 'Configure the AI provider in mainconfig.json'
                     }
                 elif 'API key required' in result.get('error', ''):
-                    error_msg = 'Translation requires API key or self-hosted setup'
+                    error_msg = 'Translation requires AI provider configuration'
                     # Add setup instructions to the response
                     result['setup_instructions'] = {
-                        'option1': 'Get API key from https://portal.libretranslate.com/',
-                        'option2': 'Run ./setup_libretranslate_no_docker.sh to set up a free local server'
+                        'option1': 'Configure OpenAI API key in mainconfig.json',
+                        'option2': 'Configure Claude API key in mainconfig.json'
                     }
                 elif '400' in result.get('error', '') or '403' in result.get('error', ''):
-                    error_msg = 'Authentication error with translation service'
-                    if not translator.self_hosted:
-                        result['suggestion'] = 'Consider using self-hosted mode by running ./setup_libretranslate_no_docker.sh'
-                    else:
-                        result['suggestion'] = 'Start your LibreTranslate server with: cd libretranslate && source venv/bin/activate && libretranslate --host localhost --port 5000'
+                    error_msg = 'Authentication error with AI service'
+                    result['suggestion'] = 'Please check your API key configuration in mainconfig.json'
             
             return jsonify({'error': error_msg, 'details': result}), status_code
             
