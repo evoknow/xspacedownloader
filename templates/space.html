@@ -7,7 +7,12 @@
     <div class="col-md-12">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <h4>{{ space.title if space.title else "Space " + space.space_id }}</h4>
+                <div class="d-flex align-items-center">
+                    <h4 id="space-title" class="mb-0 me-2">{{ space.title if space.title else "Space " + space.space_id }}</h4>
+                    <button id="edit-title-btn" class="btn btn-link btn-sm p-0" title="Edit title">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                </div>
                 <a href="{{ url_for('index') }}" class="btn btn-outline-primary btn-sm">Back to Home</a>
             </div>
             <div class="card-body">
@@ -333,6 +338,16 @@
 
 {% block styles %}
 <style>
+    /* Edit button styling */
+    #edit-title-btn {
+        opacity: 0.5;
+        transition: opacity 0.2s;
+    }
+    
+    #edit-title-btn:hover {
+        opacity: 1;
+    }
+    
     /* Transcript actions styling */
     .transcript-actions {
         display: flex;
@@ -2579,6 +2594,126 @@
             
             // Set interval for updates (every 5 seconds)
             statusInterval = setInterval(checkStatusAndUpdate, 5000);
+        }
+        
+        // Title editing functionality
+        const editTitleBtn = document.getElementById('edit-title-btn');
+        const spaceTitle = document.getElementById('space-title');
+        // spaceId is already declared above, no need to redeclare
+        
+        if (editTitleBtn && spaceTitle) {
+            editTitleBtn.addEventListener('click', function() {
+                const currentTitle = spaceTitle.textContent.trim();
+                const isDefaultTitle = currentTitle.startsWith('Space ');
+                const titleText = isDefaultTitle ? '' : currentTitle;
+                
+                // Create input field
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'form-control form-control-sm d-inline-block';
+                input.style.width = '300px';
+                input.value = titleText;
+                input.placeholder = 'Enter space title...';
+                
+                // Create save and cancel buttons
+                const saveBtn = document.createElement('button');
+                saveBtn.className = 'btn btn-success btn-sm ms-2';
+                saveBtn.innerHTML = '<i class="bi bi-check"></i>';
+                saveBtn.title = 'Save';
+                
+                const cancelBtn = document.createElement('button');
+                cancelBtn.className = 'btn btn-secondary btn-sm ms-1';
+                cancelBtn.innerHTML = '<i class="bi bi-x"></i>';
+                cancelBtn.title = 'Cancel';
+                
+                // Hide title and edit button
+                spaceTitle.style.display = 'none';
+                editTitleBtn.style.display = 'none';
+                
+                // Create container for input and buttons
+                const editContainer = document.createElement('div');
+                editContainer.className = 'd-inline-flex align-items-center';
+                editContainer.appendChild(input);
+                editContainer.appendChild(saveBtn);
+                editContainer.appendChild(cancelBtn);
+                
+                // Insert edit container
+                spaceTitle.parentNode.insertBefore(editContainer, spaceTitle);
+                
+                // Focus input
+                input.focus();
+                input.select();
+                
+                // Save function
+                function saveTitle() {
+                    const newTitle = input.value.trim();
+                    
+                    // Make API request to update title
+                    fetch(`/api/space/${spaceId}/title`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ title: newTitle })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Update display
+                            spaceTitle.textContent = newTitle || `Space ${spaceId}`;
+                            
+                            // Update page title
+                            document.title = `${newTitle || spaceId} - XSpace Downloader`;
+                            
+                            // Update audio player title if exists
+                            const audioPlayerTitle = document.querySelector('.audio-player .card-header span');
+                            if (audioPlayerTitle) {
+                                audioPlayerTitle.textContent = newTitle || `Space ${spaceId}`;
+                            }
+                            
+                            showToast('Title updated successfully', 'success');
+                        } else {
+                            showToast('Failed to update title: ' + (data.error || 'Unknown error'), 'danger');
+                        }
+                        
+                        // Clean up
+                        editContainer.remove();
+                        spaceTitle.style.display = '';
+                        editTitleBtn.style.display = '';
+                    })
+                    .catch(error => {
+                        console.error('Error updating title:', error);
+                        showToast('Error updating title', 'danger');
+                        
+                        // Clean up
+                        editContainer.remove();
+                        spaceTitle.style.display = '';
+                        editTitleBtn.style.display = '';
+                    });
+                }
+                
+                // Cancel function
+                function cancelEdit() {
+                    editContainer.remove();
+                    spaceTitle.style.display = '';
+                    editTitleBtn.style.display = '';
+                }
+                
+                // Event listeners
+                saveBtn.addEventListener('click', saveTitle);
+                cancelBtn.addEventListener('click', cancelEdit);
+                
+                // Enter to save, Escape to cancel
+                input.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        saveTitle();
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        cancelEdit();
+                    }
+                });
+            });
         }
     });
 </script>

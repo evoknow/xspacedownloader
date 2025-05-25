@@ -785,6 +785,36 @@ def api_job_status(job_id):
         logger.error(f"Error in API job status: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/space/<space_id>/title', methods=['PUT'])
+def update_space_title(space_id):
+    """API endpoint to update space title."""
+    try:
+        # Get request data
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+            
+        title = data.get('title', '').strip()
+        
+        # Get Space component
+        space = get_space_component()
+        
+        # Update title in database
+        success = space.update_title(space_id, title)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'space_id': space_id,
+                'title': title
+            })
+        else:
+            return jsonify({'error': 'Failed to update title'}), 500
+            
+    except Exception as e:
+        logger.error(f"Error updating space title: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/space_status/<space_id>', methods=['GET'])
 def api_space_status(space_id):
     """API endpoint to get space download status."""

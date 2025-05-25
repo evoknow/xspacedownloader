@@ -527,6 +527,41 @@ class Space:
             logger.error(f"Error transcribing space {space_id}: {e}")
             return {"error": str(e)}
     
+    def update_title(self, space_id, title):
+        """
+        Update space title.
+        
+        Args:
+            space_id (str): The unique space identifier
+            title (str): The new title for the space
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            cursor = self.connection.cursor()
+            
+            # Update the title field
+            query = "UPDATE spaces SET title = %s WHERE space_id = %s"
+            cursor.execute(query, (title if title else None, space_id))
+            
+            self.connection.commit()
+            rows_affected = cursor.rowcount
+            cursor.close()
+            
+            if rows_affected > 0:
+                logger.info(f"Updated title for space {space_id}: {title}")
+                return True
+            else:
+                logger.warning(f"No space found with ID: {space_id}")
+                return False
+                
+        except Error as e:
+            logger.error(f"Error updating space title: {e}")
+            if self.connection.is_connected():
+                self.connection.rollback()
+            return False
+    
     def update_space(self, space_id, **kwargs):
         """
         Update space details.

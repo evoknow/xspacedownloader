@@ -62,13 +62,10 @@
                             <a href="{{ url_for('space_page', space_id=job.space_id) }}" class="text-decoration-none">
                                 <h5 class="mb-1">
                                     {{ job.title if job.title else job.space_id }}
-                                    {% if job.title %}
-                                    <small class="text-muted">({{ job.space_id }})</small>
-                                    {% endif %}
                                 </h5>
                             </a>
                             <div class="d-flex align-items-center gap-2">
-                                <small class="text-muted">{{ job.updated_at }}</small>
+                                <small class="text-muted relative-time" data-datetime="{{ job.updated_at }}">{{ job.updated_at }}</small>
                                 {% if job.playback_cnt or job.download_cnt %}
                                 <small class="text-muted">
                                     {% if job.playback_cnt %}<i class="bi bi-play-circle" title="Plays"></i> {{ job.playback_cnt }}{% endif %}
@@ -95,8 +92,11 @@
                             </div>
                         </div>
                         <div class="d-flex gap-2 align-items-center">
-                            <a href="{{ url_for('space_page', space_id=job.space_id) }}" class="btn btn-success btn-sm">
+                            <a href="{{ url_for('space_page', space_id=job.space_id) }}" class="btn btn-success btn-sm d-none d-sm-inline-block">
                                 <i class="bi bi-play-circle"></i> Listen
+                            </a>
+                            <a href="{{ url_for('space_page', space_id=job.space_id) }}" class="btn btn-success btn-sm d-inline-block d-sm-none" title="Listen">
+                                <i class="bi bi-play-circle"></i>
                             </a>
                             <a href="/download/{{ job.space_id }}?attachment=1" class="btn btn-outline-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Download MP3">
                                 <i class="bi bi-download"></i>
@@ -139,12 +139,58 @@
             });
     }
     
+    // Function to convert datetime to relative time
+    function timeAgo(datetime) {
+        const date = new Date(datetime);
+        const now = new Date();
+        const seconds = Math.floor((now - date) / 1000);
+        
+        const intervals = {
+            year: 31536000,
+            month: 2592000,
+            week: 604800,
+            day: 86400,
+            hour: 3600,
+            minute: 60
+        };
+        
+        if (seconds < 60) {
+            return 'just now';
+        }
+        
+        for (const [unit, secondsInUnit] of Object.entries(intervals)) {
+            const interval = Math.floor(seconds / secondsInUnit);
+            if (interval >= 1) {
+                return interval === 1 ? `1 ${unit} ago` : `${interval} ${unit}s ago`;
+            }
+        }
+        
+        return datetime; // fallback to original
+    }
+    
+    // Function to update all relative times
+    function updateRelativeTimes() {
+        document.querySelectorAll('.relative-time').forEach(el => {
+            const datetime = el.getAttribute('data-datetime');
+            if (datetime) {
+                el.textContent = timeAgo(datetime);
+                el.title = datetime; // Show full date on hover
+            }
+        });
+    }
+    
     // Update status when page loads
     document.addEventListener('DOMContentLoaded', () => {
         updateQueueStatus();
         
         // Update every 30 seconds
         setInterval(updateQueueStatus, 30000);
+        
+        // Update relative times
+        updateRelativeTimes();
+        
+        // Update relative times every minute
+        setInterval(updateRelativeTimes, 60000);
         
         // Initialize Bootstrap tooltips
         const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
