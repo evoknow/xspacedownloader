@@ -1638,15 +1638,39 @@ class Space:
             
             # Convert lists to JSON strings
             import json
-            speakers_json = json.dumps(metadata.get('speakers', []))
+            import re
+            
+            # Clean speakers list to only contain @usernames
+            raw_speakers = metadata.get('speakers', [])
+            cleaned_speakers = []
+            for speaker in raw_speakers:
+                # Extract @username from strings like "@username (Display Name)"
+                match = re.match(r'(@\w+)', speaker)
+                if match:
+                    cleaned_speakers.append(match.group(1))
+                elif speaker.startswith('@'):
+                    # If it's already just @username, use it as is
+                    cleaned_speakers.append(speaker.split()[0])
+            
+            speakers_json = json.dumps(cleaned_speakers)
             tags_json = json.dumps(metadata.get('tags', []))
             raw_metadata_json = json.dumps(metadata)
+            
+            # Clean host_handle to ensure it's just @username
+            host_handle = metadata.get('host_handle')
+            if host_handle:
+                # Extract just the @username part if it contains extra info
+                handle_match = re.match(r'(@\w+)', host_handle)
+                if handle_match:
+                    host_handle = handle_match.group(1)
+                elif not host_handle.startswith('@'):
+                    host_handle = f'@{host_handle}'
             
             values = (
                 space_id,
                 metadata.get('title'),
                 metadata.get('host'),
-                metadata.get('host_handle'),
+                host_handle,
                 speakers_json,
                 tags_json,
                 metadata.get('participants_count'),

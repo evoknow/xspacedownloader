@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}Download Queue - XSpace Downloader{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4>
+                    <i class="bi bi-hourglass-split"></i> Download Queue
+                    {% if queue_jobs %}
+                    <span class="badge bg-secondary">{{ queue_jobs|length }} active</span>
+                    {% endif %}
+                </h4>
+                <div>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="location.reload()">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                    <a href="{{ url_for('index') }}" class="btn btn-outline-primary btn-sm ms-2">
+                        <i class="bi bi-house"></i> Home
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if queue_jobs %}
+                <p class="text-muted mb-3">
+                    This page shows all spaces currently being downloaded. The page will automatically update every 5 seconds.
+                </p>
+                <div class="list-group" id="queue-list">
+                    {% for job in queue_jobs %}
+                    <div class="list-group-item" data-job-id="{{ job.id }}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <h5 class="mb-1">
+                                    {% if job.title %}
+                                        {{ job.title }}
+                                    {% else %}
+                                        Space {{ job.space_id }}
+                                    {% endif %}
+                                </h5>
+                                <div class="mb-2">
+                                    <span class="badge bg-{{ job.status_class }}">
+                                        {{ job.status_label }}
+                                    </span>
+                                    <small class="text-muted ms-2">
+                                        Submitted: <span class="relative-time" data-datetime="{{ job.created_at }}">{{ job.created_at }}</span>
+                                    </small>
+                                    {% if job.space_url %}
+                                    <small class="text-muted ms-2">
+                                        <a href="{{ job.space_url }}" target="_blank" class="text-decoration-none">
+                                            <i class="bi bi-box-arrow-up-right"></i> View on X
+                                        </a>
+                                    </small>
+                                    {% endif %}
+                                </div>
+                                
+                                {% if job.status_label == 'Downloading' %}
+                                <div class="progress mb-2" style="height: 25px;">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                         role="progressbar" 
+                                         style="width: {{ job.progress_percent|default(0) }}%;"
+                                         aria-valuenow="{{ job.progress_percent|default(0) }}" 
+                                         aria-valuemin="0" 
+                                         aria-valuemax="100">
+                                        {{ job.progress_percent|default(0) }}%
+                                    </div>
+                                </div>
+                                {% if job.progress_in_size %}
+                                <small class="text-muted">
+                                    Downloaded: {{ (job.progress_in_size / 1048576)|round(2) }} MB
+                                </small>
+                                {% endif %}
+                                {% elif job.status_label == 'Pending' %}
+                                <div class="alert alert-secondary mb-0 py-2">
+                                    <small><i class="bi bi-clock"></i> Waiting in queue...</small>
+                                </div>
+                                {% elif job.status_label == 'In Progress' %}
+                                <div class="alert alert-info mb-0 py-2">
+                                    <small><i class="bi bi-gear-fill"></i> Processing...</small>
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="ms-3">
+                                <a href="{{ url_for('status', job_id=job.id) }}" class="btn btn-outline-primary btn-sm">
+                                    <i class="bi bi-info-circle"></i> Details
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-inbox display-1 text-muted"></i>
+                    <h5 class="mt-3 text-muted">No downloads in queue</h5>
+                    <p class="text-muted">All downloads have been completed or there are no pending downloads.</p>
+                    <a href="{{ url_for('index') }}" class="btn btn-primary mt-3">
+                        <i class="bi bi-plus-circle"></i> Download a Space
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Function to convert datetime to relative time
+    function timeAgo(datetime) {
+        const date = new Date(datetime);
+        const now = new Date();
+        const seconds = Math.floor((now - date) / 1000);
+        
+        const intervals = {
+            year: 31536000,
+            month: 2592000,
+            week: 604800,
+            day: 86400,
+            hour: 3600,
+            minute: 60
+        };
+        
+        if (seconds < 60) {
+            return 'just now';
+        }
+        
+        for (const [unit, secondsInUnit] of Object.entries(intervals)) {
+            const interval = Math.floor(seconds / secondsInUnit);
+            if (interval >= 1) {
+                return interval === 1 ? `1 ${unit} ago` : `${interval} ${unit}s ago`;
+            }
+        }
+        
+        return datetime; // fallback to original
+    }
+    
+    // Function to update all relative times
+    function updateRelativeTimes() {
+        document.querySelectorAll('.relative-time').forEach(el => {
+            const datetime = el.getAttribute('data-datetime');
+            if (datetime) {
+                el.textContent = timeAgo(datetime);
+                el.title = datetime; // Show full date on hover
+            }
+        });
+    }
+    
+    // Function to update queue status
+    async function updateQueueStatus() {
+        try {
+            const response = await fetch('/api/queue_status');
+            if (!response.ok) return;
+            
+            const data = await response.json();
+            
+            // Check if we need to reload the page (if jobs have been added/removed)
+            const currentJobCount = document.querySelectorAll('[data-job-id]').length;
+            if (data.jobs.length !== currentJobCount) {
+                location.reload();
+                return;
+            }
+            
+            // Update each job's status
+            data.jobs.forEach(job => {
+                const jobElement = document.querySelector(`[data-job-id="${job.id}"]`);
+                if (!jobElement) return;
+                
+                // Update status badge
+                const statusBadge = jobElement.querySelector('.badge');
+                if (statusBadge) {
+                    statusBadge.className = `badge bg-${job.status_class}`;
+                    statusBadge.textContent = job.status_label;
+                }
+                
+                // Update progress bar if downloading
+                if (job.status_label === 'Downloading') {
+                    let progressContainer = jobElement.querySelector('.progress');
+                    if (!progressContainer) {
+                        // Create progress bar if it doesn't exist
+                        const alertDiv = jobElement.querySelector('.alert');
+                        if (alertDiv) {
+                            alertDiv.remove();
+                        }
+                        
+                        const progressHtml = `
+                            <div class="progress mb-2" style="height: 25px;">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                     role="progressbar" 
+                                     style="width: ${job.progress_percent || 0}%;"
+                                     aria-valuenow="${job.progress_percent || 0}" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="100">
+                                    ${job.progress_percent || 0}%
+                                </div>
+                            </div>
+                            ${job.progress_in_size ? `<small class="text-muted">Downloaded: ${(job.progress_in_size / 1048576).toFixed(2)} MB</small>` : ''}
+                        `;
+                        
+                        const flexGrowDiv = jobElement.querySelector('.flex-grow-1');
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = progressHtml;
+                        flexGrowDiv.appendChild(tempDiv.firstElementChild);
+                        if (tempDiv.firstElementChild) {
+                            flexGrowDiv.appendChild(tempDiv.firstElementChild);
+                        }
+                    } else {
+                        // Update existing progress bar
+                        const progressBar = progressContainer.querySelector('.progress-bar');
+                        if (progressBar) {
+                            const percent = job.progress_percent || 0;
+                            progressBar.style.width = `${percent}%`;
+                            progressBar.setAttribute('aria-valuenow', percent);
+                            progressBar.textContent = `${percent}%`;
+                        }
+                        
+                        // Update download size
+                        const sizeElement = jobElement.querySelector('small.text-muted:last-child');
+                        if (sizeElement && job.progress_in_size) {
+                            sizeElement.textContent = `Downloaded: ${(job.progress_in_size / 1048576).toFixed(2)} MB`;
+                        }
+                    }
+                }
+            });
+            
+        } catch (error) {
+            console.error('Error updating queue status:', error);
+        }
+    }
+    
+    // Update when page loads
+    document.addEventListener('DOMContentLoaded', () => {
+        // Update relative times
+        updateRelativeTimes();
+        
+        // Update relative times every minute
+        setInterval(updateRelativeTimes, 60000);
+        
+        // Initialize Bootstrap tooltips
+        const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+        const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+        
+        // Update queue status every 5 seconds if there are jobs
+        if (document.querySelector('[data-job-id]')) {
+            setInterval(updateQueueStatus, 5000);
+        }
+    });
+</script>
+{% endblock %}

@@ -89,40 +89,88 @@ class SpaceScraper:
             }
             
             # Extract title
-            title_tag = soup.find("h1", class_="space-title") or soup.find("h1")
+            title_tag = soup.find("h1", class_=re.compile(r"text-gray-900"))
+            if not title_tag:
+                title_tag = soup.find("h1")
+            
             if title_tag:
-                title_text = title_tag.get_text(strip=True)
-                # Clean up common suffixes like "Ended"
-                if title_text.endswith("Ended"):
-                    title_text = title_text[:-5].strip()
-                metadata["title"] = title_text
+                # Get the direct text content, excluding nested tags
+                title_text = ""
+                for content in title_tag.contents:
+                    if isinstance(content, str):
+                        title_text += content.strip()
+                
+                # Clean up the title
+                title_text = title_text.strip()
+                metadata["title"] = title_text if title_text else None
             else:
                 metadata["title"] = None
             
             # Extract host information
-            host_section = soup.find("div", class_="host-info") or soup.find("div", {"class": ["host", "host-name", "creator"]})
-            if host_section:
-                host_name = host_section.find("span", class_="name") or host_section.find("a") or host_section
-                metadata["host"] = host_name.get_text(strip=True) if host_name else None
-                
-                # Try to get host handle
-                host_handle = host_section.find("span", class_="handle") or host_section.find("a", {"href": re.compile(r"twitter\.com/|x\.com/")})
-                if host_handle:
-                    handle_text = host_handle.get_text(strip=True)
-                    metadata["host_handle"] = handle_text if handle_text.startswith("@") else f"@{handle_text}"
+            # Look for the "Host:" header and then find the host info
+            host_header = soup.find("h2", string=re.compile(r"Host:", re.I))
+            if host_header:
+                # Find the next grid container after the header
+                host_container = host_header.find_next_sibling("div", class_=re.compile(r"grid"))
+                if host_container:
+                    # Find the link to the user profile
+                    host_link = host_container.find("a", href=re.compile(r"spacesdashboard\.com/u/"))
+                    if host_link:
+                        # Extract handle from the link or text
+                        host_handle_elem = host_link.find("span", class_="font-bold")
+                        if host_handle_elem:
+                            metadata["host_handle"] = host_handle_elem.get_text(strip=True)
+                            # The display name is in the same div as the handle
+                            parent_div = host_handle_elem.find_parent("div")
+                            if parent_div:
+                                # Get text content of the div, excluding nested elements
+                                div_text = parent_div.get_text(strip=True)
+                                # Remove the handle to get display name
+                                display_name = div_text.replace(metadata["host_handle"], "").strip()
+                                metadata["host"] = display_name if display_name else metadata["host_handle"].lstrip("@")
+                            else:
+                                metadata["host"] = metadata["host_handle"].lstrip("@")
+                        else:
+                            metadata["host_handle"] = None
+                            metadata["host"] = None
+                    else:
+                        metadata["host"] = None
+                        metadata["host_handle"] = None
+                else:
+                    metadata["host"] = None
+                    metadata["host_handle"] = None
             else:
                 metadata["host"] = None
                 metadata["host_handle"] = None
             
             # Extract speakers/co-hosts
             speakers = []
-            speaker_section = soup.find("div", class_="speakers") or soup.find("div", {"class": ["co-hosts", "participants"]})
-            if speaker_section:
-                speaker_elements = speaker_section.find_all("div", class_="speaker") or speaker_section.find_all("li") or speaker_section.find_all("span", class_="speaker-name")
-                for speaker in speaker_elements:
-                    name = speaker.get_text(strip=True)
-                    if name and name not in speakers:
-                        speakers.append(name)
+            # Look for the "Speakers:" or "Co-hosts:" header
+            speaker_header = soup.find("h2", string=re.compile(r"Speakers:|Co-hosts:", re.I))
+            if speaker_header:
+                # Find the next grid container after the header
+                speaker_container = speaker_header.find_next_sibling("div", class_=re.compile(r"grid"))
+                if speaker_container:
+                    # Find all user profile links
+                    speaker_links = speaker_container.find_all("a", href=re.compile(r"spacesdashboard\.com/u/"))
+                    for speaker_link in speaker_links:
+                        # Extract handle
+                        handle_elem = speaker_link.find("span", class_="font-bold")
+                        if handle_elem:
+                            handle = handle_elem.get_text(strip=True)
+                            # The display name is in the same div as the handle
+                            parent_div = handle_elem.find_parent("div")
+                            if parent_div:
+                                # Get text content of the div, excluding nested elements
+                                div_text = parent_div.get_text(strip=True)
+                                # Remove the handle to get display name
+                                display_name = div_text.replace(handle, "").strip()
+                                if display_name:
+                                    speakers.append(f"{handle} ({display_name})")
+                                else:
+                                    speakers.append(handle)
+                            else:
+                                speakers.append(handle)
             metadata["speakers"] = speakers
             
             # Extract tags/topics

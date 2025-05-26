@@ -11,19 +11,29 @@
                 <a href="{{ url_for('index') }}" class="btn btn-outline-primary btn-sm">Back to Home</a>
             </div>
             <div class="card-body">
-                <h5>Job Details</h5>
-                <ul class="list-group list-group-flush mb-4">
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        <span>Job ID:</span>
-                        <span class="badge bg-secondary rounded-pill">{{ job.id }}</span>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        <span>Space ID:</span>
-                        <span class="badge bg-secondary rounded-pill">{{ job.space_id }}</span>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        <span>Status:</span>
-                        <span id="status-badge" class="badge status-badge 
+                {# Compact job details in a single row #}
+                <div class="d-flex flex-wrap gap-3 mb-4">
+                    <div class="d-flex align-items-center">
+                        <span class="text-muted me-2">Job:</span>
+                        <span class="fw-bold">#{{ job.id }}</span>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <span class="text-muted me-2">Space:</span>
+                        <a href="{{ space.space_url if space else 'https://x.com/i/spaces/' + job.space_id }}" target="_blank" rel="noopener" class="text-decoration-none">
+                            <code>{{ job.space_id }}</code> <i class="bi bi-box-arrow-up-right small"></i>
+                        </a>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <span class="text-muted me-2">Started:</span>
+                        <span class="relative-time" data-datetime="{{ job.start_time }}" title="{{ job.start_time }}">{{ job.start_time }}</span>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <span class="text-muted me-2">Format:</span>
+                        <span>{{ job.file_type|upper }}</span>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <span class="text-muted me-2">Status:</span>
+                        <span id="status-badge" class="badge 
                             {% if job.status == 'completed' %}
                                 bg-success
                             {% elif job.status == 'pending' %}
@@ -36,44 +46,31 @@
                                 bg-secondary
                             {% endif %}
                         ">
-                            {{ job.status|title }}
+                            {{ job.status|replace('_', ' ')|title }}
                         </span>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        <span>Created at:</span>
-                        <span>{{ job.start_time }}</span>
-                    </li>
-                    {% if job.end_time %}
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        <span>Completed at:</span>
-                        <span>{{ job.end_time }}</span>
-                    </li>
-                    {% endif %}
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        <span>File type:</span>
-                        <span>{{ job.file_type }}</span>
-                    </li>
-                </ul>
+                    </div>
+                </div>
                 
-                {% if space %}
-                <h5>Space Details</h5>
-                <ul class="list-group list-group-flush mb-4">
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        <span>Space URL:</span>
-                        <a href="{{ space.space_url }}" target="_blank" rel="noopener">{{ space.space_url }}</a>
-                    </li>
-                    {% if space.title %}
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        <span>Title:</span>
-                        <span>{{ space.title }}</span>
-                    </li>
-                    {% endif %}
-                </ul>
+                {% if space and space.title %}
+                {# Show space title if available #}
+                <div class="mb-3">
+                    <h6 class="text-muted mb-0">{{ space.title }}</h6>
+                </div>
                 {% endif %}
                 
-                <div class="progress-container">
-                    <h5>Download Progress</h5>
-                    <div class="progress" style="height: 25px;">
+                {# Progress bar #}
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0">Progress</h6>
+                        <span id="progress-text" class="text-muted">
+                            {% if job.progress_in_size %}
+                                {{ (job.progress_in_size / 1048576)|round(1) }} MB
+                            {% else %}
+                                Waiting...
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="progress" style="height: 30px;">
                         <div id="progress-bar" class="progress-bar 
                             {% if job.status == 'completed' %}
                                 bg-success
@@ -91,21 +88,6 @@
                             aria-valuemax="100">
                             {{ job.progress_in_percent|default(0, true) }}%
                         </div>
-                    </div>
-                    <div id="progress-text" class="text-center mt-2">
-                        {% if job.progress_in_size %}
-                            Downloaded {{ job.progress_in_size|filesizeformat }} ({{ (job.progress_in_size / 1048576)|round(2) }} MB)
-                        {% else %}
-                            Waiting to start...
-                        {% endif %}
-                    </div>
-                    
-                    <!-- Debug info - will be updated by AJAX -->
-                    <div id="debug-info" class="mt-4 small text-muted">
-                        <p class="mb-1">Process ID: <span id="process-id">{{ job.process_id or 'None' }}</span></p>
-                        <p class="mb-1">Last update: <span id="last-update">{{ job.updated_at or 'N/A' }}</span></p>
-                        <p class="mb-1">Data source: <span id="data-source">Initial page load</span></p>
-                        <p class="mb-1">Part file: <span id="part-file-status">Checking...</span></p>
                     </div>
                 </div>
                 
@@ -139,7 +121,7 @@
                     {% elif job.status == 'pending' %}
                         Your download is in the queue. It will start automatically when resources are available.
                     {% elif job.status == 'in_progress' %}
-                        Download is in progress. This page will update automatically.
+                        Download is in progress. This page will update automatically. You can browse other sections of the site while your download continues.
                     {% elif job.status == 'failed' %}
                         Download failed. Please check the error message for details.
                         <div class="mt-3">
@@ -160,6 +142,45 @@
 
 {% block scripts %}
 <script>
+    // Function to convert datetime to relative time
+    function timeAgo(datetime) {
+        const date = new Date(datetime);
+        const now = new Date();
+        const seconds = Math.floor((now - date) / 1000);
+        
+        const intervals = {
+            year: 31536000,
+            month: 2592000,
+            week: 604800,
+            day: 86400,
+            hour: 3600,
+            minute: 60
+        };
+        
+        if (seconds < 60) {
+            return 'just now';
+        }
+        
+        for (const [unit, secondsInUnit] of Object.entries(intervals)) {
+            const interval = Math.floor(seconds / secondsInUnit);
+            if (interval >= 1) {
+                return interval === 1 ? `1 ${unit} ago` : `${interval} ${unit}s ago`;
+            }
+        }
+        
+        return datetime;
+    }
+    
+    // Update all relative times
+    function updateRelativeTimes() {
+        document.querySelectorAll('.relative-time').forEach(el => {
+            const datetime = el.getAttribute('data-datetime');
+            if (datetime) {
+                el.textContent = timeAgo(datetime);
+            }
+        });
+    }
+    
     // Function to update download status
     function updateStatus() {
         const jobId = {{ job.id }};
@@ -211,39 +232,10 @@
                 // Update progress text
                 const progressText = document.getElementById('progress-text');
                 if (data.progress_in_size > 0) {
-                    // Simple function to format bytes
-                    function formatBytes(bytes, decimals = 2) {
-                        if (bytes === 0) return '0 Bytes';
-                        
-                        const k = 1024;
-                        const dm = decimals < 0 ? 0 : decimals;
-                        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-                        
-                        const i = Math.floor(Math.log(bytes) / Math.log(k));
-                        
-                        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-                    }
-                    
-                    const sizeMB = (data.progress_in_size / (1024*1024)).toFixed(2);
-                    progressText.textContent = `Downloaded ${formatBytes(data.progress_in_size)} (${sizeMB} MB)`;
+                    const sizeMB = (data.progress_in_size / (1024*1024)).toFixed(1);
+                    progressText.textContent = `${sizeMB} MB`;
                 } else {
-                    progressText.textContent = 'Waiting to start...';
-                }
-                
-                // Update debug info
-                document.getElementById('process-id').textContent = data.process_id || 'None';
-                document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
-                document.getElementById('data-source').textContent = data.direct_query ? 'Direct DB Query' : 'Space Component';
-                
-                // Show part file status if available
-                if (data.part_file_exists) {
-                    document.getElementById('part-file-status').textContent = 
-                        `Found: ${formatBytes(data.part_file_size)}`;
-                } else if (data.part_file_size > 0) {
-                    document.getElementById('part-file-status').textContent = 
-                        `Size: ${formatBytes(data.part_file_size)}`;
-                } else {
-                    document.getElementById('part-file-status').textContent = 'Not found';
+                    progressText.textContent = 'Waiting...';
                 }
                 
                 // Update status message
@@ -265,7 +257,7 @@
                     statusMessage.innerHTML = 'Your download is in the queue. It will start automatically when resources are available.';
                 } else if (data.status === 'in_progress') {
                     statusMessage.classList.add('alert-info');
-                    statusMessage.innerHTML = 'Download is in progress. This page will update automatically.';
+                    statusMessage.innerHTML = 'Download is in progress. This page will update automatically. You can browse other sections of the site while your download continues.';
                 } else if (data.status === 'failed') {
                     statusMessage.classList.add('alert-danger');
                     statusMessage.innerHTML = 'Download failed. Please check the error message for details.';
@@ -311,6 +303,10 @@
     // Update status when page loads
     document.addEventListener('DOMContentLoaded', () => {
         updateStatus();
+        updateRelativeTimes();
+        
+        // Update relative times every minute
+        setInterval(updateRelativeTimes, 60000);
         
         // Set interval for updates
         const status = '{{ job.status }}';

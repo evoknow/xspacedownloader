@@ -91,6 +91,58 @@ app.config.update(
 # Create download directory if it doesn't exist
 os.makedirs(app.config['DOWNLOAD_DIR'], exist_ok=True)
 
+# Template filter for relative time
+@app.template_filter('relative_time')
+def relative_time_filter(dt):
+    """Convert datetime to relative time string."""
+    if not dt:
+        return ''
+    
+    # Handle string datetime
+    if isinstance(dt, str):
+        try:
+            # Try parsing common datetime formats
+            for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S.%f']:
+                try:
+                    dt = datetime.datetime.strptime(dt, fmt)
+                    break
+                except ValueError:
+                    continue
+            else:
+                return dt  # Return original if no format matches
+        except Exception:
+            return dt
+    
+    # Calculate time difference
+    now = datetime.datetime.now()
+    diff = now - dt
+    
+    # Convert to relative time
+    seconds = diff.total_seconds()
+    
+    if seconds < 60:
+        return "just now"
+    elif seconds < 3600:  # Less than 1 hour
+        minutes = int(seconds / 60)
+        return f"{minutes} min ago"
+    elif seconds < 86400:  # Less than 1 day
+        hours = int(seconds / 3600)
+        minutes = int((seconds % 3600) / 60)
+        if minutes > 0:
+            return f"{hours} hour{'s' if hours > 1 else ''} {minutes} min ago"
+        return f"{hours} hour{'s' if hours > 1 else ''} ago"
+    else:  # Days
+        days = int(seconds / 86400)
+        hours = int((seconds % 86400) / 3600)
+        minutes = int((seconds % 3600) / 60)
+        
+        result = f"{days} day{'s' if days > 1 else ''}"
+        if hours > 0:
+            result += f" {hours} hour{'s' if hours > 1 else ''}"
+        if minutes > 0 and days < 7:  # Only show minutes for less than a week
+            result += f" {minutes} min"
+        return result + " ago"
+
 # Global variables for space component and database connection
 space_component = None
 db_connection = None
@@ -229,7 +281,7 @@ def submit_space():
             if existing_job:
                 if existing_job['status'] in ['pending', 'in_progress']:
                     flash(f'This space is already scheduled for download. Current status: {existing_job["status"]}', 'info')
-                    return redirect(url_for('status', job_id=existing_job['id']))
+                    return redirect(url_for('view_queue'))
                 elif existing_job['status'] == 'completed':
                     # Double-check if file actually exists (redundant but safe)
                     if file_exists:
@@ -246,8 +298,9 @@ def submit_space():
             flash('Failed to schedule the download', 'error')
             return redirect(url_for('index'))
         
-        # Redirect to status page
-        return redirect(url_for('status', job_id=job_id))
+        # Redirect to queue page
+        flash('Your download has been queued successfully!', 'success')
+        return redirect(url_for('view_queue'))
         
     except Exception as e:
         logger.error(f"Error submitting space: {e}", exc_info=True)
@@ -326,6 +379,54 @@ def all_spaces():
         
     except Exception as e:
         logger.error(f"Error listing all spaces: {e}", exc_info=True)
+        flash(f'An error occurred: {str(e)}', 'error')
+        return redirect(url_for('index'))
+
+@app.route('/queue')
+def view_queue():
+    """Display all spaces currently in the download queue."""
+    try:
+        # Get Space component
+        space = get_space_component()
+        
+        # Get all jobs that are pending or in progress
+        pending_jobs = space.list_download_jobs(status='pending')
+        in_progress_jobs = space.list_download_jobs(status='in_progress')
+        downloading_jobs = space.list_download_jobs(status='downloading')
+        
+        # Combine all active jobs
+        queue_jobs = []
+        
+        # Add status labels for clarity
+        for job in pending_jobs:
+            job['status_label'] = 'Pending'
+            job['status_class'] = 'secondary'
+            queue_jobs.append(job)
+            
+        for job in in_progress_jobs:
+            job['status_label'] = 'In Progress'
+            job['status_class'] = 'info'
+            queue_jobs.append(job)
+            
+        for job in downloading_jobs:
+            job['status_label'] = 'Downloading'
+            job['status_class'] = 'primary'
+            # Try to get progress information
+            if hasattr(job, 'progress'):
+                job['progress_percent'] = job.progress
+            elif hasattr(job, 'download_cnt'):
+                job['progress_percent'] = job.download_cnt
+            else:
+                job['progress_percent'] = 0
+            queue_jobs.append(job)
+        
+        # Sort by created_at (oldest first, so they appear in queue order)
+        queue_jobs.sort(key=lambda x: x.get('created_at', ''))
+        
+        return render_template('queue.html', queue_jobs=queue_jobs)
+        
+    except Exception as e:
+        logger.error(f"Error viewing queue: {e}", exc_info=True)
         flash(f'An error occurred: {str(e)}', 'error')
         return redirect(url_for('index'))
 
@@ -733,6 +834,86 @@ def api_queue():
         logger.error(f"Error in API queue: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/queue_status', methods=['GET'])
+def api_queue_status():
+    """API endpoint to get detailed queue status for real-time updates."""
+    try:
+        # Get Space component
+        space = get_space_component()
+        
+        # Get all jobs that are pending or in progress
+        pending_jobs = space.list_download_jobs(status='pending')
+        in_progress_jobs = space.list_download_jobs(status='in_progress')
+        downloading_jobs = space.list_download_jobs(status='downloading')
+        
+        # Combine and format all active jobs
+        queue_jobs = []
+        
+        # Process pending jobs
+        for job in pending_jobs:
+            queue_jobs.append({
+                'id': job.get('id'),
+                'space_id': job.get('space_id'),
+                'title': job.get('title', ''),
+                'status': 'pending',
+                'status_label': 'Pending',
+                'status_class': 'secondary',
+                'created_at': str(job.get('created_at', '')),
+                'space_url': job.get('space_url', ''),
+                'progress_percent': 0,
+                'progress_in_size': 0
+            })
+            
+        # Process in_progress jobs
+        for job in in_progress_jobs:
+            queue_jobs.append({
+                'id': job.get('id'),
+                'space_id': job.get('space_id'),
+                'title': job.get('title', ''),
+                'status': 'in_progress',
+                'status_label': 'In Progress',
+                'status_class': 'info',
+                'created_at': str(job.get('created_at', '')),
+                'space_url': job.get('space_url', ''),
+                'progress_percent': 0,
+                'progress_in_size': 0
+            })
+            
+        # Process downloading jobs
+        for job in downloading_jobs:
+            progress = 0
+            if hasattr(job, 'progress'):
+                progress = job.progress
+            elif hasattr(job, 'download_cnt'):
+                progress = job.download_cnt
+            elif isinstance(job, dict):
+                progress = job.get('progress', job.get('download_cnt', 0))
+                
+            queue_jobs.append({
+                'id': job.get('id'),
+                'space_id': job.get('space_id'),
+                'title': job.get('title', ''),
+                'status': 'downloading',
+                'status_label': 'Downloading',
+                'status_class': 'primary',
+                'created_at': str(job.get('created_at', '')),
+                'space_url': job.get('space_url', ''),
+                'progress_percent': progress,
+                'progress_in_size': job.get('progress_in_size', 0)
+            })
+        
+        # Sort by created_at (oldest first)
+        queue_jobs.sort(key=lambda x: x.get('created_at', ''))
+        
+        return jsonify({
+            'jobs': queue_jobs,
+            'total': len(queue_jobs)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in API queue status: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/status/<int:job_id>', methods=['GET'])
 def api_job_status(job_id):
     """API endpoint to get download job status by job ID."""
@@ -928,6 +1109,186 @@ def api_space_status(space_id):
         
     except Exception as e:
         logger.error(f"Error in space status API: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/spaces/<space_id>/notes', methods=['GET'])
+def get_space_notes(space_id):
+    """Get notes for a specific space."""
+    try:
+        # Get Space component
+        space = get_space_component()
+        
+        # Get cookie ID from query parameter
+        cookie_id = request.args.get('cookie_id')
+        user_id = session.get('user_id', 0)  # Default to 0 for non-logged-in users
+        
+        # Build query based on authentication
+        cursor = space.connection.cursor(dictionary=True)
+        if user_id > 0:
+            # Logged-in user: get notes by user_id
+            query = """
+                SELECT id, space_id, notes, user_id, cookie_id, created_at, updated_at
+                FROM space_notes
+                WHERE space_id = %s AND user_id = %s
+                ORDER BY updated_at DESC
+            """
+            cursor.execute(query, (space_id, user_id))
+        elif cookie_id:
+            # Non-logged-in user: get notes by cookie_id
+            query = """
+                SELECT id, space_id, notes, user_id, cookie_id, created_at, updated_at
+                FROM space_notes
+                WHERE space_id = %s AND cookie_id = %s AND user_id = 0
+                ORDER BY updated_at DESC
+            """
+            cursor.execute(query, (space_id, cookie_id))
+        else:
+            # No identification: return empty
+            return jsonify({'notes': []})
+        
+        notes = cursor.fetchall()
+        cursor.close()
+        
+        # Convert datetime objects to strings
+        for note in notes:
+            if note['created_at']:
+                note['created_at'] = note['created_at'].isoformat()
+            if note['updated_at']:
+                note['updated_at'] = note['updated_at'].isoformat()
+        
+        return jsonify({'notes': notes})
+        
+    except Exception as e:
+        logger.error(f"Error getting notes: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/spaces/<space_id>/notes', methods=['POST'])
+def create_space_note(space_id):
+    """Create a new note for a space."""
+    try:
+        # Get Space component
+        space = get_space_component()
+        
+        # Get note data
+        data = request.get_json()
+        notes_content = data.get('notes', '').strip()
+        cookie_id = data.get('cookie_id')
+        user_id = session.get('user_id', 0)
+        
+        if not notes_content:
+            return jsonify({'error': 'Note content is required'}), 400
+        
+        # Insert note
+        cursor = space.connection.cursor()
+        query = """
+            INSERT INTO space_notes (space_id, notes, user_id, cookie_id)
+            VALUES (%s, %s, %s, %s)
+        """
+        cursor.execute(query, (space_id, notes_content, user_id, cookie_id if user_id == 0 else None))
+        space.connection.commit()
+        
+        note_id = cursor.lastrowid
+        cursor.close()
+        
+        return jsonify({
+            'success': True,
+            'note_id': note_id,
+            'message': 'Note created successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error creating note: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/spaces/<space_id>/notes/<int:note_id>', methods=['PUT'])
+def update_space_note(space_id, note_id):
+    """Update an existing note."""
+    try:
+        # Get Space component
+        space = get_space_component()
+        
+        # Get note data
+        data = request.get_json()
+        notes_content = data.get('notes', '').strip()
+        cookie_id = data.get('cookie_id')
+        user_id = session.get('user_id', 0)
+        
+        if not notes_content:
+            return jsonify({'error': 'Note content is required'}), 400
+        
+        # Update note with ownership check
+        cursor = space.connection.cursor()
+        if user_id > 0:
+            query = """
+                UPDATE space_notes 
+                SET notes = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s AND space_id = %s AND user_id = %s
+            """
+            cursor.execute(query, (notes_content, note_id, space_id, user_id))
+        else:
+            query = """
+                UPDATE space_notes 
+                SET notes = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s AND space_id = %s AND cookie_id = %s AND user_id = 0
+            """
+            cursor.execute(query, (notes_content, note_id, space_id, cookie_id))
+        
+        affected_rows = cursor.rowcount
+        space.connection.commit()
+        cursor.close()
+        
+        if affected_rows > 0:
+            return jsonify({
+                'success': True,
+                'message': 'Note updated successfully'
+            })
+        else:
+            return jsonify({'error': 'Note not found or unauthorized'}), 404
+        
+    except Exception as e:
+        logger.error(f"Error updating note: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/spaces/<space_id>/notes/<int:note_id>', methods=['DELETE'])
+def delete_space_note(space_id, note_id):
+    """Delete a note."""
+    try:
+        # Get Space component
+        space = get_space_component()
+        
+        # Get identification
+        cookie_id = request.args.get('cookie_id')
+        user_id = session.get('user_id', 0)
+        
+        # Delete note with ownership check
+        cursor = space.connection.cursor()
+        if user_id > 0:
+            query = """
+                DELETE FROM space_notes 
+                WHERE id = %s AND space_id = %s AND user_id = %s
+            """
+            cursor.execute(query, (note_id, space_id, user_id))
+        else:
+            query = """
+                DELETE FROM space_notes 
+                WHERE id = %s AND space_id = %s AND cookie_id = %s AND user_id = 0
+            """
+            cursor.execute(query, (note_id, space_id, cookie_id))
+        
+        affected_rows = cursor.rowcount
+        space.connection.commit()
+        cursor.close()
+        
+        if affected_rows > 0:
+            return jsonify({
+                'success': True,
+                'message': 'Note deleted successfully'
+            })
+        else:
+            return jsonify({'error': 'Note not found or unauthorized'}), 404
+        
+    except Exception as e:
+        logger.error(f"Error deleting note: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/transcript_job/<job_id>', methods=['GET'])
