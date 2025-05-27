@@ -544,6 +544,18 @@ class Space:
             bool: True if successful, False otherwise
         """
         try:
+            # Check if connection is active, reconnect if needed
+            if not self.connection or not self.connection.is_connected():
+                logger.warning("Database connection lost, reconnecting...")
+                # Reload config and reconnect
+                with open("db_config.json", 'r') as f:
+                    config = json.load(f)
+                db_config = config["mysql"].copy()
+                if 'use_ssl' in db_config:
+                    del db_config['use_ssl']
+                self.connection = mysql.connector.connect(**db_config)
+                logger.info("Reconnected to database")
+            
             cursor = self.connection.cursor()
             
             # Update the title field
@@ -563,7 +575,7 @@ class Space:
                 
         except Error as e:
             logger.error(f"Error updating space title: {e}")
-            if self.connection.is_connected():
+            if self.connection and self.connection.is_connected():
                 self.connection.rollback()
             return False
     
@@ -1794,4 +1806,279 @@ class Space:
             return {
                 "success": False,
                 "error": str(e)
+            }
+    
+    def add_review(self, space_id, user_id, cookie_id, rating, review_text):
+        """
+        Add a review for a space.
+        
+        Args:
+            space_id (str): The space ID
+            user_id (int): The user ID (0 for anonymous)
+            cookie_id (str): The cookie ID (for anonymous users)
+            rating (int): Rating from 1-5
+            review_text (str): The review text
+            
+        Returns:
+            dict: Result with success status and review_id or error message
+        """
+        try:
+            # Validate rating
+            if not 1 <= rating <= 5:
+                return {"success": False, "error": "Rating must be between 1 and 5"}
+            
+            # Check if connection is active
+            if not self.connection or not self.connection.is_connected():
+                logger.warning("Database connection lost, reconnecting...")
+                with open("db_config.json", 'r') as f:
+                    config = json.load(f)
+                db_config = config["mysql"].copy()
+                if 'use_ssl' in db_config:
+                    del db_config['use_ssl']
+                self.connection = mysql.connector.connect(**db_config)
+            
+            cursor = self.connection.cursor()
+            
+            # Check if user already reviewed this space
+            if user_id > 0:
+                check_query = "SELECT id FROM space_reviews WHERE space_id = %s AND user_id = %s"
+                cursor.execute(check_query, (space_id, user_id))
+            else:
+                check_query = "SELECT id FROM space_reviews WHERE space_id = %s AND cookie_id = %s AND user_id = 0"
+                cursor.execute(check_query, (space_id, cookie_id))
+            
+            existing = cursor.fetchone()
+            if existing:
+                cursor.close()
+                return {"success": False, "error": "You have already reviewed this space"}
+            
+            # Insert review
+            insert_query = """
+                INSERT INTO space_reviews (space_id, user_id, cookie_id, rating, review)
+                VALUES (%s, %s, %s, %s, %s)
+            """
+            cursor.execute(insert_query, (
+                space_id, 
+                user_id, 
+                cookie_id if user_id == 0 else None,
+                rating,
+                review_text
+            ))
+            
+            review_id = cursor.lastrowid
+            self.connection.commit()
+            cursor.close()
+            
+            logger.info(f"Added review {review_id} for space {space_id}")
+            return {"success": True, "review_id": review_id}
+            
+        except Exception as e:
+            logger.error(f"Error adding review: {e}")
+            if self.connection and self.connection.is_connected():
+                self.connection.rollback()
+            return {"success": False, "error": str(e)}
+    
+    def update_review(self, review_id, user_id, cookie_id, rating, review_text):
+        """
+        Update an existing review.
+        
+        Args:
+            review_id (int): The review ID
+            user_id (int): The user ID (for permission check)
+            cookie_id (str): The cookie ID (for permission check)
+            rating (int): New rating from 1-5
+            review_text (str): New review text
+            
+        Returns:
+            dict: Result with success status
+        """
+        try:
+            # Validate rating
+            if not 1 <= rating <= 5:
+                return {"success": False, "error": "Rating must be between 1 and 5"}
+            
+            # Check if connection is active
+            if not self.connection or not self.connection.is_connected():
+                logger.warning("Database connection lost, reconnecting...")
+                with open("db_config.json", 'r') as f:
+                    config = json.load(f)
+                db_config = config["mysql"].copy()
+                if 'use_ssl' in db_config:
+                    del db_config['use_ssl']
+                self.connection = mysql.connector.connect(**db_config)
+            
+            cursor = self.connection.cursor()
+            
+            # Update with ownership check
+            if user_id > 0:
+                update_query = """
+                    UPDATE space_reviews 
+                    SET rating = %s, review = %s, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s AND user_id = %s
+                """
+                cursor.execute(update_query, (rating, review_text, review_id, user_id))
+            else:
+                update_query = """
+                    UPDATE space_reviews 
+                    SET rating = %s, review = %s, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s AND cookie_id = %s AND user_id = 0
+                """
+                cursor.execute(update_query, (rating, review_text, review_id, cookie_id))
+            
+            affected = cursor.rowcount
+            self.connection.commit()
+            cursor.close()
+            
+            if affected > 0:
+                logger.info(f"Updated review {review_id}")
+                return {"success": True}
+            else:
+                return {"success": False, "error": "Review not found or unauthorized"}
+                
+        except Exception as e:
+            logger.error(f"Error updating review: {e}")
+            if self.connection and self.connection.is_connected():
+                self.connection.rollback()
+            return {"success": False, "error": str(e)}
+    
+    def delete_review(self, review_id, user_id, cookie_id, space_id=None):
+        """
+        Delete a review. Users can delete their own reviews.
+        Space owners can delete any review on their space.
+        
+        Args:
+            review_id (int): The review ID
+            user_id (int): The user ID (for permission check)
+            cookie_id (str): The cookie ID (for permission check)
+            space_id (str): Optional space ID for owner check
+            
+        Returns:
+            dict: Result with success status
+        """
+        try:
+            # Check if connection is active
+            if not self.connection or not self.connection.is_connected():
+                logger.warning("Database connection lost, reconnecting...")
+                with open("db_config.json", 'r') as f:
+                    config = json.load(f)
+                db_config = config["mysql"].copy()
+                if 'use_ssl' in db_config:
+                    del db_config['use_ssl']
+                self.connection = mysql.connector.connect(**db_config)
+            
+            cursor = self.connection.cursor(dictionary=True)
+            
+            # First get review details
+            cursor.execute("SELECT space_id, user_id, cookie_id FROM space_reviews WHERE id = %s", (review_id,))
+            review = cursor.fetchone()
+            
+            if not review:
+                cursor.close()
+                return {"success": False, "error": "Review not found"}
+            
+            # Check if user is the reviewer
+            can_delete = False
+            if user_id > 0 and review['user_id'] == user_id:
+                can_delete = True
+            elif user_id == 0 and review['cookie_id'] == cookie_id and review['user_id'] == 0:
+                can_delete = True
+            
+            # If not the reviewer, check if user is the space owner
+            if not can_delete and space_id:
+                cursor.execute("SELECT user_id, cookie_id FROM spaces WHERE space_id = %s", (space_id,))
+                space = cursor.fetchone()
+                if space:
+                    if user_id > 0 and space['user_id'] == user_id:
+                        can_delete = True
+                    elif user_id == 0 and space['cookie_id'] == cookie_id and space['user_id'] == 0:
+                        can_delete = True
+            
+            if not can_delete:
+                cursor.close()
+                return {"success": False, "error": "Unauthorized to delete this review"}
+            
+            # Delete the review
+            cursor.execute("DELETE FROM space_reviews WHERE id = %s", (review_id,))
+            self.connection.commit()
+            cursor.close()
+            
+            logger.info(f"Deleted review {review_id}")
+            return {"success": True}
+            
+        except Exception as e:
+            logger.error(f"Error deleting review: {e}")
+            if self.connection and self.connection.is_connected():
+                self.connection.rollback()
+            return {"success": False, "error": str(e)}
+    
+    def get_reviews(self, space_id):
+        """
+        Get all reviews for a space with user information.
+        
+        Args:
+            space_id (str): The space ID
+            
+        Returns:
+            dict: Reviews data with average rating and individual reviews
+        """
+        try:
+            # Check if connection is active
+            if not self.connection or not self.connection.is_connected():
+                logger.warning("Database connection lost, reconnecting...")
+                with open("db_config.json", 'r') as f:
+                    config = json.load(f)
+                db_config = config["mysql"].copy()
+                if 'use_ssl' in db_config:
+                    del db_config['use_ssl']
+                self.connection = mysql.connector.connect(**db_config)
+            
+            cursor = self.connection.cursor(dictionary=True)
+            
+            # Get reviews with user info
+            query = """
+                SELECT r.*, u.email as user_email
+                FROM space_reviews r
+                LEFT JOIN users u ON r.user_id = u.id
+                WHERE r.space_id = %s
+                ORDER BY r.created_at DESC
+            """
+            cursor.execute(query, (space_id,))
+            reviews = cursor.fetchall()
+            
+            # Calculate average rating
+            if reviews:
+                avg_rating = sum(r['rating'] for r in reviews) / len(reviews)
+            else:
+                avg_rating = 0
+            
+            # Format reviews
+            for review in reviews:
+                if review['user_email']:
+                    review['author'] = review['user_email'].split('@')[0]
+                else:
+                    review['author'] = 'Anonymous'
+                
+                # Convert datetime to string
+                if review['created_at']:
+                    review['created_at'] = review['created_at'].isoformat()
+                if review['updated_at']:
+                    review['updated_at'] = review['updated_at'].isoformat()
+            
+            cursor.close()
+            
+            return {
+                "success": True,
+                "average_rating": round(avg_rating, 1),
+                "total_reviews": len(reviews),
+                "reviews": reviews
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting reviews: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "average_rating": 0,
+                "total_reviews": 0,
+                "reviews": []
             }

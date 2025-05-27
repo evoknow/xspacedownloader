@@ -87,7 +87,9 @@
                             <tr>
                                 <td>
                                     <div>
-                                        <strong class="space-title">{{ space.title if space.title else space.space_id }}</strong>
+                                        <a href="{{ url_for('space_page', space_id=space.space_id) }}" class="text-decoration-none">
+                                            <strong class="space-title">{{ space.title if space.title else space.space_id }}</strong>
+                                        </a>
                                         {% if space.title %}
                                         <br><small class="text-muted space-id">{{ space.space_id }}</small>
                                         {% endif %}

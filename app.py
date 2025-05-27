@@ -13,6 +13,8 @@ import string
 import requests
 from pathlib import Path
 from flask import Flask, request, render_template, redirect, url_for, flash, jsonify, session, send_file, Response
+from PIL import Image, ImageDraw, ImageFont
+from io import BytesIO
 
 # Load environment variables from .env file if it exists
 try:
@@ -698,6 +700,31 @@ def trim_audio(space_id):
         data = request.get_json()
         start_time = data.get('start_time', 0)
         end_time = data.get('end_time')  # None means end of file
+        cookie_id = data.get('cookie_id')
+        user_id = session.get('user_id', 0)
+        
+        # Check permissions - user must own the space
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        query = "SELECT user_id, cookie_id FROM spaces WHERE space_id = %s"
+        cursor.execute(query, (space_id,))
+        space_record = cursor.fetchone()
+        cursor.close()
+        
+        if not space_record:
+            return jsonify({'error': 'Space not found'}), 404
+        
+        # Check ownership
+        can_edit = False
+        if user_id > 0:
+            # Logged in user - must match user_id
+            can_edit = (space_record['user_id'] == user_id)
+        else:
+            # Not logged in - must match cookie_id
+            can_edit = (space_record['cookie_id'] == cookie_id and space_record['user_id'] == 0)
+        
+        if not can_edit:
+            return jsonify({'error': 'You do not have permission to trim this space'}), 403
         
         # Validate input
         if start_time < 0:
@@ -1008,6 +1035,22 @@ def space_page(space_id):
         except Exception as e:
             logger.error(f"Error getting clips: {e}")
             
+        # Check if user can edit this space
+        can_edit_space = False
+        user_id = session.get('user_id', 0)
+        cookie_id = request.cookies.get('xspace_user_id', '')
+        
+        if space_details:
+            space_user_id = space_details.get('user_id', 0)
+            space_cookie_id = space_details.get('cookie_id', '')
+            
+            if user_id > 0:
+                # Logged in user - must match user_id
+                can_edit_space = (space_user_id == user_id)
+            else:
+                # Not logged in - must match cookie_id
+                can_edit_space = (space_cookie_id == cookie_id and space_user_id == 0)
+            
         return render_template('space.html', 
                                space=space_details, 
                                file_path=file_path, 
@@ -1015,7 +1058,8 @@ def space_page(space_id):
                                file_extension=file_extension,
                                content_type=content_type,
                                job=job,
-                               clips=clips)
+                               clips=clips,
+                               can_edit_space=can_edit_space)
         
     except Exception as e:
         logger.error(f"Error displaying space page: {e}", exc_info=True)
@@ -1188,9 +1232,33 @@ def update_space_title(space_id):
             return jsonify({'error': 'No data provided'}), 400
             
         title = data.get('title', '').strip()
+        cookie_id = data.get('cookie_id')
+        user_id = session.get('user_id', 0)
         
         # Get Space component
         space = get_space_component()
+        
+        # Check permissions - user must own the space
+        cursor = space.connection.cursor(dictionary=True)
+        query = "SELECT user_id, cookie_id FROM spaces WHERE space_id = %s"
+        cursor.execute(query, (space_id,))
+        space_record = cursor.fetchone()
+        cursor.close()
+        
+        if not space_record:
+            return jsonify({'error': 'Space not found'}), 404
+        
+        # Check ownership
+        can_edit = False
+        if user_id > 0:
+            # Logged in user - must match user_id
+            can_edit = (space_record['user_id'] == user_id)
+        else:
+            # Not logged in - must match cookie_id
+            can_edit = (space_record['cookie_id'] == cookie_id and space_record['user_id'] == 0)
+        
+        if not can_edit:
+            return jsonify({'error': 'You do not have permission to edit this space'}), 403
         
         # Update title in database
         success = space.update_title(space_id, title)
@@ -1334,39 +1402,44 @@ def get_space_notes(space_id):
         cookie_id = request.args.get('cookie_id')
         user_id = session.get('user_id', 0)  # Default to 0 for non-logged-in users
         
-        # Build query based on authentication
+        # Get ALL notes for this space, marking which ones belong to current user
         cursor = space.connection.cursor(dictionary=True)
-        if user_id > 0:
-            # Logged-in user: get notes by user_id
-            query = """
-                SELECT id, space_id, notes, user_id, cookie_id, created_at, updated_at
-                FROM space_notes
-                WHERE space_id = %s AND user_id = %s
-                ORDER BY updated_at DESC
-            """
-            cursor.execute(query, (space_id, user_id))
-        elif cookie_id:
-            # Non-logged-in user: get notes by cookie_id
-            query = """
-                SELECT id, space_id, notes, user_id, cookie_id, created_at, updated_at
-                FROM space_notes
-                WHERE space_id = %s AND cookie_id = %s AND user_id = 0
-                ORDER BY updated_at DESC
-            """
-            cursor.execute(query, (space_id, cookie_id))
-        else:
-            # No identification: return empty
-            return jsonify({'notes': []})
-        
+        query = """
+            SELECT id, space_id, notes, user_id, cookie_id, created_at, updated_at
+            FROM space_notes
+            WHERE space_id = %s
+            ORDER BY updated_at DESC
+        """
+        cursor.execute(query, (space_id,))
         notes = cursor.fetchall()
         cursor.close()
         
-        # Convert datetime objects to strings
+        # Mark which notes can be edited by the current user
         for note in notes:
+            # User can edit if:
+            # 1. They are logged in and it's their note (user_id matches)
+            # 2. They are not logged in but have the cookie_id (anonymous note)
+            if user_id > 0:
+                note['can_edit'] = (note['user_id'] == user_id)
+            else:
+                note['can_edit'] = (note['cookie_id'] == cookie_id and note['user_id'] == 0)
+            
+            # Convert datetime objects to strings
             if note['created_at']:
                 note['created_at'] = note['created_at'].isoformat()
             if note['updated_at']:
                 note['updated_at'] = note['updated_at'].isoformat()
+            
+            # Add author info
+            if note['user_id'] > 0:
+                # Get user email for display
+                cursor = space.connection.cursor(dictionary=True)
+                cursor.execute("SELECT email FROM users WHERE id = %s", (note['user_id'],))
+                user = cursor.fetchone()
+                cursor.close()
+                note['author'] = user['email'].split('@')[0] if user else 'User'
+            else:
+                note['author'] = 'Anonymous'
         
         return jsonify({'notes': notes})
         
@@ -1503,6 +1576,159 @@ def delete_space_note(space_id, note_id):
         logger.error(f"Error deleting note: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/spaces/<space_id>/reviews', methods=['GET'])
+def get_space_reviews(space_id):
+    """Get reviews for a specific space."""
+    try:
+        # Get Space component
+        space = get_space_component()
+        
+        # Get reviews
+        result = space.get_reviews(space_id)
+        
+        if result['success']:
+            # Get current user info to mark editable reviews
+            user_id = session.get('user_id', 0)
+            cookie_id = request.args.get('cookie_id', '')
+            
+            # Check if user owns this space
+            cursor = space.connection.cursor(dictionary=True)
+            cursor.execute("SELECT user_id, cookie_id FROM spaces WHERE space_id = %s", (space_id,))
+            space_record = cursor.fetchone()
+            cursor.close()
+            
+            is_space_owner = False
+            if space_record:
+                if user_id > 0:
+                    is_space_owner = (space_record['user_id'] == user_id)
+                else:
+                    is_space_owner = (space_record['cookie_id'] == cookie_id and space_record['user_id'] == 0)
+            
+            # Mark which reviews can be edited/deleted
+            for review in result['reviews']:
+                # User can edit/delete their own review
+                can_edit = False
+                if user_id > 0:
+                    can_edit = (review['user_id'] == user_id)
+                else:
+                    can_edit = (review['cookie_id'] == cookie_id and review['user_id'] == 0)
+                
+                review['can_edit'] = can_edit
+                review['can_delete'] = can_edit or is_space_owner
+            
+            return jsonify({
+                'success': True,
+                'average_rating': result['average_rating'],
+                'total_reviews': result['total_reviews'],
+                'reviews': result['reviews'],
+                'is_space_owner': is_space_owner
+            })
+        else:
+            return jsonify(result), 500
+            
+    except Exception as e:
+        logger.error(f"Error getting reviews: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/spaces/<space_id>/reviews', methods=['POST'])
+def create_space_review(space_id):
+    """Create a new review for a space."""
+    try:
+        # Get Space component
+        space = get_space_component()
+        
+        # Get review data
+        data = request.get_json()
+        rating = data.get('rating')
+        review_text = data.get('review', '').strip()
+        cookie_id = data.get('cookie_id', '')
+        user_id = session.get('user_id', 0)
+        
+        # Validate input
+        if not rating:
+            return jsonify({'error': 'Rating is required'}), 400
+        
+        try:
+            rating = int(rating)
+        except:
+            return jsonify({'error': 'Invalid rating value'}), 400
+            
+        if not 1 <= rating <= 5:
+            return jsonify({'error': 'Rating must be between 1 and 5'}), 400
+        
+        # Add review
+        result = space.add_review(space_id, user_id, cookie_id, rating, review_text)
+        
+        if result['success']:
+            return jsonify(result)
+        else:
+            return jsonify(result), 400
+            
+    except Exception as e:
+        logger.error(f"Error creating review: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/spaces/<space_id>/reviews/<int:review_id>', methods=['PUT'])
+def update_space_review(space_id, review_id):
+    """Update an existing review."""
+    try:
+        # Get Space component
+        space = get_space_component()
+        
+        # Get review data
+        data = request.get_json()
+        rating = data.get('rating')
+        review_text = data.get('review', '').strip()
+        cookie_id = data.get('cookie_id', '')
+        user_id = session.get('user_id', 0)
+        
+        # Validate input
+        if not rating:
+            return jsonify({'error': 'Rating is required'}), 400
+        
+        try:
+            rating = int(rating)
+        except:
+            return jsonify({'error': 'Invalid rating value'}), 400
+            
+        if not 1 <= rating <= 5:
+            return jsonify({'error': 'Rating must be between 1 and 5'}), 400
+        
+        # Update review
+        result = space.update_review(review_id, user_id, cookie_id, rating, review_text)
+        
+        if result['success']:
+            return jsonify(result)
+        else:
+            return jsonify(result), 404
+            
+    except Exception as e:
+        logger.error(f"Error updating review: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/spaces/<space_id>/reviews/<int:review_id>', methods=['DELETE'])
+def delete_space_review(space_id, review_id):
+    """Delete a review."""
+    try:
+        # Get Space component
+        space = get_space_component()
+        
+        # Get user info
+        cookie_id = request.args.get('cookie_id', '')
+        user_id = session.get('user_id', 0)
+        
+        # Delete review (space_id is passed for owner check)
+        result = space.delete_review(review_id, user_id, cookie_id, space_id)
+        
+        if result['success']:
+            return jsonify(result)
+        else:
+            return jsonify(result), 404
+            
+    except Exception as e:
+        logger.error(f"Error deleting review: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/transcript_job/<job_id>', methods=['GET'])
 def api_get_transcript_job(job_id):
     """API endpoint to get transcript job status."""
@@ -1623,6 +1849,199 @@ def download_space(space_id):
         logger.error(f"Error downloading space: {e}", exc_info=True)
         flash(f'An error occurred: {str(e)}', 'error')
         return redirect(url_for('space_page', space_id=space_id))
+
+@app.route('/share/<space_id>.jpg')
+@app.route('/share/<space_id>.large.jpg')
+def share_image(space_id):
+    """Generate dynamic share image for a space."""
+    try:
+        # Determine image size based on route
+        is_large = request.path.endswith('.large.jpg')
+        width = 1200 if is_large else 300
+        height = 630 if is_large else 157
+        
+        # Get space details
+        space = get_space_component()
+        space_details = space.get_space(space_id)
+        
+        if not space_details:
+            # Return a default image or 404
+            return "Space not found", 404
+        
+        # Get space title and metadata
+        title = space_details.get('title', f'Space {space_id}')
+        metadata = space_details.get('metadata', {})
+        host_handle = metadata.get('host_handle', '') if metadata else ''
+        
+        # Create image with white background
+        img = Image.new('RGB', (width, height), color='white')
+        draw = ImageDraw.Draw(img)
+        
+        # Try to use a system font, fallback to default if not available
+        try:
+            # Try different font sizes for different image sizes
+            font_size = 48 if is_large else 20
+            title_font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", font_size)
+            handle_font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", int(font_size * 0.7))
+        except:
+            # Use default font if system font not found
+            title_font = ImageFont.load_default()
+            handle_font = ImageFont.load_default()
+        
+        # Define layout parameters
+        padding = 40 if is_large else 20
+        avatar_size = 120 if is_large else 60
+        avatar_x = padding
+        avatar_y = (height - avatar_size) // 2
+        
+        # Try to fetch host profile picture
+        avatar_img = None
+        if host_handle:
+            try:
+                # Remove @ if present
+                username = host_handle[1:] if host_handle.startswith('@') else host_handle
+                avatar_url = f"https://unavatar.io/twitter/{username}"
+                
+                # Download avatar with timeout
+                response = requests.get(avatar_url, timeout=5)
+                if response.status_code == 200:
+                    avatar_img = Image.open(BytesIO(response.content))
+                    # Resize to avatar size
+                    avatar_img = avatar_img.resize((avatar_size, avatar_size), Image.Resampling.LANCZOS)
+                    
+                    # Create circular mask
+                    mask = Image.new('L', (avatar_size, avatar_size), 0)
+                    mask_draw = ImageDraw.Draw(mask)
+                    mask_draw.ellipse([0, 0, avatar_size, avatar_size], fill=255)
+                    
+                    # Apply circular mask
+                    output = Image.new('RGBA', (avatar_size, avatar_size), (0, 0, 0, 0))
+                    output.paste(avatar_img, (0, 0))
+                    output.putalpha(mask)
+                    
+                    # Paste onto main image
+                    img.paste(output, (avatar_x, avatar_y), output)
+                    
+                    # Add purple border around avatar
+                    border_color = '#511fb2'
+                    border_width = 3 if is_large else 2
+                    draw.ellipse(
+                        [avatar_x - border_width, avatar_y - border_width, 
+                         avatar_x + avatar_size + border_width, avatar_y + avatar_size + border_width],
+                        outline=border_color,
+                        width=border_width
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to fetch avatar for {host_handle}: {e}")
+                avatar_img = None
+        
+        # Fallback to letter avatar if image fetch failed
+        if not avatar_img:
+            # Draw avatar placeholder (circle)
+            avatar_color = '#511fb2'  # Purple color matching the site theme
+            draw.ellipse(
+                [avatar_x, avatar_y, avatar_x + avatar_size, avatar_y + avatar_size],
+                fill=avatar_color,
+                outline=avatar_color
+            )
+            
+            # If we have a host handle, add the first letter in the avatar
+            if host_handle:
+                # Get first letter of handle (remove @ if present)
+                first_letter = host_handle[1] if host_handle.startswith('@') else host_handle[0]
+                # Calculate text position to center it in the circle
+                letter_font_size = 60 if is_large else 30
+                try:
+                    letter_font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", letter_font_size)
+                except:
+                    letter_font = title_font
+                
+                # Get text bounding box for centering
+                letter_bbox = draw.textbbox((0, 0), first_letter.upper(), font=letter_font)
+                letter_width = letter_bbox[2] - letter_bbox[0]
+                letter_height = letter_bbox[3] - letter_bbox[1]
+                letter_x = avatar_x + (avatar_size - letter_width) // 2
+                letter_y = avatar_y + (avatar_size - letter_height) // 2
+                
+                draw.text((letter_x, letter_y), first_letter.upper(), fill='white', font=letter_font)
+        
+        # Calculate text area
+        text_x = avatar_x + avatar_size + padding
+        text_width = width - text_x - padding
+        
+        # Draw host handle if available
+        text_y = avatar_y
+        if host_handle:
+            draw.text((text_x, text_y), host_handle, fill='#666666', font=handle_font)
+            text_y += int(font_size * 0.8)
+        
+        # Wrap and draw title
+        # Simple word wrapping
+        words = title.split()
+        lines = []
+        current_line = []
+        
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            bbox = draw.textbbox((0, 0), test_line, font=title_font)
+            if bbox[2] - bbox[0] <= text_width:
+                current_line.append(word)
+            else:
+                if current_line:
+                    lines.append(' '.join(current_line))
+                    current_line = [word]
+                else:
+                    lines.append(word)
+                    current_line = []
+        
+        if current_line:
+            lines.append(' '.join(current_line))
+        
+        # Draw title lines
+        for line in lines[:3]:  # Limit to 3 lines
+            draw.text((text_x, text_y), line, fill='#333333', font=title_font)
+            text_y += int(font_size * 1.2)
+        
+        # Add site branding at bottom
+        brand_text = "XSpace Downloader"
+        brand_font_size = 24 if is_large else 12
+        try:
+            brand_font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", brand_font_size)
+        except:
+            brand_font = handle_font
+        
+        brand_bbox = draw.textbbox((0, 0), brand_text, font=brand_font)
+        brand_width = brand_bbox[2] - brand_bbox[0]
+        brand_x = width - brand_width - padding
+        brand_y = height - padding - brand_font_size
+        draw.text((brand_x, brand_y), brand_text, fill='#999999', font=brand_font)
+        
+        # Convert to bytes
+        img_bytes = BytesIO()
+        img.save(img_bytes, format='JPEG', quality=85)
+        img_bytes.seek(0)
+        
+        # Return image with proper headers
+        response = send_file(
+            img_bytes,
+            mimetype='image/jpeg',
+            as_attachment=False,
+            download_name=f'{space_id}{"_large" if is_large else ""}.jpg'
+        )
+        
+        # Add cache headers (cache for 1 hour)
+        response.headers['Cache-Control'] = 'public, max-age=3600'
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error generating share image: {e}", exc_info=True)
+        # Return a 1x1 transparent pixel as fallback
+        img = Image.new('RGBA', (1, 1), (0, 0, 0, 0))
+        img_bytes = BytesIO()
+        img.save(img_bytes, format='PNG')
+        img_bytes.seek(0)
+        return send_file(img_bytes, mimetype='image/png')
         
 @app.errorhandler(404)
 def page_not_found(e):

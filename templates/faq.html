@@ -57,7 +57,11 @@
                                     <li>Add personal notes to spaces</li>
                                     <li>Access your downloads from any device</li>
                                     <li>Organize spaces with custom tags</li>
+                                    <li>Edit space titles for better organization</li>
+                                    <li>View your download history and statistics</li>
+                                    <li>Create audio clips from longer spaces</li>
                                 </ul>
+                                We automatically detect your country on login for better regional support.
                             </div>
                         </div>
                     </div>
@@ -167,8 +171,30 @@
                                     <li>Highlight key moments with timestamps</li>
                                     <li>Embed YouTube videos for reference</li>
                                     <li>Format text with rich editing tools</li>
+                                    <li>View note history and timestamps</li>
                                 </ul>
                                 Notes are private to your account and saved automatically.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq9a">
+                                What AI features are available?
+                            </button>
+                        </h2>
+                        <div id="faq9a" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                XSpace Downloader leverages advanced AI for several features:
+                                <ul>
+                                    <li><strong>Smart Transcription:</strong> Converts speech to text with speaker identification</li>
+                                    <li><strong>AI Summaries:</strong> Automatically generates concise summaries of long conversations</li>
+                                    <li><strong>Language Detection:</strong> Automatically identifies the spoken language</li>
+                                    <li><strong>Multilingual Support:</strong> Transcribe and summarize in the original language</li>
+                                    <li><strong>Context-Aware Translation:</strong> Maintains meaning and nuance across languages</li>
+                                </ul>
+                                These features use either OpenAI (GPT-4) or Anthropic (Claude) APIs, configurable in settings.
                             </div>
                         </div>
                     </div>
@@ -193,6 +219,69 @@
                         </div>
                     </div>
                     
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq10a">
+                                How do I trim or create clips from Spaces?
+                            </button>
+                        </h2>
+                        <div id="faq10a" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                You can create shorter clips from long Spaces using our trim and clip features:
+                                <ul>
+                                    <li><strong>Trim:</strong> Click the scissors icon on any Space to remove unwanted portions from the beginning or end</li>
+                                    <li><strong>Create Clips:</strong> Use the "Create Clip" button to extract specific segments with custom titles</li>
+                                    <li>Set precise start and end times using the audio player</li>
+                                    <li>Name your clips for easy identification</li>
+                                    <li>Download clips separately while keeping the original</li>
+                                </ul>
+                                Perfect for sharing highlights or important moments!
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq10b">
+                                Can I edit Space titles and metadata?
+                            </button>
+                        </h2>
+                        <div id="faq10b" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Yes! Logged-in users can customize Space information:
+                                <ul>
+                                    <li>Click the edit icon next to any Space title to rename it</li>
+                                    <li>Titles are updated instantly without page reload</li>
+                                    <li>Original metadata is preserved and can be viewed</li>
+                                    <li>Search works with both original and custom titles</li>
+                                    <li>Your custom titles sync across all your devices</li>
+                                </ul>
+                                This helps you organize Spaces with meaningful names instead of auto-generated IDs.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq10c">
+                                What is the Admin Dashboard?
+                            </button>
+                        </h2>
+                        <div id="faq10c" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                The Admin Dashboard (available to administrators only) provides comprehensive site management:
+                                <ul>
+                                    <li><strong>User Management:</strong> View all users, toggle admin status, suspend accounts</li>
+                                    <li><strong>Space Management:</strong> Monitor all downloaded spaces, remove inappropriate content</li>
+                                    <li><strong>Statistics:</strong> Track daily/weekly/monthly usage patterns</li>
+                                    <li><strong>Analytics:</strong> View most popular spaces, active users, and download trends</li>
+                                    <li><strong>System Health:</strong> Monitor queue status and system performance</li>
+                                </ul>
+                                Admins can access the dashboard via the Admin button in the navigation menu.
+                            </div>
+                        </div>
+                    </div>
+                    
                     <!-- Technical Questions -->
                     <h5 class="mt-5 mb-3 text-primary">Technical Questions</h5>
                     
@@ -209,8 +298,36 @@
                                     <li>Downloaded Spaces are associated with your account only</li>
                                     <li>Personal notes are private and encrypted</li>
                                     <li>No passwords are stored (we use secure email magic links)</li>
+                                    <li>Email login links expire after one use for security</li>
+                                    <li>We track minimal data: only login count and country for statistics</li>
                                     <li>You can delete your data at any time</li>
                                     <li>We don't share your information with third parties</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq11a">
+                                How does the email magic link login work?
+                            </button>
+                        </h2>
+                        <div id="faq11a" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Our passwordless authentication system is simple and secure:
+                                <ol>
+                                    <li>Enter your email address and click "Send Login Link"</li>
+                                    <li>Check your email for a secure login link</li>
+                                    <li>Click the link to instantly log in</li>
+                                    <li>The link expires after use or 24 hours for security</li>
+                                </ol>
+                                Benefits:
+                                <ul>
+                                    <li>No passwords to remember or manage</li>
+                                    <li>More secure than traditional passwords</li>
+                                    <li>Quick access from any device</li>
+                                    <li>Automatic migration of anonymous downloads to your account</li>
                                 </ul>
                             </div>
                         </div>
@@ -230,6 +347,14 @@
                                     <li>MySQL or MariaDB database</li>
                                     <li>FFmpeg for audio processing</li>
                                     <li>Optional: AI API keys for transcription/translation</li>
+                                </ul>
+                                The setup wizard (accessible at /setup) guides you through:
+                                <ul>
+                                    <li>Creating your first admin account</li>
+                                    <li>Configuring database connections with test functionality</li>
+                                    <li>Setting up email providers (SendGrid or Mailgun)</li>
+                                    <li>Adding AI service keys (OpenAI or Anthropic)</li>
+                                    <li>Testing all services before going live</li>
                                 </ul>
                                 Check our GitHub repository for detailed installation instructions.
                             </div>
