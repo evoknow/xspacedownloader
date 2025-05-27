@@ -8,6 +8,9 @@ import json
 import logging
 import datetime
 import subprocess
+import secrets
+import string
+import requests
 from pathlib import Path
 from flask import Flask, request, render_template, redirect, url_for, flash, jsonify, session, send_file, Response
 
@@ -292,8 +295,10 @@ def submit_space():
             logger.error(f"Error checking for existing jobs: {check_err}", exc_info=True)
             # Continue with normal flow if check fails
         
-        # Create a new download job
-        job_id = space.create_download_job(space_id)
+        # Create a new download job with user_id if logged in
+        user_id = session.get('user_id', 0)
+        cookie_id = session.get('cookie_id') if not user_id else None
+        job_id = space.create_download_job(space_id, user_id=user_id, cookie_id=cookie_id)
         if not job_id:
             flash('Failed to schedule the download', 'error')
             return redirect(url_for('index'))
@@ -670,11 +675,210 @@ def delete_clip(clip_id):
         logger.error(f"Error deleting clip: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/spaces/<space_id>/trim', methods=['POST'])
+def trim_audio(space_id):
+    """Trim an audio file using FFmpeg."""
+    try:
+        # Get request data
+        data = request.get_json()
+        start_time = data.get('start_time', 0)
+        end_time = data.get('end_time')  # None means end of file
+        
+        # Validate input
+        if start_time < 0:
+            return jsonify({'success': False, 'error': 'Start time cannot be negative'}), 400
+        
+        if end_time is not None and end_time <= start_time:
+            return jsonify({'success': False, 'error': 'End time must be after start time'}), 400
+        
+        # Find the audio file
+        download_dir = app.config['DOWNLOAD_DIR']
+        file_path = None
+        
+        for ext in ['mp3', 'm4a', 'wav']:
+            path = os.path.join(download_dir, f"{space_id}.{ext}")
+            if os.path.exists(path):
+                file_path = path
+                break
+        
+        if not file_path:
+            return jsonify({'success': False, 'error': 'Audio file not found'}), 404
+        
+        # Create a temporary file for the trimmed audio
+        temp_file = file_path + '.tmp'
+        
+        # Build FFmpeg command
+        cmd = ['ffmpeg', '-y', '-i', file_path]
+        
+        # Add start time
+        if start_time > 0:
+            cmd.extend(['-ss', str(start_time)])
+        
+        # Add duration if end time is specified
+        if end_time is not None:
+            duration = end_time - start_time
+            cmd.extend(['-t', str(duration)])
+        
+        # Copy codec to avoid re-encoding (faster)
+        cmd.extend(['-c', 'copy', temp_file])
+        
+        logger.info(f"Trimming audio with command: {' '.join(cmd)}")
+        
+        # Execute FFmpeg command
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            logger.info(f"FFmpeg output: {result.stdout}")
+            
+            # Replace original file with trimmed version
+            if os.path.exists(temp_file) and os.path.getsize(temp_file) > 0:
+                os.replace(temp_file, file_path)
+                logger.info(f"Successfully trimmed audio file: {file_path}")
+                
+                # Update file size in database
+                new_size = os.path.getsize(file_path)
+                space = get_space_component()
+                cursor = space.connection.cursor()
+                cursor.execute(
+                    "UPDATE spaces SET file_size = %s, updated_at = NOW() WHERE space_id = %s",
+                    (new_size, space_id)
+                )
+                space.connection.commit()
+                cursor.close()
+                
+                return jsonify({
+                    'success': True,
+                    'message': 'Audio trimmed successfully',
+                    'new_size': new_size
+                })
+            else:
+                return jsonify({'success': False, 'error': 'Failed to create trimmed file'}), 500
+                
+        except subprocess.CalledProcessError as e:
+            logger.error(f"FFmpeg error: {e.stderr}")
+            # Clean up temp file if it exists
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+            return jsonify({'success': False, 'error': f'FFmpeg error: {e.stderr}'}), 500
+            
+    except Exception as e:
+        logger.error(f"Error trimming audio: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 def is_valid_space_url(url):
     """Check if a given URL appears to be a valid X space URL."""
     # This pattern matches URLs like https://x.com/i/spaces/1dRJZEpyjlNGB
     pattern = r'https?://(?:www\.)?(?:twitter|x)\.com/\w+/(?:spaces|status)/\w+'
     return bool(re.match(pattern, url))
+
+def is_private_ip(ip):
+    """Check if IP is private/localhost"""
+    import ipaddress
+    try:
+        ip_obj = ipaddress.ip_address(ip)
+        return ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local
+    except:
+        return False
+
+def get_country_code_from_geoip2(ip):
+    """Get country code using local GeoIP2 database"""
+    try:
+        import geoip2.database
+        
+        # Look for database files
+        db_paths = [
+            os.path.join(os.path.dirname(__file__), 'data', 'GeoLite2-Country.mmdb'),
+            os.path.join(os.path.dirname(__file__), 'data', 'GeoLite2-Country-Test.mmdb'),
+            '/usr/share/GeoIP/GeoLite2-Country.mmdb',  # Common system location
+        ]
+        
+        db_path = None
+        for path in db_paths:
+            if os.path.exists(path):
+                db_path = path
+                break
+        
+        if not db_path:
+            logger.info("No GeoIP2 database found")
+            return None
+            
+        with geoip2.database.Reader(db_path) as reader:
+            response = reader.country(ip)
+            country_code = response.country.iso_code
+            logger.info(f"Got country code {country_code} from GeoIP2 database")
+            return country_code
+            
+    except geoip2.errors.AddressNotFoundError:
+        logger.info(f"IP {ip} not found in GeoIP2 database")
+        return None
+    except Exception as e:
+        logger.debug(f"GeoIP2 lookup failed: {e}")
+        return None
+
+def get_country_code(ip):
+    """Get country code from IP address using GeoIP2 database or online APIs"""
+    try:
+        # Check if it's a private/localhost IP
+        if is_private_ip(ip):
+            logger.info(f"IP {ip} is private/localhost, cannot geolocate")
+            # For testing purposes, try to get the public IP
+            try:
+                public_ip_response = requests.get('https://api.ipify.org?format=json', timeout=5)
+                if public_ip_response.status_code == 200:
+                    public_ip = public_ip_response.json().get('ip')
+                    logger.info(f"Using public IP {public_ip} instead of private IP {ip} for geolocation")
+                    ip = public_ip
+                else:
+                    return None
+            except:
+                logger.warning("Could not get public IP for geolocation")
+                return None
+        
+        # First try GeoIP2 database (fastest, no rate limits)
+        country = get_country_code_from_geoip2(ip)
+        if country:
+            return country
+        
+        # Fall back to online APIs
+        # First try ipapi.co
+        url = f"https://ipapi.co/{ip}/country/"
+        logger.info(f"Trying ipapi.co for IP {ip}")
+        response = requests.get(url, timeout=5)
+        logger.info(f"ipapi.co response status: {response.status_code}, text: {repr(response.text)}")
+        
+        if response.status_code == 200:
+            country = response.text.strip()
+            # Validate it's a 2-letter country code
+            if len(country) == 2 and country.isalpha():
+                logger.info(f"Got country code {country} from ipapi.co")
+                return country.upper()
+            else:
+                logger.warning(f"Invalid country code from ipapi.co: {repr(country)}")
+        elif response.status_code == 429:
+            # Rate limited, try alternative API
+            logger.info("ipapi.co rate limited, trying ip-api.com")
+            alt_url = f"http://ip-api.com/json/{ip}?fields=status,countryCode"
+            alt_response = requests.get(alt_url, timeout=5)
+            logger.info(f"ip-api.com response status: {alt_response.status_code}")
+            
+            if alt_response.status_code == 200:
+                data = alt_response.json()
+                logger.info(f"ip-api.com response data: {data}")
+                if data.get('status') == 'success':
+                    country = data.get('countryCode', '').strip()
+                    if len(country) == 2 and country.isalpha():
+                        logger.info(f"Got country code {country} from ip-api.com")
+                        return country.upper()
+                    else:
+                        logger.warning(f"Invalid country code from ip-api.com: {repr(country)}")
+                else:
+                    logger.warning(f"ip-api.com returned failure status for IP {ip}")
+        else:
+            logger.warning(f"Unexpected response from ipapi.co: {response.status_code}")
+        
+        return None
+    except Exception as e:
+        logger.error(f"Failed to get country code for IP {ip}: {e}", exc_info=True)
+        return None
 
 @app.route('/spaces/<space_id>')
 def space_page(space_id):
@@ -1990,6 +2194,260 @@ def api_get_transcripts_for_space(space_id):
     except Exception as e:
         logger.error(f"Error getting transcripts for space {space_id}: {e}", exc_info=True)
         return jsonify({'error': 'An unexpected error occurred'}), 500
+
+# Helper function to generate secure tokens
+def generate_secure_token(length=6):
+    """Generate a secure random token like YouTube video IDs."""
+    # Use URL-safe characters: letters (upper and lower) and digits
+    alphabet = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
+
+# Route for sending login link
+@app.route('/auth/send-login-link', methods=['POST'])
+def send_login_link():
+    """Send a magic login link to the user's email."""
+    try:
+        email = request.form.get('email', '').strip().lower()
+        
+        if not email:
+            flash('Email address is required', 'error')
+            return redirect(url_for('index'))
+        
+        # Basic email validation
+        if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
+            flash('Please enter a valid email address', 'error')
+            return redirect(url_for('index'))
+        
+        # Get database connection
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        # Check if user exists, create if not
+        cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
+        user = cursor.fetchone()
+        
+        if not user:
+            # Create new user with email only (no password needed)
+            cursor.execute(
+                "INSERT INTO users (email, password, status, is_admin, country) VALUES (%s, %s, %s, %s, %s)",
+                (email, '', 1, 0, None)  # Empty password, status = 1 (active), is_admin = 0 (not admin), country = NULL
+            )
+            space.connection.commit()
+            user_id = cursor.lastrowid
+        else:
+            user_id = user['id']
+        
+        # Generate login token
+        token = generate_secure_token(6)
+        expires_at = datetime.datetime.now() + datetime.timedelta(hours=24)
+        
+        # Store token in database
+        cursor.execute(
+            "INSERT INTO login_tokens (user_id, token, email, expires_at) VALUES (%s, %s, %s, %s)",
+            (user_id, token, email, expires_at)
+        )
+        space.connection.commit()
+        cursor.close()
+        
+        # Create login URL
+        base_url = request.url_root.rstrip('/')
+        login_url = f"{base_url}/auth/verify/{token}"
+        
+        # Send email using Email component
+        try:
+            from components.Email import Email
+            email_component = Email()
+            
+            subject = "Your XSpace Downloader Login Link"
+            body = f"""
+Hello!
+
+You requested a login link for XSpace Downloader. Click the link below to log in:
+
+{login_url}
+
+This link will expire in 24 hours.
+
+If you didn't request this link, you can safely ignore this email.
+
+Best regards,
+XSpace Downloader Team
+"""
+            
+            email_component.send(email, subject=subject, body=body, content_type='text/plain')
+            flash('Login link sent! Check your email inbox.', 'success')
+            
+        except Exception as email_error:
+            logger.error(f"Error sending login email: {email_error}")
+            flash('Error sending email. Please try again later.', 'error')
+            
+        return redirect(url_for('index'))
+        
+    except Exception as e:
+        logger.error(f"Error in send_login_link: {e}", exc_info=True)
+        flash('An error occurred. Please try again.', 'error')
+        return redirect(url_for('index'))
+
+# Route for verifying login token
+@app.route('/auth/verify/<token>')
+def verify_login_token(token):
+    """Verify the login token and log the user in."""
+    try:
+        # Get database connection
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        # First check if token exists at all
+        cursor.execute("""
+            SELECT lt.*, u.email, u.id as user_id
+            FROM login_tokens lt
+            JOIN users u ON lt.user_id = u.id
+            WHERE lt.token = %s
+        """, (token,))
+        
+        token_data = cursor.fetchone()
+        
+        if not token_data:
+            flash('This login link is invalid. Please request a new one.', 'error')
+            return redirect(url_for('index'))
+        
+        # Check if token is already used
+        if token_data['used']:
+            flash('This login link has already been used. Please request a new one.', 'warning')
+            return redirect(url_for('index'))
+        
+        # Check if token is expired
+        cursor.execute("""
+            SELECT expires_at > NOW() as is_valid
+            FROM login_tokens
+            WHERE token = %s
+        """, (token,))
+        
+        validity = cursor.fetchone()
+        if not validity['is_valid']:
+            flash('This login link has expired. Please request a new one.', 'warning')
+            return redirect(url_for('index'))
+        
+        # Mark token as used
+        cursor.execute(
+            "UPDATE login_tokens SET used = TRUE WHERE id = %s",
+            (token_data['id'],)
+        )
+        
+        # Get cookie_id from session if exists
+        cookie_id = session.get('cookie_id')
+        
+        if cookie_id:
+            # Migrate cookie-based data to user account
+            # Update spaces
+            cursor.execute("""
+                UPDATE spaces 
+                SET user_id = %s 
+                WHERE cookie_id = %s AND user_id = 0
+            """, (token_data['user_id'], cookie_id))
+            
+            # Update space_notes
+            cursor.execute("""
+                UPDATE space_notes 
+                SET user_id = %s, cookie_id = NULL 
+                WHERE cookie_id = %s AND user_id = 0
+            """, (token_data['user_id'], cookie_id))
+            
+            # Update download_jobs
+            cursor.execute("""
+                UPDATE download_jobs 
+                SET user_id = %s 
+                WHERE cookie_id = %s AND user_id = 0
+            """, (token_data['user_id'], cookie_id))
+            
+            logger.info(f"Migrated cookie data {cookie_id} to user {token_data['user_id']}")
+        
+        space.connection.commit()
+        
+        # Update last login time
+        cursor.execute(
+            "UPDATE users SET last_logged_in = NOW() WHERE id = %s",
+            (token_data['user_id'],)
+        )
+        
+        # Check if user needs country set (first login)
+        cursor.execute(
+            "SELECT country FROM users WHERE id = %s",
+            (token_data['user_id'],)
+        )
+        user_country_row = cursor.fetchone()
+        logger.info(f"User country check - user_id: {token_data['user_id']}, country_row: {user_country_row}")
+        
+        if user_country_row:
+            country_value = user_country_row.get('country')
+            logger.info(f"Country value from DB: {repr(country_value)}")
+            
+            if country_value is None or country_value == '':
+                # Get IP address from request
+                user_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+                logger.info(f"User IP address: {user_ip}, X-Forwarded-For: {request.headers.get('X-Forwarded-For')}, remote_addr: {request.remote_addr}")
+                
+                if user_ip:
+                    # Handle comma-separated IPs from proxy headers
+                    user_ip = user_ip.split(',')[0].strip()
+                    logger.info(f"Using IP for geolocation: {user_ip}")
+                    
+                    # Get country code from IP
+                    country_code = get_country_code(user_ip)
+                    logger.info(f"Geolocation result: {country_code}")
+                    
+                    if country_code:
+                        # Update user's country
+                        cursor.execute(
+                            "UPDATE users SET country = %s WHERE id = %s",
+                            (country_code, token_data['user_id'])
+                        )
+                        logger.info(f"Set country {country_code} for user {token_data['user_id']} from IP {user_ip}")
+                    else:
+                        logger.warning(f"Could not determine country for IP {user_ip}")
+                else:
+                    logger.warning("No IP address available for geolocation")
+            else:
+                logger.info(f"User already has country set: {country_value}")
+        else:
+            logger.error(f"Could not fetch user record for user_id {token_data['user_id']}")
+        
+        space.connection.commit()
+        cursor.close()
+        
+        # Set session variables
+        session['user_id'] = token_data['user_id']
+        session['user_email'] = token_data['email']
+        session.permanent = True  # Make session persistent
+        
+        flash(f'Welcome! You are now logged in as {token_data["email"]}', 'success')
+        return redirect(url_for('index'))
+        
+    except Exception as e:
+        logger.error(f"Error verifying login token: {e}", exc_info=True)
+        flash('An error occurred during login. Please try again.', 'error')
+        return redirect(url_for('index'))
+
+# Route for logout
+@app.route('/auth/logout')
+def logout():
+    """Log the user out."""
+    session.pop('user_id', None)
+    session.pop('user_email', None)
+    flash('You have been logged out successfully.', 'info')
+    return redirect(url_for('index'))
+
+# Route for FAQ page
+@app.route('/faq')
+def faq():
+    """Display the FAQ page."""
+    return render_template('faq.html')
+
+# Route for About page
+@app.route('/about')
+def about():
+    """Display the About page."""
+    return render_template('about.html')
 
 # Route for transcribing a space
 @app.route('/api/transcribe/<space_id>', methods=['POST'])

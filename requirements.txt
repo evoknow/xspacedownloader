@@ -9,3 +9,5 @@ pydub>=0.25.1
 audioop-lts>=0.2.1; python_version >= '3.13'
 # Additional dependencies for translation
 six>=1.14.0
+# GeoIP2 for country detection
+geoip2>=4.7.0
