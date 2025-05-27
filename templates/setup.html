@@ -1,0 +1,490 @@
+{% extends "base.html" %}
+
+{% block title %}Setup Wizard - XSpace Downloader{% endblock %}
+
+{% block head %}
+<style>
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+    .spin {
+        display: inline-block;
+        animation: spin 1s linear infinite;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h3 class="mb-0">
+                        <i class="bi bi-gear-fill"></i> XSpace Downloader Setup Wizard
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <!-- Progress Bar -->
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between mb-2">
+                            {% if admin_exists %}
+                            <a href="{{ url_for('setup', step=1) }}" class="badge bg-primary text-decoration-none">1. Admin Setup</a>
+                            <a href="{{ url_for('setup', step=2) }}" class="badge {% if step >= 2 %}bg-primary{% else %}bg-secondary{% endif %} text-decoration-none">2. Database Config</a>
+                            <a href="{{ url_for('setup', step=3) }}" class="badge {% if step >= 3 %}bg-primary{% else %}bg-secondary{% endif %} text-decoration-none">3. API Keys</a>
+                            {% else %}
+                            <span class="badge {% if step >= 1 %}bg-primary{% else %}bg-secondary{% endif %}">1. Admin Setup</span>
+                            <span class="badge {% if step >= 2 %}bg-primary{% else %}bg-secondary{% endif %}">2. Database Config</span>
+                            <span class="badge {% if step >= 3 %}bg-primary{% else %}bg-secondary{% endif %}">3. API Keys</span>
+                            {% endif %}
+                        </div>
+                        <div class="progress" style="height: 10px;">
+                            <div class="progress-bar" role="progressbar" style="width: {% if step == 1 %}33%{% elif step == 2 %}66%{% else %}100%{% endif %};" aria-valuenow="{{ step * 33 }}" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                    </div>
+
+                    <!-- Step 1: Admin Email -->
+                    {% if step == 1 %}
+                        {% if not admin_exists %}
+                        <form method="POST" action="{{ url_for('setup') }}">
+                            <input type="hidden" name="step" value="1">
+                            <h4 class="mb-3">Step 1: Create Admin Account</h4>
+                            <p class="text-muted">No administrator account exists. Please create one to continue.</p>
+                            
+                            <div class="mb-3">
+                                <label for="admin_email" class="form-label">Admin Email Address</label>
+                                <input type="email" class="form-control" id="admin_email" name="admin_email" required placeholder="admin@example.com">
+                                <div class="form-text">This email will be used for admin login and system notifications.</div>
+                            </div>
+                            
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle"></i> You will receive a login link at this email address for future access.
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary">
+                                Create Admin & Continue <i class="bi bi-arrow-right"></i>
+                            </button>
+                        </form>
+                        {% else %}
+                        <div>
+                            <h4 class="mb-3">Step 1: Admin Account</h4>
+                            <div class="alert alert-success">
+                                <i class="bi bi-check-circle"></i> Admin account already exists. You are currently logged in as admin.
+                            </div>
+                            <p>Current admin email: <strong>{{ session.get('user_email', 'Unknown') }}</strong></p>
+                            <a href="{{ url_for('setup', step=2) }}" class="btn btn-primary">
+                                Continue to Database Config <i class="bi bi-arrow-right"></i>
+                            </a>
+                        </div>
+                        {% endif %}
+                    {% endif %}
+
+                    <!-- Step 2: Database Configuration -->
+                    {% if step == 2 %}
+                    <form method="POST" action="{{ url_for('setup') }}">
+                        <input type="hidden" name="step" value="2">
+                        <h4 class="mb-3">Step 2: Database Configuration</h4>
+                        <p class="text-muted">Configure your MySQL database connection.</p>
+                        
+                        <div class="row">
+                            <div class="col-md-8 mb-3">
+                                <label for="db_host" class="form-label">Database Host</label>
+                                <input type="text" class="form-control" id="db_host" name="db_host" value="{{ config.get('db_host', 'localhost') if config else 'localhost' }}" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="db_port" class="form-label">Port</label>
+                                <input type="number" class="form-control" id="db_port" name="db_port" value="{{ config.get('db_port', 3306) if config else 3306 }}" required>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="db_name" class="form-label">Database Name</label>
+                            <input type="text" class="form-control" id="db_name" name="db_name" value="{{ config.get('db_name', '') if config else '' }}" placeholder="xspacedownloader" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="db_user" class="form-label">Database Username</label>
+                            <input type="text" class="form-control" id="db_user" name="db_user" value="{{ config.get('db_user', '') if config else '' }}" placeholder="xspaceuser" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="db_password" class="form-label">Database Password</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="db_password" name="db_password" value="{{ config.get('db_password', '') if config else '' }}" required>
+                                <button class="btn btn-outline-secondary" type="button" id="togglePassword">
+                                    <i class="bi bi-eye" id="togglePasswordIcon"></i>
+                                </button>
+                            </div>
+                            <div class="form-text">This will be saved in db_config.json</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <button type="button" class="btn btn-secondary" onclick="testDatabaseConnection()">
+                                <i class="bi bi-plug"></i> Test Connection
+                            </button>
+                            <span id="connectionStatus" class="ms-3"></span>
+                        </div>
+                        
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle"></i> Make sure the database and user exist before continuing.
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary">
+                            Save & Continue <i class="bi bi-arrow-right"></i>
+                        </button>
+                    </form>
+                    {% endif %}
+
+                    <!-- Step 3: API Configuration -->
+                    {% if step == 3 %}
+                    <form method="POST" action="{{ url_for('setup') }}">
+                        <input type="hidden" name="step" value="3">
+                        <h4 class="mb-3">Step 3: API Configuration</h4>
+                        <p class="text-muted">Configure email and AI services (optional but recommended).</p>
+                        
+                        <!-- Email Configuration -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="bi bi-envelope"></i> Email Configuration</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label for="mail_provider" class="form-label">Email Provider</label>
+                                    <select class="form-control" id="mail_provider" name="mail_provider" onchange="toggleMailProvider()">
+                                        <option value="">None</option>
+                                        <option value="sendgrid" {% if config and config.get('email_provider') == 'sendgrid' %}selected{% endif %}>SendGrid</option>
+                                        <option value="mailgun" {% if config and config.get('email_provider') == 'mailgun' %}selected{% endif %}>Mailgun</option>
+                                    </select>
+                                </div>
+                                
+                                <div id="mail_config" style="display: none;">
+                                    <div class="mb-3">
+                                        <label for="mail_api_key" class="form-label">API Key</label>
+                                        <input type="text" class="form-control" id="mail_api_key" name="mail_api_key" value="" placeholder="Enter API key">
+                                    </div>
+                                    
+                                    <div class="mb-3" id="mailgun_domain_div" style="display: none;">
+                                        <label for="mailgun_domain" class="form-label">Mailgun Domain</label>
+                                        <input type="text" class="form-control" id="mailgun_domain" name="mailgun_domain" value="{{ config.get('MAILGUN_DOMAIN', '') if config else '' }}" placeholder="mg.yourdomain.com">
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="mail_from" class="form-label">From Email Address</label>
+                                        <input type="email" class="form-control" id="mail_from" name="mail_from" value="" placeholder="noreply@yourdomain.com">
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="mail_from_name" class="form-label">From Name</label>
+                                        <input type="text" class="form-control" id="mail_from_name" name="mail_from_name" value="{{ config.get('email_from_name', 'XSpace Downloader') if config else 'XSpace Downloader' }}" placeholder="XSpace Downloader">
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="test_email" class="form-label">Test Email Address</label>
+                                        <div class="input-group">
+                                            <input type="email" class="form-control" id="test_email" placeholder="test@example.com">
+                                            <button type="button" class="btn btn-secondary" onclick="testEmailConfig()">
+                                                <i class="bi bi-envelope-check"></i> Send Test Email
+                                            </button>
+                                        </div>
+                                        <div id="emailTestStatus" class="mt-2"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- AI Configuration -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="bi bi-cpu"></i> AI Services Configuration</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label for="openai_api_key" class="form-label">OpenAI API Key</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="openai_api_key" name="openai_api_key" value="{{ config.get('OPENAI_API_KEY', '') if config else '' }}" placeholder="sk-...">
+                                        <button type="button" class="btn btn-secondary" onclick="testOpenAI()">
+                                            <i class="bi bi-robot"></i> Test
+                                        </button>
+                                    </div>
+                                    <div class="form-text">For transcription and translation features</div>
+                                    <div id="openaiTestStatus" class="mt-2"></div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="anthropic_api_key" class="form-label">Anthropic API Key</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="anthropic_api_key" name="anthropic_api_key" value="{{ config.get('ANTHROPIC_API_KEY', '') if config else '' }}" placeholder="sk-ant-...">
+                                        <button type="button" class="btn btn-secondary" onclick="testAnthropic()">
+                                            <i class="bi bi-robot"></i> Test
+                                        </button>
+                                    </div>
+                                    <div class="form-text">For Claude AI features</div>
+                                    <div id="anthropicTestStatus" class="mt-2"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> API keys will be saved in the .env file. You can update them later.
+                        </div>
+                        
+                        <button type="submit" class="btn btn-success">
+                            <i class="bi bi-check"></i> Complete Setup
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Store config data from server
+const configData = {{ config|tojson if config else '{}' }};
+console.log('Config data loaded:', configData);
+
+function toggleMailProvider() {
+    const provider = document.getElementById('mail_provider').value;
+    const mailConfig = document.getElementById('mail_config');
+    const mailgunDomain = document.getElementById('mailgun_domain_div');
+    const apiKeyField = document.getElementById('mail_api_key');
+    const fromEmailField = document.getElementById('mail_from');
+    
+    if (provider) {
+        mailConfig.style.display = 'block';
+        mailgunDomain.style.display = provider === 'mailgun' ? 'block' : 'none';
+        
+        // Populate fields based on provider
+        if (provider === 'sendgrid' && configData.email_provider === 'sendgrid') {
+            apiKeyField.value = configData.email_api_key || '';
+            fromEmailField.value = configData.email_from_email || '';
+        } else if (provider === 'mailgun' && configData.email_provider === 'mailgun') {
+            apiKeyField.value = configData.email_api_key || '';
+            fromEmailField.value = configData.email_from_email || '';
+        } else {
+            // Clear fields if switching to a different provider
+            apiKeyField.value = '';
+            fromEmailField.value = '';
+        }
+    } else {
+        mailConfig.style.display = 'none';
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize mail provider fields
+    if (document.getElementById('mail_provider')) {
+        const provider = document.getElementById('mail_provider').value;
+        
+        // If a provider is already selected, show the fields
+        if (provider) {
+            const mailConfig = document.getElementById('mail_config');
+            const mailgunDomain = document.getElementById('mailgun_domain_div');
+            const apiKeyField = document.getElementById('mail_api_key');
+            const fromEmailField = document.getElementById('mail_from');
+            
+            mailConfig.style.display = 'block';
+            
+            if (provider === 'sendgrid' && configData.email_provider === 'sendgrid') {
+                apiKeyField.value = configData.email_api_key || '';
+                fromEmailField.value = configData.email_from_email || '';
+                mailgunDomain.style.display = 'none';
+            } else if (provider === 'mailgun' && configData.email_provider === 'mailgun') {
+                apiKeyField.value = configData.email_api_key || '';
+                fromEmailField.value = configData.email_from_email || '';
+                mailgunDomain.style.display = 'block';
+                // Also populate the Mailgun domain field
+                const domainField = document.getElementById('mailgun_domain');
+                if (domainField && configData.mailgun_domain) {
+                    domainField.value = configData.mailgun_domain;
+                }
+            }
+        }
+        
+        toggleMailProvider();
+    }
+    
+    // Password toggle functionality
+    const togglePassword = document.getElementById('togglePassword');
+    if (togglePassword) {
+        togglePassword.addEventListener('click', function() {
+            const passwordField = document.getElementById('db_password');
+            const icon = document.getElementById('togglePasswordIcon');
+            
+            if (passwordField.type === 'password') {
+                passwordField.type = 'text';
+                icon.classList.remove('bi-eye');
+                icon.classList.add('bi-eye-slash');
+            } else {
+                passwordField.type = 'password';
+                icon.classList.remove('bi-eye-slash');
+                icon.classList.add('bi-eye');
+            }
+        });
+    }
+});
+
+// Test database connection
+function testDatabaseConnection() {
+    const statusSpan = document.getElementById('connectionStatus');
+    statusSpan.innerHTML = '<i class="bi bi-arrow-repeat spin"></i> Testing connection...';
+    statusSpan.className = 'ms-3 text-info';
+    
+    // Get form values
+    const host = document.getElementById('db_host').value;
+    const port = document.getElementById('db_port').value;
+    const database = document.getElementById('db_name').value;
+    const user = document.getElementById('db_user').value;
+    const password = document.getElementById('db_password').value;
+    
+    // Send test request
+    fetch('/setup/test-db', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            host: host,
+            port: port,
+            database: database,
+            user: user,
+            password: password
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            statusSpan.innerHTML = '<i class="bi bi-check-circle"></i> Connection successful!';
+            statusSpan.className = 'ms-3 text-success';
+        } else {
+            statusSpan.innerHTML = '<i class="bi bi-x-circle"></i> ' + (data.error || 'Connection failed');
+            statusSpan.className = 'ms-3 text-danger';
+        }
+    })
+    .catch(error => {
+        statusSpan.innerHTML = '<i class="bi bi-x-circle"></i> Error testing connection';
+        statusSpan.className = 'ms-3 text-danger';
+    });
+}
+
+// Test email configuration
+function testEmailConfig() {
+    const statusDiv = document.getElementById('emailTestStatus');
+    const testEmail = document.getElementById('test_email').value;
+    const provider = document.getElementById('mail_provider').value;
+    const apiKey = document.getElementById('mail_api_key').value;
+    const fromEmail = document.getElementById('mail_from').value;
+    const fromName = document.getElementById('mail_from_name').value;
+    const mailgunDomain = document.getElementById('mailgun_domain') ? document.getElementById('mailgun_domain').value : '';
+    
+    if (!testEmail) {
+        statusDiv.innerHTML = '<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> Please enter a test email address</div>';
+        return;
+    }
+    
+    if (!provider || !apiKey || !fromEmail) {
+        statusDiv.innerHTML = '<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> Please fill in all email configuration fields</div>';
+        return;
+    }
+    
+    statusDiv.innerHTML = '<div class="alert alert-info"><i class="bi bi-arrow-repeat spin"></i> Sending test email...</div>';
+    
+    fetch('/setup/test-email', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            provider: provider,
+            api_key: apiKey,
+            from_email: fromEmail,
+            from_name: fromName,
+            mailgun_domain: mailgunDomain,
+            test_email: testEmail
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            statusDiv.innerHTML = '<div class="alert alert-success"><i class="bi bi-check-circle"></i> Test email sent successfully! Check your inbox.</div>';
+        } else {
+            statusDiv.innerHTML = '<div class="alert alert-danger"><i class="bi bi-x-circle"></i> ' + (data.error || 'Failed to send test email') + '</div>';
+        }
+    })
+    .catch(error => {
+        statusDiv.innerHTML = '<div class="alert alert-danger"><i class="bi bi-x-circle"></i> Error testing email configuration</div>';
+    });
+}
+
+// Test OpenAI API
+function testOpenAI() {
+    const statusDiv = document.getElementById('openaiTestStatus');
+    const apiKey = document.getElementById('openai_api_key').value;
+    
+    if (!apiKey) {
+        statusDiv.innerHTML = '<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> Please enter an API key</div>';
+        return;
+    }
+    
+    statusDiv.innerHTML = '<div class="alert alert-info"><i class="bi bi-arrow-repeat spin"></i> Testing OpenAI API...</div>';
+    
+    fetch('/setup/test-openai', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            api_key: apiKey
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            statusDiv.innerHTML = '<div class="alert alert-success"><i class="bi bi-check-circle"></i> ' + (data.message || 'API key is valid!') + '</div>';
+        } else {
+            statusDiv.innerHTML = '<div class="alert alert-danger"><i class="bi bi-x-circle"></i> ' + (data.error || 'Invalid API key') + '</div>';
+        }
+    })
+    .catch(error => {
+        statusDiv.innerHTML = '<div class="alert alert-danger"><i class="bi bi-x-circle"></i> Error testing API</div>';
+    });
+}
+
+// Test Anthropic API
+function testAnthropic() {
+    const statusDiv = document.getElementById('anthropicTestStatus');
+    const apiKey = document.getElementById('anthropic_api_key').value;
+    
+    if (!apiKey) {
+        statusDiv.innerHTML = '<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> Please enter an API key</div>';
+        return;
+    }
+    
+    statusDiv.innerHTML = '<div class="alert alert-info"><i class="bi bi-arrow-repeat spin"></i> Testing Anthropic API...</div>';
+    
+    fetch('/setup/test-anthropic', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            api_key: apiKey
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            statusDiv.innerHTML = '<div class="alert alert-success"><i class="bi bi-check-circle"></i> ' + (data.message || 'API key is valid!') + '</div>';
+        } else {
+            statusDiv.innerHTML = '<div class="alert alert-danger"><i class="bi bi-x-circle"></i> ' + (data.error || 'Invalid API key') + '</div>';
+        }
+    })
+    .catch(error => {
+        statusDiv.innerHTML = '<div class="alert alert-danger"><i class="bi bi-x-circle"></i> Error testing API</div>';
+    });
+}
+</script>
+{% endblock %}

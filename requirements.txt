@@ -11,3 +11,8 @@ audioop-lts>=0.2.1; python_version >= '3.13'
 six>=1.14.0
 # GeoIP2 for country detection
 geoip2>=4.7.0
+# Email providers
+sendgrid>=6.9.7
+# AI providers
+openai>=0.27.0
+anthropic>=0.3.0

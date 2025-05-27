@@ -15,13 +15,134 @@
         }
         
         body {
-            padding-top: 20px;
+            padding-top: 100px; /* More space for fixed navbar */
             padding-bottom: 20px;
             transition: background-color 0.3s ease, color 0.3s ease;
         }
         
-        .container {
-            max-width: 800px;
+        /* Wider container for desktop, responsive for mobile */
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 15px;
+        }
+        
+        .flash-messages {
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .flash-messages .alert {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid;
+        }
+        
+        .flash-messages .alert-error,
+        .flash-messages .alert-danger {
+            border-left-color: #dc3545;
+        }
+        
+        .flash-messages .alert-warning {
+            border-left-color: #ffc107;
+        }
+        
+        .flash-messages .alert-success {
+            border-left-color: #28a745;
+        }
+        
+        .flash-messages .alert-info {
+            border-left-color: #17a2b8;
+        }
+        
+        @media (max-width: 768px) {
+            .main-container {
+                padding: 0 10px;
+            }
+        }
+        
+        /* Sticky navbar */
+        .navbar-sticky {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1030;
+            background-color: var(--bs-body-bg);
+            border-bottom: 1px solid var(--border-color-light);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        html[data-bs-theme="dark"] .navbar-sticky {
+            border-bottom-color: var(--border-color-dark);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .navbar-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .navbar-brand {
+            font-size: 1.5rem;
+            font-weight: 500;
+            color: var(--bs-body-color);
+            text-decoration: none;
+        }
+        
+        .navbar-brand:hover {
+            color: var(--bs-primary);
+        }
+        
+        .navbar-nav {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            flex-direction: row;
+            flex-wrap: nowrap;
+        }
+        
+        .navbar-nav li {
+            display: inline-flex;
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                padding-top: 120px; /* More space for wrapped navbar */
+            }
+            
+            .navbar-content {
+                padding: 10px 15px;
+                flex-wrap: wrap;
+            }
+            
+            .navbar-brand {
+                font-size: 1.2rem;
+                width: 100%;
+                margin-bottom: 10px;
+            }
+            
+            .navbar-nav {
+                gap: 5px;
+                width: 100%;
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+            
+            .navbar-nav .btn {
+                padding: 0.25rem 0.5rem;
+                font-size: 0.875rem;
+            }
+            
+            .navbar-nav li {
+                margin-bottom: 5px;
+            }
         }
         
         .header {
@@ -144,15 +265,49 @@
     {% block head %}{% endblock %}
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h3 class="text-muted">XSpace Downloader</h3>
-            <div class="theme-toggle-container">
-                <i class="bi bi-sun-fill theme-toggle" id="light-mode-toggle"></i>
-                <i class="bi bi-moon-fill theme-toggle" id="dark-mode-toggle"></i>
+    <!-- Sticky Navigation -->
+    <nav class="navbar-sticky">
+        <div class="navbar-content">
+            <a href="{{ url_for('index') }}" class="navbar-brand">
+                <i class="bi bi-broadcast"></i> XSpace Downloader
+            </a>
+            
+            <div class="navbar-nav">
+                <a href="{{ url_for('index') }}" class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-house"></i> <span class="d-none d-lg-inline">Home</span>
+                </a>
+                <a href="{{ url_for('view_queue') }}" class="btn btn-outline-success btn-sm">
+                    <i class="bi bi-hourglass-split"></i> <span class="d-none d-lg-inline">Queue</span>
+                </a>
+                <a href="{{ url_for('all_spaces') }}" class="btn btn-outline-info btn-sm">
+                    <i class="bi bi-collection"></i> <span class="d-none d-lg-inline">All Spaces</span>
+                </a>
+                <a href="{{ url_for('faq') }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-question-circle"></i> <span class="d-none d-lg-inline">FAQ</span>
+                </a>
+                <a href="{{ url_for('about') }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-info-circle"></i> <span class="d-none d-lg-inline">About</span>
+                </a>
+                {% if session.get('user_id') %}
+                    {% if session.get('is_admin') %}
+                    <a href="{{ url_for('setup') }}" class="btn btn-outline-warning btn-sm">
+                        <i class="bi bi-gear"></i> <span class="d-none d-lg-inline">Setup</span>
+                    </a>
+                    {% endif %}
+                <a href="{{ url_for('logout') }}" class="btn btn-outline-danger btn-sm">
+                    <i class="bi bi-box-arrow-right"></i> <span class="d-none d-lg-inline">Logout</span>
+                </a>
+                {% endif %}
+                <div class="theme-toggle-container">
+                    <i class="bi bi-sun-fill theme-toggle" id="light-mode-toggle"></i>
+                    <i class="bi bi-moon-fill theme-toggle" id="dark-mode-toggle"></i>
+                </div>
             </div>
         </div>
-        
+    </nav>
+    
+    <!-- Main Container -->
+    <div class="main-container">
         <!-- Flash messages -->
         <div class="flash-messages">
             {% with messages = get_flashed_messages(with_categories=true) %}
@@ -173,8 +328,13 @@
         </div>
         
         <!-- Footer -->
-        <div class="footer">
-            <p>&copy; XSpace Downloader</p>
+        <div class="footer text-center">
+            <p class="mb-2">
+                <a href="https://github.com/yourusername/xspacedownloader/blob/main/LICENSE" class="text-decoration-none">MIT License</a>
+                &bull;
+                Copyright &copy; 2025 <a href="https://evoknow.com" target="_blank" class="text-decoration-none">EVOKNOW, Inc.</a>
+            </p>
+            <p class="mb-0"><small>XSpace Downloader - Download and archive X Spaces with ease</small></p>
         </div>
     </div>
     

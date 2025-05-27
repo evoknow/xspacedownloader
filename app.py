@@ -167,6 +167,21 @@ def get_space_component():
 
 def index():
     """Home page with form to submit a space URL."""
+    # Check if setup is needed (no admin exists)
+    try:
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        cursor.execute("SELECT COUNT(*) as admin_count FROM users WHERE is_admin = 1")
+        result = cursor.fetchone()
+        cursor.close()
+        
+        if result['admin_count'] == 0:
+            # No admin exists, redirect to setup
+            return redirect(url_for('setup'))
+    except Exception as e:
+        logger.error(f"Error checking admin existence: {e}", exc_info=True)
+        # Continue to normal index if check fails
+    
     # Get a list of completed downloads to display
     try:
         space = get_space_component()
@@ -2413,11 +2428,18 @@ def verify_login_token(token):
             logger.error(f"Could not fetch user record for user_id {token_data['user_id']}")
         
         space.connection.commit()
+        
+        # Check if user is admin
+        cursor.execute("SELECT is_admin FROM users WHERE id = %s", (token_data['user_id'],))
+        admin_check = cursor.fetchone()
+        is_admin = admin_check.get('is_admin', 0) if admin_check else 0
+        
         cursor.close()
         
         # Set session variables
         session['user_id'] = token_data['user_id']
         session['user_email'] = token_data['email']
+        session['is_admin'] = bool(is_admin)
         session.permanent = True  # Make session persistent
         
         flash(f'Welcome! You are now logged in as {token_data["email"]}', 'success')
@@ -2434,8 +2456,558 @@ def logout():
     """Log the user out."""
     session.pop('user_id', None)
     session.pop('user_email', None)
+    session.pop('is_admin', None)
     flash('You have been logged out successfully.', 'info')
     return redirect(url_for('index'))
+
+# Route for setup wizard
+@app.route('/setup', methods=['GET', 'POST'])
+def setup():
+    """Setup wizard for initial admin configuration."""
+    try:
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        # Check if any admin exists
+        cursor.execute("SELECT COUNT(*) as admin_count FROM users WHERE is_admin = 1")
+        result = cursor.fetchone()
+        admin_exists = result['admin_count'] > 0
+        
+        # If admin exists, require admin login
+        if admin_exists:
+            user_id = session.get('user_id')
+            if not user_id:
+                flash('Please log in as admin to access setup.', 'warning')
+                return redirect(url_for('index'))
+            
+            # Check if current user is admin
+            cursor.execute("SELECT is_admin FROM users WHERE id = %s", (user_id,))
+            user = cursor.fetchone()
+            if not user or not user['is_admin']:
+                flash('Admin access required for setup.', 'error')
+                return redirect(url_for('index'))
+        
+        if request.method == 'POST':
+            step = request.form.get('step', '1')
+            
+            if step == '1' and not admin_exists:
+                # Create admin user
+                admin_email = request.form.get('admin_email', '').strip()
+                if not admin_email or '@' not in admin_email:
+                    flash('Please enter a valid email address.', 'error')
+                    return render_template('setup.html', step=1, admin_exists=admin_exists)
+                
+                # Check if user already exists
+                cursor.execute("SELECT id FROM users WHERE email = %s", (admin_email,))
+                existing_user = cursor.fetchone()
+                
+                if existing_user:
+                    # Update existing user to admin
+                    cursor.execute(
+                        "UPDATE users SET is_admin = 1 WHERE id = %s",
+                        (existing_user['id'],)
+                    )
+                    user_id = existing_user['id']
+                else:
+                    # Create new admin user
+                    cursor.execute(
+                        "INSERT INTO users (email, password, status, is_admin) VALUES (%s, %s, %s, %s)",
+                        (admin_email, '', 1, 1)  # Empty password, active status, is_admin=1
+                    )
+                    user_id = cursor.lastrowid
+                
+                space.connection.commit()
+                
+                # Log in the admin
+                session['user_id'] = user_id
+                session['user_email'] = admin_email
+                session['is_admin'] = True
+                session.permanent = True
+                
+                flash('Admin account created successfully!', 'success')
+                
+                # Load existing config for next step
+                config_data = {}
+                try:
+                    with open('db_config.json', 'r') as f:
+                        db_config = json.load(f)
+                        if 'mysql' in db_config:
+                            config_data['db_host'] = db_config['mysql'].get('host', 'localhost')
+                            config_data['db_port'] = db_config['mysql'].get('port', 3306)
+                            config_data['db_name'] = db_config['mysql'].get('database', '')
+                            config_data['db_user'] = db_config['mysql'].get('user', '')
+                            config_data['db_password'] = db_config['mysql'].get('password', '')
+                except:
+                    pass
+                
+                return render_template('setup.html', step=2, admin_exists=True, config=config_data)
+            
+            elif step == '2':
+                # Save database configuration
+                db_host = request.form.get('db_host', '').strip()
+                db_port = request.form.get('db_port', '3306').strip()
+                db_name = request.form.get('db_name', '').strip()
+                db_user = request.form.get('db_user', '').strip()
+                db_password = request.form.get('db_password', '').strip()
+                
+                # Update db_config.json
+                db_config = {
+                    "type": "mysql",
+                    "mysql": {
+                        "host": db_host,
+                        "port": int(db_port),
+                        "database": db_name,
+                        "user": db_user,
+                        "password": db_password
+                    }
+                }
+                
+                with open('db_config.json', 'w') as f:
+                    json.dump(db_config, f, indent=4)
+                
+                flash('Database configuration saved!', 'success')
+                
+                # Load existing config for next step
+                config_data = {}
+                
+                # Load email config from database
+                try:
+                    cursor = space.connection.cursor(dictionary=True)
+                    cursor.execute("SELECT * FROM email_config WHERE status = 1 ORDER BY id DESC LIMIT 1")
+                    email_config = cursor.fetchone()
+                    cursor.close()
+                    
+                    if email_config:
+                        config_data['email_provider'] = email_config['provider']
+                        config_data['email_api_key'] = email_config['api_key'] or ''
+                        config_data['email_from_email'] = email_config['from_email'] or ''
+                        config_data['email_from_name'] = email_config['from_name'] or ''
+                        
+                        # For mailgun, we need the domain
+                        if email_config['provider'] == 'mailgun' and email_config['from_email']:
+                            parts = email_config['from_email'].split('@')
+                            if len(parts) == 2:
+                                config_data['mailgun_domain'] = parts[1]
+                except:
+                    pass
+                
+                # Load .env for AI keys
+                try:
+                    if os.path.exists('.env'):
+                        with open('.env', 'r') as f:
+                            for line in f:
+                                line = line.strip()
+                                if line and not line.startswith('#') and '=' in line:
+                                    key, value = line.split('=', 1)
+                                    value = value.strip().strip('"').strip("'")
+                                    if key in ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY']:
+                                        config_data[key] = value
+                except:
+                    pass
+                
+                return render_template('setup.html', step=3, admin_exists=True, config=config_data)
+            
+            elif step == '3':
+                # Save API configurations
+                mail_provider = request.form.get('mail_provider', '').strip()
+                mail_api_key = request.form.get('mail_api_key', '').strip()
+                mail_from = request.form.get('mail_from', '').strip()
+                mail_from_name = request.form.get('mail_from_name', 'XSpace Downloader').strip()
+                mailgun_domain = request.form.get('mailgun_domain', '').strip()
+                openai_api_key = request.form.get('openai_api_key', '').strip()
+                anthropic_api_key = request.form.get('anthropic_api_key', '').strip()
+                
+                # Save email config to database
+                if mail_provider and mail_api_key:
+                    try:
+                        cursor = space.connection.cursor()
+                        
+                        # First disable all existing email configs
+                        cursor.execute("UPDATE email_config SET status = 0")
+                        
+                        # Check if this provider already exists
+                        cursor.execute("SELECT id FROM email_config WHERE provider = %s", (mail_provider,))
+                        existing = cursor.fetchone()
+                        
+                        if existing:
+                            # Update existing record
+                            cursor.execute("""
+                                UPDATE email_config 
+                                SET api_key = %s, from_email = %s, from_name = %s, 
+                                    status = 1, updated_at = NOW()
+                                WHERE id = %s
+                            """, (mail_api_key, mail_from, mail_from_name, existing[0]))
+                        else:
+                            # Insert new record
+                            cursor.execute("""
+                                INSERT INTO email_config 
+                                (provider, api_key, from_email, from_name, status)
+                                VALUES (%s, %s, %s, %s, 1)
+                            """, (mail_provider, mail_api_key, mail_from, mail_from_name))
+                        
+                        space.connection.commit()
+                        cursor.close()
+                        logger.info(f"Saved email config for provider: {mail_provider}")
+                    except Exception as e:
+                        logger.error(f"Error saving email config: {e}")
+                        if cursor:
+                            cursor.close()
+                
+                # Save AI API keys to .env file
+                env_vars = {}
+                
+                # Read existing .env if it exists
+                if os.path.exists('.env'):
+                    with open('.env', 'r') as f:
+                        for line in f:
+                            line = line.strip()
+                            if line and not line.startswith('#') and '=' in line:
+                                key, value = line.split('=', 1)
+                                env_vars[key] = value
+                
+                # Update AI keys
+                if openai_api_key:
+                    env_vars['OPENAI_API_KEY'] = openai_api_key
+                
+                if anthropic_api_key:
+                    env_vars['ANTHROPIC_API_KEY'] = anthropic_api_key
+                
+                # Write updated .env file
+                with open('.env', 'w') as f:
+                    f.write("# XSpace Downloader Configuration\n")
+                    f.write("# Generated by setup wizard\n\n")
+                    
+                    # Database section (commented, as it's in db_config.json)
+                    f.write("# Database configuration is stored in db_config.json\n")
+                    f.write("# Email configuration is stored in database email_config table\n\n")
+                    
+                    f.write("# AI API Keys\n")
+                    for key in ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY']:
+                        if key in env_vars:
+                            f.write(f"{key}={env_vars[key]}\n")
+                    
+                    # Other existing variables (excluding old email configs)
+                    f.write("\n# Other Configuration\n")
+                    for key, value in env_vars.items():
+                        if key not in ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY',
+                                      'SENDGRID_API_KEY', 'SENDGRID_FROM_EMAIL', 
+                                      'MAILGUN_API_KEY', 'MAILGUN_DOMAIN', 'MAILGUN_FROM_EMAIL']:
+                            f.write(f"{key}={value}\n")
+                
+                flash('Configuration saved successfully! Setup complete.', 'success')
+                return redirect(url_for('index'))
+        
+        # GET request - show appropriate step
+        # Always load existing configuration for display
+        config_data = {}
+        
+        # Load database config
+        try:
+            with open('db_config.json', 'r') as f:
+                db_config = json.load(f)
+                logger.debug(f"Loaded db_config: {db_config}")
+                if 'mysql' in db_config:
+                    config_data['db_host'] = db_config['mysql'].get('host', 'localhost')
+                    config_data['db_port'] = db_config['mysql'].get('port', 3306)
+                    config_data['db_name'] = db_config['mysql'].get('database', '')
+                    config_data['db_user'] = db_config['mysql'].get('user', '')
+                    config_data['db_password'] = db_config['mysql'].get('password', '')
+                    logger.debug(f"Database config loaded: host={config_data.get('db_host')}, db={config_data.get('db_name')}")
+        except Exception as e:
+            logger.debug(f"Could not load db_config.json: {e}")
+        
+        # Load email config from database
+        try:
+            cursor = space.connection.cursor(dictionary=True)
+            cursor.execute("SELECT * FROM email_config WHERE status = 1 ORDER BY id DESC LIMIT 1")
+            email_config = cursor.fetchone()
+            cursor.close()
+            
+            if email_config:
+                config_data['email_provider'] = email_config['provider']
+                config_data['email_api_key'] = email_config['api_key'] or ''
+                config_data['email_from_email'] = email_config['from_email'] or ''
+                config_data['email_from_name'] = email_config['from_name'] or ''
+                
+                # For mailgun, we need the domain from the from_email
+                if email_config['provider'] == 'mailgun' and email_config['from_email']:
+                    # Extract domain from email like noreply@mg.example.com
+                    parts = email_config['from_email'].split('@')
+                    if len(parts) == 2:
+                        config_data['mailgun_domain'] = parts[1]
+                
+                logger.debug(f"Loaded email config from database: provider={email_config['provider']}")
+        except Exception as e:
+            logger.debug(f"Could not load email config from database: {e}")
+        
+        # Load .env values for AI keys only
+        try:
+            if os.path.exists('.env'):
+                with open('.env', 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#') and '=' in line:
+                            key, value = line.split('=', 1)
+                            # Remove quotes if present
+                            value = value.strip().strip('"').strip("'")
+                            if key in ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY']:
+                                config_data[key] = value
+                logger.debug(f"Loaded .env config: {list(config_data.keys())}")
+        except Exception as e:
+            logger.debug(f"Could not load .env file: {e}")
+        
+        if not admin_exists:
+            return render_template('setup.html', step=1, admin_exists=False, config=config_data)
+        else:
+            # Determine which step to show based on URL parameter
+            requested_step = request.args.get('step', '2')
+            return render_template('setup.html', step=int(requested_step), admin_exists=True, config=config_data)
+        
+    except Exception as e:
+        logger.error(f"Error in setup wizard: {e}", exc_info=True)
+        flash('An error occurred during setup. Please try again.', 'error')
+        return redirect(url_for('index'))
+    finally:
+        if 'cursor' in locals() and cursor:
+            cursor.close()
+
+# Route for testing database connection
+@app.route('/setup/test-db', methods=['POST'])
+def test_database_connection():
+    """Test database connection with provided credentials."""
+    try:
+        data = request.get_json()
+        
+        # Validate input
+        required_fields = ['host', 'port', 'database', 'user', 'password']
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({'success': False, 'error': f'Missing {field}'}), 400
+        
+        # Try to connect
+        import mysql.connector
+        try:
+            connection = mysql.connector.connect(
+                host=data['host'],
+                port=int(data['port']),
+                database=data['database'],
+                user=data['user'],
+                password=data['password'],
+                connection_timeout=5
+            )
+            
+            # Test with a simple query
+            cursor = connection.cursor()
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+            cursor.close()
+            connection.close()
+            
+            return jsonify({'success': True, 'message': 'Connection successful'})
+            
+        except mysql.connector.Error as e:
+            error_msg = str(e)
+            # Simplify error messages for common issues
+            if 'Access denied' in error_msg:
+                error_msg = 'Access denied - check username and password'
+            elif 'Unknown database' in error_msg:
+                error_msg = f"Database '{data['database']}' does not exist"
+            elif "Can't connect" in error_msg:
+                error_msg = f"Cannot connect to server at {data['host']}:{data['port']}"
+            
+            return jsonify({'success': False, 'error': error_msg})
+            
+    except Exception as e:
+        logger.error(f"Error testing database connection: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': 'Invalid request'}), 400
+
+# Route for testing email configuration
+@app.route('/setup/test-email', methods=['POST'])
+def test_email_config():
+    """Test email configuration by sending a test email."""
+    try:
+        data = request.get_json()
+        
+        # Validate input
+        required_fields = ['provider', 'api_key', 'from_email', 'test_email']
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({'success': False, 'error': f'Missing {field}'}), 400
+        
+        provider = data['provider']
+        api_key = data['api_key']
+        from_email = data['from_email']
+        from_name = data.get('from_name', 'XSpace Downloader')
+        test_email = data['test_email']
+        
+        # Send test email based on provider
+        try:
+            if provider == 'sendgrid':
+                import sendgrid
+                from sendgrid.helpers.mail import Mail
+                
+                sg = sendgrid.SendGridAPIClient(api_key=api_key)
+                message = Mail(
+                    from_email=(from_email, from_name),
+                    to_emails=test_email,
+                    subject='Test Email from XSpace Downloader Setup',
+                    html_content='<h3>Test Email Successful!</h3><p>Your SendGrid email configuration is working correctly.</p><p>You can now send emails from XSpace Downloader.</p>'
+                )
+                response = sg.send(message)
+                
+                if response.status_code in [200, 201, 202]:
+                    return jsonify({'success': True, 'message': 'Test email sent successfully'})
+                else:
+                    return jsonify({'success': False, 'error': f'SendGrid returned status {response.status_code}'})
+                    
+            elif provider == 'mailgun':
+                import requests
+                
+                mailgun_domain = data.get('mailgun_domain', '')
+                if not mailgun_domain:
+                    # Extract domain from from_email
+                    parts = from_email.split('@')
+                    if len(parts) == 2:
+                        mailgun_domain = parts[1]
+                
+                response = requests.post(
+                    f"https://api.mailgun.net/v3/{mailgun_domain}/messages",
+                    auth=("api", api_key),
+                    data={
+                        "from": f"{from_name} <{from_email}>",
+                        "to": test_email,
+                        "subject": "Test Email from XSpace Downloader Setup",
+                        "html": "<h3>Test Email Successful!</h3><p>Your Mailgun email configuration is working correctly.</p><p>You can now send emails from XSpace Downloader.</p>"
+                    }
+                )
+                
+                if response.status_code == 200:
+                    return jsonify({'success': True, 'message': 'Test email sent successfully'})
+                else:
+                    error_data = response.json() if response.text else {}
+                    return jsonify({'success': False, 'error': error_data.get('message', f'Mailgun returned status {response.status_code}')})
+                    
+            else:
+                return jsonify({'success': False, 'error': f'Unsupported provider: {provider}'})
+                
+        except Exception as e:
+            error_msg = str(e)
+            # Simplify error messages
+            if 'unauthorized' in error_msg.lower() or '401' in error_msg:
+                error_msg = 'Invalid API key'
+            elif 'not found' in error_msg.lower() or '404' in error_msg:
+                error_msg = 'Invalid configuration (check domain/settings)'
+            
+            return jsonify({'success': False, 'error': error_msg})
+            
+    except Exception as e:
+        logger.error(f"Error testing email config: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': 'Invalid request'}), 400
+
+# Route for testing OpenAI API
+@app.route('/setup/test-openai', methods=['POST'])
+def test_openai_api():
+    """Test OpenAI API key."""
+    try:
+        data = request.get_json()
+        api_key = data.get('api_key', '').strip()
+        
+        if not api_key:
+            return jsonify({'success': False, 'error': 'API key is required'}), 400
+        
+        try:
+            import openai
+            
+            # Try both old and new API styles
+            try:
+                # New style (openai >= 1.0)
+                from openai import OpenAI
+                client = OpenAI(api_key=api_key)
+                response = client.models.list()
+                model_count = len(list(response.data))
+                return jsonify({
+                    'success': True, 
+                    'message': f'API key is valid! Found {model_count} available models.'
+                })
+            except:
+                # Old style (openai < 1.0)
+                openai.api_key = api_key
+                response = openai.Model.list()
+                model_count = len(response.data) if hasattr(response, 'data') else 0
+                return jsonify({
+                    'success': True, 
+                    'message': f'API key is valid! Found {model_count} available models.'
+                })
+            
+        except Exception as e:
+            error_msg = str(e)
+            if 'invalid' in error_msg.lower() or 'incorrect' in error_msg.lower() or 'authentication' in error_msg.lower():
+                return jsonify({'success': False, 'error': 'Invalid API key'})
+            elif 'rate' in error_msg.lower():
+                return jsonify({'success': False, 'error': 'Rate limit reached (but key is valid)'})
+            return jsonify({'success': False, 'error': f'API error: {error_msg}'})
+            
+    except Exception as e:
+        logger.error(f"Error testing OpenAI API: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': 'Invalid request'}), 400
+
+# Route for testing Anthropic API
+@app.route('/setup/test-anthropic', methods=['POST'])
+def test_anthropic_api():
+    """Test Anthropic API key."""
+    try:
+        data = request.get_json()
+        api_key = data.get('api_key', '').strip()
+        
+        if not api_key:
+            return jsonify({'success': False, 'error': 'API key is required'}), 400
+        
+        try:
+            import anthropic
+            
+            # Try both old and new API styles
+            try:
+                # New style (anthropic >= 0.7)
+                client = anthropic.Anthropic(api_key=api_key)
+                
+                # Try a simple API call to test the key
+                response = client.messages.create(
+                    model="claude-3-haiku-20240307",
+                    max_tokens=1,
+                    messages=[{"role": "user", "content": "Hi"}]
+                )
+                
+                return jsonify({
+                    'success': True, 
+                    'message': 'API key is valid! Claude is ready to use.'
+                })
+            except:
+                # Old style
+                client = anthropic.Client(api_key=api_key)
+                response = client.completions.create(
+                    model="claude-instant-1.2",
+                    prompt=f"{anthropic.HUMAN_PROMPT} Hi{anthropic.AI_PROMPT}",
+                    max_tokens_to_sample=1
+                )
+                
+                return jsonify({
+                    'success': True, 
+                    'message': 'API key is valid! Claude is ready to use.'
+                })
+            
+        except Exception as e:
+            error_msg = str(e)
+            if 'invalid' in error_msg.lower() or 'unauthorized' in error_msg.lower() or 'authentication' in error_msg.lower():
+                return jsonify({'success': False, 'error': 'Invalid API key'})
+            elif 'rate' in error_msg.lower():
+                return jsonify({'success': False, 'error': 'Rate limit reached (but key is valid)'})
+            elif 'not found' in error_msg.lower():
+                return jsonify({'success': False, 'error': 'API key format is incorrect'})
+            return jsonify({'success': False, 'error': f'API error: {error_msg}'})
+            
+    except Exception as e:
+        logger.error(f"Error testing Anthropic API: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': 'Invalid request'}), 400
 
 # Route for FAQ page
 @app.route('/faq')
