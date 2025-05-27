@@ -1130,13 +1130,14 @@ class Space:
             'download_dir': download_dir
         }
     
-    def create_download_job(self, space_id, user_id=0, file_type='mp3'):
+    def create_download_job(self, space_id, user_id=0, cookie_id=None, file_type='mp3'):
         """
         Create a new download job.
         
         Args:
             space_id (str): The unique space identifier
             user_id (int, optional): User who created the job
+            cookie_id (str, optional): Cookie ID for non-logged-in users
             file_type (str, optional): Audio file type ('mp3', 'm4a', 'wav')
             
         Returns:
@@ -1167,14 +1168,14 @@ class Space:
                     # Insert new space record
                     space_insert = """
                     INSERT INTO spaces (
-                        space_id, space_url, filename, format, status, download_cnt, created_at
+                        space_id, space_url, filename, format, status, download_cnt, user_id, cookie_id, created_at
                     ) VALUES (
-                        %s, %s, %s, %s, 'pending', 0, NOW()
+                        %s, %s, %s, %s, 'pending', 0, %s, %s, NOW()
                     )
                     """
                     space_filename = f"{space_id}.mp3"  # Default filename based on space_id
                     space_format = "mp3"  # Default format
-                    cursor.execute(space_insert, (space_id, space_url, space_filename, space_format))
+                    cursor.execute(space_insert, (space_id, space_url, space_filename, space_format, user_id, cookie_id))
                     self.connection.commit()
                     
                     logger.info(f"Created new space record for {space_id}")
@@ -1200,13 +1201,13 @@ class Space:
             # Create a new download job
             insert_query = """
             INSERT INTO space_download_scheduler (
-                space_id, user_id, file_type, status, start_time, created_at, updated_at
+                space_id, user_id, cookie_id, file_type, status, start_time, created_at, updated_at
             ) VALUES (
-                %s, %s, %s, 'pending', NOW(), NOW(), NOW()
+                %s, %s, %s, %s, 'pending', NOW(), NOW(), NOW()
             )
             """
             cursor.execute(insert_query, (
-                space_id, user_id, file_type
+                space_id, user_id, cookie_id, file_type
             ))
             
             self.connection.commit()

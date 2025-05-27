@@ -290,6 +290,9 @@
                 </a>
                 {% if session.get('user_id') %}
                     {% if session.get('is_admin') %}
+                    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-warning btn-sm">
+                        <i class="bi bi-speedometer2"></i> <span class="d-none d-lg-inline">Admin</span>
+                    </a>
                     <a href="{{ url_for('setup') }}" class="btn btn-outline-warning btn-sm">
                         <i class="bi bi-gear"></i> <span class="d-none d-lg-inline">Setup</span>
                     </a>

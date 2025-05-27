@@ -2,98 +2,216 @@
 
 {% block title %}XSpace Downloader - Home{% endblock %}
 
+{% block head %}
+<style>
+    .equal-height-row {
+        display: flex;
+        flex-wrap: wrap;
+    }
+    
+    .equal-height-row > [class*='col-'] {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .equal-height-card {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .equal-height-card .card-body {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .equal-height-card .card-body form {
+        margin-top: auto;
+    }
+    
+    @media (max-width: 991px) {
+        .equal-height-row {
+            display: block;
+        }
+        
+        .equal-height-card {
+            height: auto;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="row">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header">
-                <h4>Download X Space</h4>
+<div class="row g-4 equal-height-row">
+    <div class="col-lg-8">
+        <div class="card shadow-sm equal-height-card">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0"><i class="bi bi-download"></i> Download X Space</h4>
             </div>
             <div class="card-body">
                 <p class="lead">
-                    Enter an X space URL to download. The download will be processed in the background, and you will receive an update when it's complete.
+                    Enter an X space URL to download. The download will be processed in the background, and you can browse other sections while it completes.
                 </p>
                 
                 <form action="{{ url_for('submit_space') }}" method="POST" class="mt-4">
-                    <div class="mb-3">
-                        <label for="space_url" class="form-label">X Space URL</label>
-                        <input type="url" class="form-control" id="space_url" name="space_url" 
-                               placeholder="https://x.com/i/spaces/1dRJZEpyjlNGB" required>
-                        <div class="form-text">
-                            Enter the full URL of the X space you want to download.
+                    <div class="row">
+                        <div class="col-lg-9 mb-3">
+                            <label for="space_url" class="form-label">X Space URL</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-link-45deg"></i></span>
+                                <input type="url" class="form-control form-control-lg" id="space_url" name="space_url" 
+                                       placeholder="https://x.com/i/spaces/1dRJZEpyjlNGB" required>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 mb-3 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary btn-lg w-100">
+                                <i class="bi bi-cloud-download"></i> Submit
+                            </button>
                         </div>
                     </div>
-                    
-                    <button type="submit" class="btn btn-primary">Submit for Download</button>
                 </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <div class="card shadow-sm equal-height-card">
+            <div class="card-header bg-success text-white">
+                <h4 class="mb-0"><i class="bi bi-person-circle"></i> Account</h4>
+            </div>
+            <div class="card-body">
+                {% if session.get('user_id') %}
+                    <div class="text-center">
+                        <i class="bi bi-person-check-fill text-success" style="font-size: 3rem;"></i>
+                        <h5 class="mt-3">Welcome back!</h5>
+                        <p class="mb-1">Logged in as:</p>
+                        <p class="fw-bold">{{ session.get('user_email') }}</p>
+                        <div class="mt-4">
+                            <a href="{{ url_for('logout') }}" class="btn btn-outline-danger">
+                                <i class="bi bi-box-arrow-right"></i> Logout
+                            </a>
+                        </div>
+                    </div>
+                {% else %}
+                    <p class="lead">
+                        Get instant access with a magic link!
+                    </p>
+                    
+                    <form action="{{ url_for('send_login_link') }}" method="POST" class="mt-4">
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email Address</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                                <input type="email" class="form-control" id="email" name="email" 
+                                       placeholder="your@email.com" required>
+                            </div>
+                            <div class="form-text">
+                                We'll send you a secure login link. No password needed!
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="bi bi-send"></i> Send Login Link
+                        </button>
+                    </form>
+                    
+                    <div class="mt-3 text-center">
+                        <small class="text-muted">
+                            <i class="bi bi-shield-lock"></i> 
+                            New users are automatically registered
+                        </small>
+                    </div>
+                {% endif %}
             </div>
         </div>
     </div>
 </div>
 
 {% if completed_spaces %}
-<div class="row mt-4">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h4>Recently Downloaded Spaces</h4>
-                <div>
-                    <a href="{{ url_for('view_queue') }}" class="btn btn-outline-success btn-sm me-2">
-                        <i class="bi bi-hourglass-split"></i> View Queue
-                    </a>
-                    <a href="{{ url_for('all_spaces') }}" class="btn btn-outline-primary btn-sm">View All</a>
+<div class="row mt-5">
+    <div class="col-12">
+        <div class="card shadow-sm" id="spaces-list-container">
+            <div class="card-header bg-light">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h4 class="mb-0"><i class="bi bi-clock-history"></i> Recently Downloaded Spaces</h4>
+                    <div class="d-flex align-items-center gap-2 gap-md-3">
+                        <div class="input-group" style="max-width: 250px;">
+                            <span class="input-group-text d-none d-sm-flex"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control search" placeholder="Search...">
+                        </div>
+                        <span class="badge bg-secondary d-none d-sm-inline">{{ completed_spaces|length }} total</span>
+                    </div>
                 </div>
             </div>
-            <div class="card-body">
-                <div class="list-group">
-                    {% for job in completed_spaces %}
-                    <div class="list-group-item d-flex justify-content-between align-items-center">
-                        <div class="flex-grow-1">
-                            <a href="{{ url_for('space_page', space_id=job.space_id) }}" class="text-decoration-none">
-                                <h5 class="mb-1">
-                                    {{ job.title if job.title else job.space_id }}
-                                </h5>
-                            </a>
-                            <div class="d-flex align-items-center gap-2">
-                                <small class="text-muted relative-time" data-datetime="{{ job.updated_at }}">{{ job.updated_at }}</small>
-                                {% if job.playback_cnt or job.download_cnt %}
-                                <small class="text-muted">
-                                    {% if job.playback_cnt %}<i class="bi bi-play-circle" title="Plays"></i> {{ job.playback_cnt }}{% endif %}
-                                    {% if job.download_cnt %}<i class="bi bi-download" title="Downloads"></i> {{ job.download_cnt }}{% endif %}
-                                </small>
-                                {% endif %}
-                                <div class="d-flex gap-1">
-                                    {% if job.has_transcript %}
-                                    <span class="badge bg-info" data-bs-toggle="tooltip" data-bs-placement="top" title="Transcript available">
-                                        <i class="bi bi-mic-fill"></i>
-                                    </span>
-                                    {% endif %}
-                                    {% if job.has_translation %}
-                                    <span class="badge bg-primary" data-bs-toggle="tooltip" data-bs-placement="top" title="Translation(s) available">
-                                        <i class="bi bi-translate"></i>
-                                    </span>
-                                    {% endif %}
-                                    {% if job.has_summary %}
-                                    <span class="badge bg-warning text-dark" data-bs-toggle="tooltip" data-bs-placement="top" title="Summary available">
-                                        <i class="bi bi-lightbulb-fill"></i>
-                                    </span>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-                        <div class="d-flex gap-2 align-items-center">
-                            <a href="{{ url_for('space_page', space_id=job.space_id) }}" class="btn btn-success btn-sm d-none d-sm-inline-block">
-                                <i class="bi bi-play-circle"></i> Listen
-                            </a>
-                            <a href="{{ url_for('space_page', space_id=job.space_id) }}" class="btn btn-success btn-sm d-inline-block d-sm-none" title="Listen">
-                                <i class="bi bi-play-circle"></i>
-                            </a>
-                            <a href="/download/{{ job.space_id }}?attachment=1" class="btn btn-outline-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Download MP3">
-                                <i class="bi bi-download"></i>
-                            </a>
-                        </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <tbody class="list">
+                            {% for job in completed_spaces %}
+                            <tr>
+                                <td class="ps-4">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-broadcast text-primary me-3" style="font-size: 1.5rem;"></i>
+                                        <div>
+                                            <a href="{{ url_for('space_page', space_id=job.space_id) }}" class="text-decoration-none">
+                                                <h6 class="mb-0 space-title">{{ job.title if job.title else job.space_id }}</h6>
+                                            </a>
+                                            <small class="text-muted">
+                                                <span class="relative-time space-time" data-datetime="{{ job.updated_at }}">{{ job.updated_at }}</span>
+                                                {% if job.playback_cnt or job.download_cnt %}
+                                                <span class="ms-2 space-stats">
+                                                    {% if job.playback_cnt %}<i class="bi bi-play-circle"></i> {{ job.playback_cnt }}{% endif %}
+                                                    {% if job.download_cnt %}<i class="bi bi-download ms-2"></i> {{ job.download_cnt }}{% endif %}
+                                                </span>
+                                                {% endif %}
+                                            </small>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="text-center align-middle d-none d-md-table-cell">
+                                    <div class="d-flex gap-1 justify-content-center">
+                                        {% if job.has_transcript %}
+                                        <span class="badge bg-info" data-bs-toggle="tooltip" data-bs-placement="top" title="Transcript available">
+                                            <i class="bi bi-mic-fill"></i>
+                                        </span>
+                                        {% endif %}
+                                        {% if job.has_translation %}
+                                        <span class="badge bg-primary" data-bs-toggle="tooltip" data-bs-placement="top" title="Translation(s) available">
+                                            <i class="bi bi-translate"></i>
+                                        </span>
+                                        {% endif %}
+                                        {% if job.has_summary %}
+                                        <span class="badge bg-warning text-dark" data-bs-toggle="tooltip" data-bs-placement="top" title="Summary available">
+                                            <i class="bi bi-lightbulb-fill"></i>
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                <td class="text-end pe-4 align-middle">
+                                    <div class="btn-group" role="group">
+                                        <a href="{{ url_for('space_page', space_id=job.space_id) }}" class="btn btn-success btn-sm">
+                                            <i class="bi bi-play-circle"></i> <span class="d-none d-md-inline">Listen</span>
+                                        </a>
+                                        <a href="/download/{{ job.space_id }}?attachment=1" class="btn btn-outline-primary btn-sm d-none d-md-inline-block" data-bs-toggle="tooltip" data-bs-placement="top" title="Download MP3">
+                                            <i class="bi bi-download"></i>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Pagination -->
+                <div class="d-flex justify-content-between align-items-center p-3 border-top">
+                    <div>
+                        <small class="text-muted">Showing <span class="showing-count"></span> of {{ completed_spaces|length }} spaces</small>
                     </div>
-                    {% endfor %}
+                    <nav>
+                        <ul class="pagination pagination-sm mb-0"></ul>
+                    </nav>
                 </div>
             </div>
         </div>
@@ -103,6 +221,9 @@
 {% endblock %}
 
 {% block scripts %}
+<!-- List.js library -->
+<script src="https://cdn.jsdelivr.net/npm/list.js@2.3.1/dist/list.min.js"></script>
+
 <script>
     // Function to convert datetime to relative time
     function timeAgo(datetime) {
@@ -155,6 +276,56 @@
         // Initialize Bootstrap tooltips
         const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
         const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+        
+        // Initialize List.js if we have completed spaces
+        {% if completed_spaces %}
+        const options = {
+            valueNames: [ 'space-title', 'space-time', 'space-stats' ],
+            page: 10,
+            pagination: {
+                innerWindow: 2,
+                outerWindow: 1,
+                left: 0,
+                right: 0,
+                paginationClass: 'pagination',
+                item: '<li class="page-item"><a class="page-link" href="#"></a></li>',
+                activeClass: 'active'
+            }
+        };
+        
+        const spacesList = new List('spaces-list-container', options);
+        
+        // Update showing count
+        function updateShowingCount() {
+            const visibleItems = spacesList.visibleItems.length;
+            const totalItems = spacesList.size();
+            
+            if (visibleItems === 0) {
+                document.querySelector('.showing-count').textContent = '0';
+                return;
+            }
+            
+            // For List.js, when all items fit on one page, just show the count
+            if (totalItems <= options.page) {
+                document.querySelector('.showing-count').textContent = `1-${visibleItems}`;
+            } else {
+                // Calculate actual pagination
+                const currentPage = spacesList.page || 1;
+                const pageSize = options.page || 10;
+                const start = (currentPage - 1) * pageSize + 1;
+                const end = Math.min(start + pageSize - 1, start + visibleItems - 1, totalItems);
+                document.querySelector('.showing-count').textContent = `${start}-${end}`;
+            }
+        }
+        
+        // Update count on list changes
+        spacesList.on('updated', updateShowingCount);
+        spacesList.on('searchComplete', updateShowingCount);
+        spacesList.on('filterComplete', updateShowingCount);
+        
+        // Initial count update
+        updateShowingCount();
+        {% endif %}
     });
 </script>
 {% endblock %}

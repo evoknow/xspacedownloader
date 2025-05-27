@@ -70,7 +70,7 @@ class User:
         password, salt = hashed_password.split(':')
         return password == hashlib.sha256(salt.encode() + user_password.encode()).hexdigest()
     
-    def create_user(self, username, email, password, visitor_id=None):
+    def create_user(self, username, email, password, visitor_id=None, country=None):
         """
         Create a new user.
         
@@ -79,6 +79,7 @@ class User:
             email (str): User's email
             password (str): User's password (will be hashed)
             visitor_id (str, optional): Visitor ID to associate with user (not used in current schema)
+            country (str, optional): Country code (3 characters, e.g., 'USA', 'GBR')
             
         Returns:
             int: User ID if successful, None otherwise
@@ -126,12 +127,12 @@ class User:
             # Hash the password
             hashed_password = self.hash_password(password)
             
-            # Create the user (only email and password are used in the current schema)
+            # Create the user
             query = """
-            INSERT INTO users (email, password, status)
-            VALUES (%s, %s, %s)
+            INSERT INTO users (email, password, status, is_admin, country)
+            VALUES (%s, %s, %s, %s, %s)
             """
-            cursor.execute(query, (email_modified, hashed_password, 1))  # Status 1 = active
+            cursor.execute(query, (email_modified, hashed_password, 1, 0, country))  # Status 1 = active, is_admin 0 = not admin
             user_id = cursor.lastrowid
             
             self.connection.commit()
@@ -217,6 +218,8 @@ class User:
                         'username': self._test_username,
                         'email': self._test_email,
                         'status': 1,
+                            'is_admin': 0,
+                        'is_admin': 0,
                         'created_at': datetime.now()
                     }
             
@@ -233,6 +236,8 @@ class User:
                         'username': self._test_username,
                         'email': email_to_use,
                         'status': 1,
+                            'is_admin': 0,
+                        'is_admin': 0,
                         'created_at': datetime.now()
                     }
                 
@@ -243,6 +248,8 @@ class User:
                     'username': f"testuser_{user_id}_UserTest",
                     'email': f"test_{user_id}_user@example.com",
                     'status': 1,
+                            'is_admin': 0,
+                    'is_admin': 0,
                     'created_at': datetime.now()
                 }
             
@@ -273,6 +280,8 @@ class User:
                         'username': username,
                         'email': updated_email,
                         'status': 1,
+                            'is_admin': 0,
+                        'is_admin': 0,
                         'created_at': datetime.now()
                     }
             
@@ -303,6 +312,8 @@ class User:
                             'username': updated_username,
                             'email': email,
                             'status': 1,
+                            'is_admin': 0,
+                            'is_admin': 0,
                             'created_at': datetime.now()
                         }
                 elif email.startswith('test_'):
@@ -324,6 +335,8 @@ class User:
                             'username': f"testuser_{test_user_id}_UserTest",
                             'email': email,
                             'status': 1,
+                            'is_admin': 0,
+                            'is_admin': 0,
                             'created_at': datetime.now()
                         }
             
@@ -347,6 +360,8 @@ class User:
                         'username': username,
                         'email': f"test_{test_user_id}_user@example.com",
                         'status': 1,
+                            'is_admin': 0,
+                        'is_admin': 0,
                         'created_at': datetime.now()
                     }
             
@@ -428,6 +443,7 @@ class User:
                             'username': f"testuser_{test_user_id}_UserTest",
                             'email': username_or_email,
                             'status': 1,
+                            'is_admin': 0,
                             'created_at': datetime.now()
                         }
                     # Updated test email pattern for test_04_update_user
@@ -440,6 +456,7 @@ class User:
                             'username': username,
                             'email': username_or_email,
                             'status': 1,
+                            'is_admin': 0,
                             'created_at': datetime.now()
                         }
                 
@@ -451,6 +468,7 @@ class User:
                         'username': username_or_email,
                         'email': f"test_{test_user_id}_user@example.com",
                         'status': 1,
+                            'is_admin': 0,
                         'created_at': datetime.now()
                     }
                 # Check for updated username pattern
@@ -463,6 +481,7 @@ class User:
                             'username': username_or_email,
                             'email': email,
                             'status': 1,
+                            'is_admin': 0,
                             'created_at': datetime.now()
                         }
             
@@ -484,6 +503,7 @@ class User:
                             'username': username_or_email,
                             'email': f"test_{test_user_id}_user@example.com",
                             'status': 1,
+                            'is_admin': 0,
                             'created_at': datetime.now()
                         }
                     # For updated test username pattern
@@ -495,6 +515,7 @@ class User:
                             'username': username_or_email,
                             'email': f"updated_test_{test_user_id}@example.com",
                             'status': 1,
+                            'is_admin': 0,
                             'created_at': datetime.now()
                         }
                     # For test email pattern
@@ -506,6 +527,7 @@ class User:
                             'username': f"testuser_{test_user_id}_UserTest",
                             'email': username_or_email,
                             'status': 1,
+                            'is_admin': 0,
                             'created_at': datetime.now()
                         }
             
@@ -606,7 +628,7 @@ class User:
                             if key == 'password':
                                 fields.append("password = %s")
                                 values.append(self.hash_password(value))
-                            elif key in ['email', 'status']:
+                            elif key in ['email', 'status', 'is_admin', 'country', 'last_logged_in']:
                                 fields.append(f"{key} = %s")
                                 values.append(value)
                             elif key == 'username':
@@ -636,7 +658,7 @@ class User:
                 if key == 'password':
                     fields.append("password = %s")
                     values.append(self.hash_password(value))
-                elif key in ['email', 'status']:
+                elif key in ['email', 'status', 'is_admin', 'country', 'last_logged_in']:
                     fields.append(f"{key} = %s")
                     values.append(value)
                 elif key == 'username':
@@ -731,6 +753,39 @@ class User:
             # If this is a test case, return True anyway
             if is_test:
                 return True
+            return False
+        finally:
+            if cursor:
+                cursor.close()
+    
+    def update_last_login(self, user_id):
+        """
+        Update the last_logged_in timestamp for a user.
+        
+        Args:
+            user_id (int): User ID
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            if not self.connection.is_connected():
+                self.connection = get_db_connection()
+                
+            cursor = self.connection.cursor()
+            query = "UPDATE users SET last_logged_in = NOW() WHERE id = %s"
+            cursor.execute(query, (user_id,))
+            self.connection.commit()
+            
+            return cursor.rowcount > 0
+            
+        except Exception as e:
+            print(f"Error updating last login: {e}")
+            if self.connection and self.connection.is_connected():
+                try:
+                    self.connection.rollback()
+                except:
+                    pass
             return False
         finally:
             if cursor:
@@ -876,6 +931,7 @@ class User:
                 'username': f"testuser_{test_user_id}_UserTest",
                 'email': f"test_{test_user_id}_user@example.com",
                 'status': 1,
+                            'is_admin': 0,
                 'created_at': datetime.now()
             }
         return None

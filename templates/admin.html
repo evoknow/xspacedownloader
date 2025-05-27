@@ -1,0 +1,631 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - XSpace Downloader{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">
+        <i class="bi bi-speedometer2"></i> Admin Dashboard
+    </h1>
+    
+    <!-- Overview Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="card text-white bg-primary">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="bi bi-people-fill"></i> Total Users
+                    </h5>
+                    <h2 class="mb-0">{{ total_users }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card text-white bg-success">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="bi bi-collection-play-fill"></i> Total Spaces
+                    </h5>
+                    <h2 class="mb-0">{{ total_spaces }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card text-white bg-info">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="bi bi-download"></i> Total Downloads
+                    </h5>
+                    <h2 class="mb-0">{{ total_downloads }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card text-white bg-warning">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="bi bi-play-circle-fill"></i> Total Plays
+                    </h5>
+                    <h2 class="mb-0">{{ total_plays }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Navigation Tabs -->
+    <ul class="nav nav-tabs" id="adminTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="users-tab" data-bs-toggle="tab" data-bs-target="#users" type="button" role="tab">
+                <i class="bi bi-people"></i> Users
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="spaces-tab" data-bs-toggle="tab" data-bs-target="#spaces" type="button" role="tab">
+                <i class="bi bi-collection-play"></i> Spaces
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="stats-tab" data-bs-toggle="tab" data-bs-target="#stats" type="button" role="tab">
+                <i class="bi bi-graph-up"></i> Statistics
+            </button>
+        </li>
+    </ul>
+    
+    <!-- Tab Content -->
+    <div class="tab-content" id="adminTabContent">
+        <!-- Users Tab -->
+        <div class="tab-pane fade show active" id="users" role="tabpanel">
+            <div class="card mt-3">
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <h5 class="card-title">Manage Users</h5>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="userSearch" placeholder="Search by email...">
+                                <button class="btn btn-outline-secondary" type="button" onclick="searchUsers()">
+                                    <i class="bi bi-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Email</th>
+                                    <th>Status</th>
+                                    <th>Admin</th>
+                                    <th>Country</th>
+                                    <th>Logins</th>
+                                    <th>Spaces</th>
+                                    <th>Last Login</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersList">
+                                <tr>
+                                    <td colspan="9" class="text-center">Loading users...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <nav>
+                        <ul class="pagination justify-content-center" id="usersPagination"></ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Spaces Tab -->
+        <div class="tab-pane fade" id="spaces" role="tabpanel">
+            <div class="card mt-3">
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <h5 class="card-title">Manage Spaces</h5>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="spaceSearch" placeholder="Search spaces...">
+                                <button class="btn btn-outline-secondary" type="button" onclick="searchSpaces()">
+                                    <i class="bi bi-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Space ID</th>
+                                    <th>Title</th>
+                                    <th>Host</th>
+                                    <th>User</th>
+                                    <th>Downloads</th>
+                                    <th>Plays</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="spacesList">
+                                <tr>
+                                    <td colspan="8" class="text-center">Loading spaces...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <nav>
+                        <ul class="pagination justify-content-center" id="spacesPagination"></ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Statistics Tab -->
+        <div class="tab-pane fade" id="stats" role="tabpanel">
+            <div class="card mt-3">
+                <div class="card-body">
+                    <h5 class="card-title">Site Statistics</h5>
+                    
+                    <!-- Period Selection -->
+                    <div class="btn-group mb-3" role="group">
+                        <button type="button" class="btn btn-outline-primary active" onclick="changePeriod('daily')">Daily</button>
+                        <button type="button" class="btn btn-outline-primary" onclick="changePeriod('weekly')">Weekly</button>
+                        <button type="button" class="btn btn-outline-primary" onclick="changePeriod('monthly')">Monthly</button>
+                        <button type="button" class="btn btn-outline-primary" onclick="changePeriod('all')">All Time</button>
+                    </div>
+                    
+                    <!-- Statistics Cards -->
+                    <div class="row">
+                        <!-- Space Submissions Chart -->
+                        <div class="col-md-12 mb-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Space Submissions</h6>
+                                </div>
+                                <div class="card-body">
+                                    <canvas id="submissionsChart" height="100"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Popular Spaces -->
+                        <div class="col-md-6 mb-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Most Played Spaces</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div id="popularSpacesList" class="list-group">
+                                        <div class="text-center">Loading...</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Most Downloaded -->
+                        <div class="col-md-6 mb-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Most Downloaded Spaces</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div id="downloadedSpacesList" class="list-group">
+                                        <div class="text-center">Loading...</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Active Users -->
+                        <div class="col-md-12 mb-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Most Active Users</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>Email</th>
+                                                    <th>Country</th>
+                                                    <th>Logins</th>
+                                                    <th>Spaces</th>
+                                                    <th>Downloads</th>
+                                                    <th>Plays</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="activeUsersList">
+                                                <tr>
+                                                    <td colspan="6" class="text-center">Loading...</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Include Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+let currentPeriod = 'daily';
+let submissionsChart = null;
+let currentUsersPage = 1;
+let currentSpacesPage = 1;
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadUsers();
+    loadSpaces();
+    loadStatistics('daily');
+    
+    // Add enter key support for search
+    document.getElementById('userSearch').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') searchUsers();
+    });
+    document.getElementById('spaceSearch').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') searchSpaces();
+    });
+});
+
+// User Management Functions
+function loadUsers(page = 1) {
+    currentUsersPage = page;
+    const search = document.getElementById('userSearch').value;
+    
+    fetch(`/admin/api/users?page=${page}&search=${encodeURIComponent(search)}`)
+        .then(response => response.json())
+        .then(data => {
+            displayUsers(data.users);
+            displayPagination('usersPagination', data.page, data.pages, loadUsers);
+        })
+        .catch(error => {
+            console.error('Error loading users:', error);
+            document.getElementById('usersList').innerHTML = 
+                '<tr><td colspan="9" class="text-danger text-center">Error loading users</td></tr>';
+        });
+}
+
+function displayUsers(users) {
+    const tbody = document.getElementById('usersList');
+    
+    if (users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center">No users found</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = users.map(user => `
+        <tr>
+            <td>${user.id}</td>
+            <td>${user.email}</td>
+            <td>
+                <span class="badge bg-${user.status === 1 ? 'success' : 'secondary'}">
+                    ${user.status === 1 ? 'Active' : 'Inactive'}
+                </span>
+            </td>
+            <td>
+                <input type="checkbox" class="form-check-input" 
+                       ${user.is_admin ? 'checked' : ''} 
+                       onchange="updateUser(${user.id}, 'is_admin', this.checked)">
+            </td>
+            <td>${user.country || '-'}</td>
+            <td>${user.login_count || 0}</td>
+            <td>${user.space_count || 0}</td>
+            <td>${user.last_logged_in ? new Date(user.last_logged_in).toLocaleString() : 'Never'}</td>
+            <td>
+                <div class="btn-group btn-group-sm" role="group">
+                    <button class="btn btn-warning" onclick="toggleUserStatus(${user.id}, ${user.status})">
+                        ${user.status === 1 ? 'Suspend' : 'Activate'}
+                    </button>
+                    <button class="btn btn-danger" onclick="deleteUser(${user.id}, '${user.email}')">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function searchUsers() {
+    loadUsers(1);
+}
+
+function updateUser(userId, field, value) {
+    fetch(`/admin/api/users/${userId}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({[field]: value})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!data.success) {
+            alert('Error updating user');
+            loadUsers(currentUsersPage);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error updating user');
+        loadUsers(currentUsersPage);
+    });
+}
+
+function toggleUserStatus(userId, currentStatus) {
+    const newStatus = currentStatus === 1 ? 0 : 1;
+    updateUser(userId, 'status', newStatus);
+    loadUsers(currentUsersPage);
+}
+
+function deleteUser(userId, email) {
+    if (!confirm(`Are you sure you want to delete user: ${email}?`)) return;
+    
+    fetch(`/admin/api/users/${userId}`, {method: 'DELETE'})
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                loadUsers(currentUsersPage);
+            } else {
+                alert(data.error || 'Error deleting user');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error deleting user');
+        });
+}
+
+// Space Management Functions
+function loadSpaces(page = 1) {
+    currentSpacesPage = page;
+    const search = document.getElementById('spaceSearch').value;
+    
+    fetch(`/admin/api/spaces?page=${page}&search=${encodeURIComponent(search)}`)
+        .then(response => response.json())
+        .then(data => {
+            displaySpaces(data.spaces);
+            displayPagination('spacesPagination', data.page, data.pages, loadSpaces);
+        })
+        .catch(error => {
+            console.error('Error loading spaces:', error);
+            document.getElementById('spacesList').innerHTML = 
+                '<tr><td colspan="8" class="text-danger text-center">Error loading spaces</td></tr>';
+        });
+}
+
+function displaySpaces(spaces) {
+    const tbody = document.getElementById('spacesList');
+    
+    if (spaces.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center">No spaces found</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = spaces.map(space => `
+        <tr>
+            <td>
+                <a href="/spaces/${space.space_id}" target="_blank">
+                    ${space.space_id.substring(0, 10)}...
+                </a>
+            </td>
+            <td>${space.title || 'Untitled'}</td>
+            <td>${space.host || '-'}</td>
+            <td>${space.user_email || 'Anonymous'}</td>
+            <td>${space.download_cnt || 0}</td>
+            <td>${space.playback_cnt || 0}</td>
+            <td>${new Date(space.created_at).toLocaleDateString()}</td>
+            <td>
+                <button class="btn btn-danger btn-sm" onclick="deleteSpace('${space.space_id}')">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function searchSpaces() {
+    loadSpaces(1);
+}
+
+function deleteSpace(spaceId) {
+    if (!confirm('Are you sure you want to delete this space? This action cannot be undone.')) return;
+    
+    fetch(`/admin/api/spaces/${spaceId}`, {method: 'DELETE'})
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                loadSpaces(currentSpacesPage);
+            } else {
+                alert(data.error || 'Error deleting space');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error deleting space');
+        });
+}
+
+// Statistics Functions
+function changePeriod(period) {
+    currentPeriod = period;
+    
+    // Update button states
+    document.querySelectorAll('.btn-group button').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    loadStatistics(period);
+}
+
+function loadStatistics(period) {
+    // Load all statistics
+    loadSubmissionsChart(period);
+    loadPopularSpaces(period);
+    loadDownloadedSpaces(period);
+    loadActiveUsers(period);
+}
+
+function loadSubmissionsChart(period) {
+    fetch(`/admin/api/stats/submissions?period=${period}`)
+        .then(response => response.json())
+        .then(result => {
+            const ctx = document.getElementById('submissionsChart').getContext('2d');
+            
+            if (submissionsChart) {
+                submissionsChart.destroy();
+            }
+            
+            submissionsChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: result.data.map(d => new Date(d.date).toLocaleDateString()),
+                    datasets: [{
+                        label: 'Space Submissions',
+                        data: result.data.map(d => d.count),
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            });
+        })
+        .catch(error => console.error('Error loading submissions chart:', error));
+}
+
+function loadPopularSpaces(period) {
+    fetch(`/admin/api/stats/plays?period=${period}`)
+        .then(response => response.json())
+        .then(result => {
+            const list = document.getElementById('popularSpacesList');
+            
+            if (result.data.length === 0) {
+                list.innerHTML = '<div class="text-center text-muted">No data available</div>';
+                return;
+            }
+            
+            list.innerHTML = result.data.slice(0, 10).map((space, index) => `
+                <a href="/spaces/${space.space_id}" target="_blank" class="list-group-item list-group-item-action">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>#${index + 1}</strong> ${space.title || 'Untitled'}
+                            <small class="text-muted d-block">${space.host || 'Unknown host'}</small>
+                        </div>
+                        <span class="badge bg-primary rounded-pill">${space.playback_cnt} plays</span>
+                    </div>
+                </a>
+            `).join('');
+        })
+        .catch(error => console.error('Error loading popular spaces:', error));
+}
+
+function loadDownloadedSpaces(period) {
+    fetch(`/admin/api/stats/downloads?period=${period}`)
+        .then(response => response.json())
+        .then(result => {
+            const list = document.getElementById('downloadedSpacesList');
+            
+            if (result.data.length === 0) {
+                list.innerHTML = '<div class="text-center text-muted">No data available</div>';
+                return;
+            }
+            
+            list.innerHTML = result.data.slice(0, 10).map((space, index) => `
+                <a href="/spaces/${space.space_id}" target="_blank" class="list-group-item list-group-item-action">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>#${index + 1}</strong> ${space.title || 'Untitled'}
+                            <small class="text-muted d-block">${space.host || 'Unknown host'}</small>
+                        </div>
+                        <span class="badge bg-info rounded-pill">${space.download_cnt} downloads</span>
+                    </div>
+                </a>
+            `).join('');
+        })
+        .catch(error => console.error('Error loading downloaded spaces:', error));
+}
+
+function loadActiveUsers(period) {
+    fetch(`/admin/api/stats/active_users?period=${period}`)
+        .then(response => response.json())
+        .then(result => {
+            const tbody = document.getElementById('activeUsersList');
+            
+            if (result.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No data available</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = result.data.map(user => `
+                <tr>
+                    <td>${user.email}</td>
+                    <td>${user.country || '-'}</td>
+                    <td>${user.login_count || 0}</td>
+                    <td>${user.space_count || 0}</td>
+                    <td>${user.total_downloads || 0}</td>
+                    <td>${user.total_plays || 0}</td>
+                </tr>
+            `).join('');
+        })
+        .catch(error => console.error('Error loading active users:', error));
+}
+
+// Pagination Helper
+function displayPagination(elementId, currentPage, totalPages, loadFunction) {
+    const pagination = document.getElementById(elementId);
+    
+    if (totalPages <= 1) {
+        pagination.innerHTML = '';
+        return;
+    }
+    
+    let html = '';
+    
+    // Previous button
+    html += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+        <a class="page-link" href="#" onclick="event.preventDefault(); ${currentPage > 1 ? `${loadFunction.name}(${currentPage - 1})` : ''}">Previous</a>
+    </li>`;
+    
+    // Page numbers
+    for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) {
+        html += `<li class="page-item ${i === currentPage ? 'active' : ''}">
+            <a class="page-link" href="#" onclick="event.preventDefault(); ${loadFunction.name}(${i})">${i}</a>
+        </li>`;
+    }
+    
+    // Next button
+    html += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+        <a class="page-link" href="#" onclick="event.preventDefault(); ${currentPage < totalPages ? `${loadFunction.name}(${currentPage + 1})` : ''}">Next</a>
+    </li>`;
+    
+    pagination.innerHTML = html;
+}
+</script>
+{% endblock %}

@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+
+{% block title %}FAQ - XSpace Downloader{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-10 mx-auto">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0"><i class="bi bi-question-circle"></i> Frequently Asked Questions</h4>
+            </div>
+            <div class="card-body">
+                <p class="lead mb-4">Find answers to common questions about XSpace Downloader</p>
+                
+                <div class="accordion" id="faqAccordion">
+                    
+                    <!-- General Questions -->
+                    <h5 class="mt-4 mb-3 text-primary">General Questions</h5>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq1">
+                                What is XSpace Downloader?
+                            </button>
+                        </h2>
+                        <div id="faq1" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                XSpace Downloader is a web-based tool that allows you to download and archive X (formerly Twitter) Spaces. It preserves audio content from live conversations, making them available for future listening, transcription, and translation.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2">
+                                Is XSpace Downloader free to use?
+                            </button>
+                        </h2>
+                        <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Yes, XSpace Downloader is completely free to use. It's an open-source project released under the MIT License. You can download spaces without any limitations or subscription fees.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3">
+                                Do I need to create an account?
+                            </button>
+                        </h2>
+                        <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                No account is required to download spaces. However, creating a free account (via email magic link) allows you to:
+                                <ul>
+                                    <li>Keep track of all your downloaded spaces</li>
+                                    <li>Add personal notes to spaces</li>
+                                    <li>Access your downloads from any device</li>
+                                    <li>Organize spaces with custom tags</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Downloading Questions -->
+                    <h5 class="mt-5 mb-3 text-primary">Downloading Spaces</h5>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq4">
+                                How do I download a Space?
+                            </button>
+                        </h2>
+                        <div id="faq4" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                <ol>
+                                    <li>Copy the URL of the X Space you want to download</li>
+                                    <li>Paste it into the input field on the home page</li>
+                                    <li>Click "Submit"</li>
+                                    <li>Your download will be queued and processed automatically</li>
+                                    <li>Once complete, you can listen online or download the MP3 file</li>
+                                </ol>
+                                You can continue browsing while your download is being processed.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq5">
+                                What format are Spaces downloaded in?
+                            </button>
+                        </h2>
+                        <div id="faq5" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Spaces are downloaded and converted to MP3 format for maximum compatibility. MP3 files can be played on virtually any device and are optimized for audio quality while keeping file sizes reasonable.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq6">
+                                How long does downloading take?
+                            </button>
+                        </h2>
+                        <div id="faq6" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Download time depends on:
+                                <ul>
+                                    <li>Length of the Space (longer spaces take more time)</li>
+                                    <li>Current queue size (downloads are processed in order)</li>
+                                    <li>Server load</li>
+                                </ul>
+                                Typically, a 1-hour Space takes 2-5 minutes to download and process. You can monitor progress in the Queue page.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq7">
+                                Can I download Spaces that have already ended?
+                            </button>
+                        </h2>
+                        <div id="faq7" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Yes, you can download Spaces that have ended, as long as they are still available on X. X typically keeps recorded Spaces available for a limited time (usually 30 days), so download them soon after they end.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Features Questions -->
+                    <h5 class="mt-5 mb-3 text-primary">Features & Functionality</h5>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq8">
+                                What is the transcription feature?
+                            </button>
+                        </h2>
+                        <div id="faq8" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                The transcription feature converts spoken audio from Spaces into written text using advanced AI. This allows you to:
+                                <ul>
+                                    <li>Read the conversation instead of listening</li>
+                                    <li>Search for specific topics or quotes</li>
+                                    <li>Copy and share text excerpts</li>
+                                    <li>Translate content to other languages</li>
+                                </ul>
+                                Transcription supports multiple languages and is highly accurate.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq9">
+                                Can I add notes to Spaces?
+                            </button>
+                        </h2>
+                        <div id="faq9" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Yes! Each Space has a notes section where you can:
+                                <ul>
+                                    <li>Add personal thoughts and comments</li>
+                                    <li>Highlight key moments with timestamps</li>
+                                    <li>Embed YouTube videos for reference</li>
+                                    <li>Format text with rich editing tools</li>
+                                </ul>
+                                Notes are private to your account and saved automatically.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq10">
+                                What languages are supported for translation?
+                            </button>
+                        </h2>
+                        <div id="faq10" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                XSpace Downloader supports translation to and from over 100 languages, including:
+                                <ul>
+                                    <li>Major languages: English, Spanish, French, German, Chinese, Japanese, Arabic, Hindi</li>
+                                    <li>European languages: Italian, Portuguese, Dutch, Polish, Russian</li>
+                                    <li>Asian languages: Korean, Vietnamese, Thai, Indonesian</li>
+                                    <li>And many more...</li>
+                                </ul>
+                                The AI-powered translation maintains context and nuance for accurate results.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Technical Questions -->
+                    <h5 class="mt-5 mb-3 text-primary">Technical Questions</h5>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq11">
+                                Is my data private and secure?
+                            </button>
+                        </h2>
+                        <div id="faq11" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Yes, your privacy is important to us:
+                                <ul>
+                                    <li>Downloaded Spaces are associated with your account only</li>
+                                    <li>Personal notes are private and encrypted</li>
+                                    <li>No passwords are stored (we use secure email magic links)</li>
+                                    <li>You can delete your data at any time</li>
+                                    <li>We don't share your information with third parties</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq12">
+                                Can I self-host XSpace Downloader?
+                            </button>
+                        </h2>
+                        <div id="faq12" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Yes! XSpace Downloader is open-source and can be self-hosted. You'll need:
+                                <ul>
+                                    <li>Python 3.8 or higher</li>
+                                    <li>MySQL or MariaDB database</li>
+                                    <li>FFmpeg for audio processing</li>
+                                    <li>Optional: AI API keys for transcription/translation</li>
+                                </ul>
+                                Check our GitHub repository for detailed installation instructions.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq13">
+                                What are the system requirements?
+                            </button>
+                        </h2>
+                        <div id="faq13" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                For users: Any modern web browser (Chrome, Firefox, Safari, Edge) with JavaScript enabled.
+                                <br><br>
+                                For self-hosting:
+                                <ul>
+                                    <li>2GB RAM minimum (4GB recommended)</li>
+                                    <li>10GB storage for application and downloads</li>
+                                    <li>Linux, macOS, or Windows with WSL</li>
+                                    <li>Stable internet connection</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Support Questions -->
+                    <h5 class="mt-5 mb-3 text-primary">Support & Troubleshooting</h5>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq14">
+                                My download failed. What should I do?
+                            </button>
+                        </h2>
+                        <div id="faq14" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                If a download fails:
+                                <ol>
+                                    <li>Check if the Space URL is correct and still accessible on X</li>
+                                    <li>Try submitting the URL again</li>
+                                    <li>Check the Queue page for error messages</li>
+                                    <li>Ensure the Space hasn't been deleted by the host</li>
+                                </ol>
+                                If problems persist, please report the issue on our GitHub page.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq15">
+                                How can I report bugs or request features?
+                            </button>
+                        </h2>
+                        <div id="faq15" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                We welcome feedback and contributions! You can:
+                                <ul>
+                                    <li>Report bugs on our GitHub Issues page</li>
+                                    <li>Request features through GitHub Discussions</li>
+                                    <li>Submit pull requests for improvements</li>
+                                    <li>Join our community Discord server</li>
+                                </ul>
+                                Please include detailed information when reporting issues to help us resolve them quickly.
+                            </div>
+                        </div>
+                    </div>
+                    
+                </div>
+                
+                <div class="mt-5 p-4 bg-light rounded">
+                    <h5 class="mb-3">Still have questions?</h5>
+                    <p class="mb-0">
+                        Check out our <a href="{{ url_for('about') }}">About page</a> for more information about the project, 
+                        or visit our <a href="https://github.com/yourusername/xspacedownloader" target="_blank">GitHub repository</a> 
+                        for technical documentation.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

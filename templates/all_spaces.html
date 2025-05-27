@@ -2,59 +2,110 @@
 
 {% block title %}All Downloaded Spaces - XSpace Downloader{% endblock %}
 
+{% block head %}
+<style>
+    /* Sortable column styling */
+    th.sort {
+        position: relative;
+        user-select: none;
+    }
+    
+    th.sort:hover {
+        background-color: rgba(0,0,0,0.05);
+    }
+    
+    html[data-bs-theme="dark"] th.sort:hover {
+        background-color: rgba(255,255,255,0.05);
+    }
+    
+    /* Hide default arrow */
+    th.sort i {
+        opacity: 0.3;
+        transition: opacity 0.2s;
+    }
+    
+    th.sort:hover i {
+        opacity: 0.6;
+    }
+    
+    /* Show active sort direction */
+    th.sort.asc i::before,
+    th.sort.desc i::before {
+        opacity: 1;
+    }
+    
+    th.sort.asc i::before {
+        content: "\f128"; /* bi-arrow-up */
+    }
+    
+    th.sort.desc i::before {
+        content: "\f125"; /* bi-arrow-down */
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="row">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h4>All Downloaded Spaces</h4>
-                <a href="{{ url_for('index') }}" class="btn btn-outline-primary btn-sm">Back to Home</a>
+    <div class="col-12">
+        <div class="card shadow-sm" id="all-spaces-container">
+            <div class="card-header bg-light">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h4 class="mb-0"><i class="bi bi-collection"></i> All Downloaded Spaces</h4>
+                    <div class="d-flex align-items-center gap-2 gap-md-3">
+                        <div class="input-group" style="max-width: 300px;">
+                            <span class="input-group-text d-none d-sm-flex"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control search" placeholder="Search spaces...">
+                        </div>
+                        <span class="badge bg-secondary d-none d-sm-inline">{{ spaces|length }} total</span>
+                    </div>
+                </div>
             </div>
-            <div class="card-body">
+            <div class="card-body p-0">
                 {% if spaces %}
                 <div class="table-responsive">
-                    <table class="table table-striped table-hover align-middle">
+                    <table class="table table-striped table-hover align-middle mb-0">
                         <thead>
                             <tr>
-                                <th>Space</th>
-                                <th>Downloaded</th>
-                                <th>Stats</th>
-                                <th>Features</th>
+                                <th class="sort" data-sort="space-title" style="cursor: pointer;">
+                                    Space <i class="bi bi-arrow-down-up ms-1"></i>
+                                </th>
+                                <th class="d-none d-md-table-cell sort" data-sort="space-date" style="cursor: pointer;">
+                                    Downloaded <i class="bi bi-arrow-down-up ms-1"></i>
+                                </th>
+                                <th class="d-none d-md-table-cell text-center sort" data-sort="space-plays" style="cursor: pointer;">
+                                    Plays <i class="bi bi-arrow-down-up ms-1"></i>
+                                </th>
+                                <th class="d-none d-md-table-cell text-center sort" data-sort="space-downloads" style="cursor: pointer;">
+                                    Downloads <i class="bi bi-arrow-down-up ms-1"></i>
+                                </th>
+                                <th class="d-none d-md-table-cell">Features</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody class="list">
                             {% for space in spaces %}
                             <tr>
                                 <td>
                                     <div>
-                                        <strong>{{ space.title if space.title else space.space_id }}</strong>
+                                        <strong class="space-title">{{ space.title if space.title else space.space_id }}</strong>
                                         {% if space.title %}
-                                        <br><small class="text-muted">{{ space.space_id }}</small>
+                                        <br><small class="text-muted space-id">{{ space.space_id }}</small>
                                         {% endif %}
                                     </div>
                                 </td>
-                                <td><small>{{ space.updated_at }}</small></td>
-                                <td>
-                                    <div class="d-flex flex-column align-items-start">
-                                        {% if space.file_exists %}
-                                        <small>{{ space.file_size|filesizeformat }}</small>
-                                        {% endif %}
-                                        <div class="text-nowrap">
-                                            {% if space.playback_cnt %}
-                                            <small class="text-muted" data-bs-toggle="tooltip" data-bs-placement="top" title="Plays">
-                                                <i class="bi bi-play-circle-fill"></i> {{ space.playback_cnt }}
-                                            </small>
-                                            {% endif %}
-                                            {% if space.download_cnt %}
-                                            <small class="text-muted ms-2" data-bs-toggle="tooltip" data-bs-placement="top" title="Downloads">
-                                                <i class="bi bi-download"></i> {{ space.download_cnt }}
-                                            </small>
-                                            {% endif %}
-                                        </div>
-                                    </div>
+                                <td class="d-none d-md-table-cell">
+                                    <small class="text-muted relative-time" data-datetime="{{ space.updated_at }}">
+                                        <span class="space-date" style="display: none;">{{ space.updated_at }}</span>
+                                        <span class="space-date-display">{{ space.updated_at }}</span>
+                                    </small>
                                 </td>
-                                <td>
+                                <td class="d-none d-md-table-cell text-center">
+                                    <span class="space-plays">{{ space.playback_cnt|default(0, true) }}</span>
+                                </td>
+                                <td class="d-none d-md-table-cell text-center">
+                                    <span class="space-downloads">{{ space.download_cnt|default(0, true) }}</span>
+                                </td>
+                                <td class="d-none d-md-table-cell">
                                     <div class="d-flex gap-1">
                                         {% if space.has_transcript %}
                                         <span class="badge bg-info" data-bs-toggle="tooltip" data-bs-placement="top" title="Transcript available">
@@ -97,9 +148,19 @@
                         </tbody>
                     </table>
                 </div>
+                
+                <!-- Pagination -->
+                <div class="d-flex justify-content-between align-items-center p-3 border-top">
+                    <div>
+                        <small class="text-muted">Showing <span class="showing-count"></span> of {{ spaces|length }} spaces</small>
+                    </div>
+                    <nav>
+                        <ul class="pagination pagination-sm mb-0"></ul>
+                    </nav>
+                </div>
                 {% else %}
-                <div class="alert alert-info">
-                    <p>No downloaded spaces found. <a href="{{ url_for('index') }}">Submit a space for download</a>.</p>
+                <div class="alert alert-info m-3">
+                    <p class="mb-0">No downloaded spaces found. <a href="{{ url_for('index') }}">Submit a space for download</a>.</p>
                 </div>
                 {% endif %}
             </div>
@@ -109,11 +170,130 @@
 {% endblock %}
 
 {% block scripts %}
+<!-- List.js library -->
+<script src="https://cdn.jsdelivr.net/npm/list.js@2.3.1/dist/list.min.js"></script>
+
 <script>
-    // Initialize Bootstrap tooltips
+    // Function to convert datetime to relative time
+    function timeAgo(datetime) {
+        const date = new Date(datetime);
+        const now = new Date();
+        const seconds = Math.floor((now - date) / 1000);
+        
+        const intervals = {
+            year: 31536000,
+            month: 2592000,
+            week: 604800,
+            day: 86400,
+            hour: 3600,
+            minute: 60
+        };
+        
+        if (seconds < 60) {
+            return 'just now';
+        }
+        
+        // Calculate days, hours, and minutes
+        const days = Math.floor(seconds / intervals.day);
+        const hours = Math.floor((seconds % intervals.day) / intervals.hour);
+        const minutes = Math.floor((seconds % intervals.hour) / intervals.minute);
+        
+        // Format output based on time elapsed
+        if (days > 0) {
+            let result = `${days} day${days > 1 ? 's' : ''}`;
+            if (hours > 0) {
+                result += ` ${hours} hour${hours > 1 ? 's' : ''}`;
+            }
+            return result + ' ago';
+        } else if (hours > 0) {
+            let result = `${hours} hour${hours > 1 ? 's' : ''}`;
+            if (minutes > 0) {
+                result += ` ${minutes} min`;
+            }
+            return result + ' ago';
+        } else {
+            return `${minutes} min ago`;
+        }
+    }
+    
+    // Function to update all relative times
+    function updateRelativeTimes() {
+        document.querySelectorAll('.relative-time').forEach(el => {
+            const datetime = el.getAttribute('data-datetime');
+            if (datetime) {
+                const displayEl = el.querySelector('.space-date-display');
+                if (displayEl) {
+                    displayEl.textContent = timeAgo(datetime);
+                    el.title = datetime; // Show full date on hover
+                }
+            }
+        });
+    }
+    
+    // Initialize on page load
     document.addEventListener('DOMContentLoaded', function() {
+        // Initialize Bootstrap tooltips
         const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
         const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+        
+        // Update relative times
+        updateRelativeTimes();
+        
+        // Update relative times every minute
+        setInterval(updateRelativeTimes, 60000);
+        
+        // Initialize List.js if we have spaces
+        {% if spaces %}
+        const options = {
+            valueNames: [ 'space-title', 'space-id', 'space-date', 'space-plays', 'space-downloads' ],
+            page: 20,
+            pagination: {
+                innerWindow: 2,
+                outerWindow: 1,
+                left: 0,
+                right: 0,
+                paginationClass: 'pagination',
+                item: '<li class="page-item"><a class="page-link" href="#"></a></li>',
+                activeClass: 'active'
+            }
+        };
+        
+        const spacesList = new List('all-spaces-container', options);
+        
+        // Update showing count
+        function updateShowingCount() {
+            const visibleItems = spacesList.visibleItems.length;
+            const totalItems = spacesList.size();
+            
+            if (visibleItems === 0) {
+                document.querySelector('.showing-count').textContent = '0';
+                return;
+            }
+            
+            // For List.js, when all items fit on one page, just show the count
+            if (totalItems <= options.page) {
+                document.querySelector('.showing-count').textContent = `1-${visibleItems}`;
+            } else {
+                // Calculate actual pagination
+                const currentPage = spacesList.page || 1;
+                const pageSize = options.page || 20;
+                const start = (currentPage - 1) * pageSize + 1;
+                const end = Math.min(start + pageSize - 1, start + visibleItems - 1, totalItems);
+                document.querySelector('.showing-count').textContent = `${start}-${end}`;
+            }
+        }
+        
+        // Update count on list changes
+        spacesList.on('updated', function() {
+            updateShowingCount();
+            updateRelativeTimes(); // Update times after sorting
+        });
+        spacesList.on('searchComplete', updateShowingCount);
+        spacesList.on('filterComplete', updateShowingCount);
+        
+        // Initial count update
+        updateShowingCount();
+        {% endif %}
     });
 </script>
 {% endblock %}

@@ -94,6 +94,7 @@ class TestUser(unittest.TestCase):
         user_by_id = self.user.get_user(user_id=user_id)
         self.assertIsNotNone(user_by_id, "Should retrieve user by ID")
         self.assertEqual(user_by_id['user_id'], user_id, "Retrieved user ID should match")
+        self.assertEqual(user_by_id.get('is_admin', 0), 0, "New user should not be admin")
         
         # Test get by username
         log_test_step(f"Getting user by username: {self.test_data['username']}")
@@ -182,9 +183,69 @@ class TestUser(unittest.TestCase):
         self.assertIsNotNone(auth_user, "Should authenticate with new password")
         self.assertEqual(auth_user['user_id'], user_id, "Authenticated user ID should match")
         
+        # Test updating is_admin field
+        log_test_step("Testing is_admin field update")
+        result = self.user.update_user(user_id, is_admin=1)
+        self.assertTrue(result, "Should update is_admin field")
+        
+        # Verify is_admin update
+        user = self.user.get_user(user_id=user_id)
+        self.assertEqual(user.get('is_admin', 0), 1, "is_admin should be updated to 1")
+        
+        # Reset is_admin back to 0
+        result = self.user.update_user(user_id, is_admin=0)
+        self.assertTrue(result, "Should reset is_admin field")
+        
+        # Test updating country field
+        log_test_step("Testing country field update")
+        result = self.user.update_user(user_id, country='USA')
+        self.assertTrue(result, "Should update country field")
+        
+        # Verify country update
+        user = self.user.get_user(user_id=user_id)
+        self.assertEqual(user.get('country'), 'USA', "country should be updated to USA")
+        
+        # Test updating last_logged_in using the dedicated method
+        log_test_step("Testing last_logged_in update")
+        result = self.user.update_last_login(user_id)
+        self.assertTrue(result, "Should update last_logged_in timestamp")
+        
+        # Verify last_logged_in was set
+        user = self.user.get_user(user_id=user_id)
+        self.assertIsNotNone(user.get('last_logged_in'), "last_logged_in should be set")
+        
         log_test_end("update_user")
     
-    def test_05_delete_user(self):
+    def test_05_create_user_with_country(self):
+        """Test creating a user with country specified."""
+        log_test_start("create_user_with_country")
+        
+        # Create test data with country
+        test_data_with_country = {
+            'username': f"country_test_{self.timestamp}_UserTest",
+            'email': f"country_test_{self.timestamp}@example.com",
+            'password': TEST_USER['password'],
+            'country': 'GBR'
+        }
+        
+        log_test_step("Creating user with country GBR")
+        user_id = self.user.create_user(
+            test_data_with_country['username'],
+            test_data_with_country['email'],
+            test_data_with_country['password'],
+            self.visitor_id,
+            test_data_with_country['country']
+        )
+        
+        self.assertIsNotNone(user_id, "User creation with country should return a user ID")
+        
+        # Verify user was created with country
+        user = self.user.get_user(user_id=user_id)
+        self.assertEqual(user.get('country'), 'GBR', "User should have country set to GBR")
+        
+        log_test_end("create_user_with_country")
+    
+    def test_06_delete_user(self):
         """Test deleting a user."""
         # First create a user
         user_id = self.test_01_create_user()

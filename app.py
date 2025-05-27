@@ -719,8 +719,9 @@ def trim_audio(space_id):
         if not file_path:
             return jsonify({'success': False, 'error': 'Audio file not found'}), 404
         
-        # Create a temporary file for the trimmed audio
-        temp_file = file_path + '.tmp'
+        # Create a temporary file for the trimmed audio with proper extension
+        file_ext = os.path.splitext(file_path)[1]
+        temp_file = file_path.replace(file_ext, f'_tmp{file_ext}')
         
         # Build FFmpeg command
         cmd = ['ffmpeg', '-y', '-i', file_path]
@@ -749,16 +750,8 @@ def trim_audio(space_id):
                 os.replace(temp_file, file_path)
                 logger.info(f"Successfully trimmed audio file: {file_path}")
                 
-                # Update file size in database
+                # Get new file size for response
                 new_size = os.path.getsize(file_path)
-                space = get_space_component()
-                cursor = space.connection.cursor()
-                cursor.execute(
-                    "UPDATE spaces SET file_size = %s, updated_at = NOW() WHERE space_id = %s",
-                    (new_size, space_id)
-                )
-                space.connection.commit()
-                cursor.close()
                 
                 return jsonify({
                     'success': True,
@@ -2379,9 +2372,9 @@ def verify_login_token(token):
         
         space.connection.commit()
         
-        # Update last login time
+        # Update last login time and increment login count
         cursor.execute(
-            "UPDATE users SET last_logged_in = NOW() WHERE id = %s",
+            "UPDATE users SET last_logged_in = NOW(), login_count = COALESCE(login_count, 0) + 1 WHERE id = %s",
             (token_data['user_id'],)
         )
         
@@ -3008,6 +3001,417 @@ def test_anthropic_api():
     except Exception as e:
         logger.error(f"Error testing Anthropic API: {e}", exc_info=True)
         return jsonify({'success': False, 'error': 'Invalid request'}), 400
+
+# Admin dashboard route
+@app.route('/admin')
+def admin_dashboard():
+    """Admin dashboard for managing users, spaces, and viewing stats."""
+    try:
+        # Check if user is logged in and is admin
+        if not session.get('user_id') or not session.get('is_admin'):
+            flash('Admin access required.', 'error')
+            return redirect(url_for('index'))
+        
+        # Get database connection
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        # Get basic stats
+        # Total users
+        cursor.execute("SELECT COUNT(*) as total FROM users")
+        total_users = cursor.fetchone()['total']
+        
+        # Total spaces
+        cursor.execute("SELECT COUNT(*) as total FROM spaces")
+        total_spaces = cursor.fetchone()['total']
+        
+        # Total downloads
+        cursor.execute("SELECT SUM(download_cnt) as total FROM spaces")
+        total_downloads = cursor.fetchone()['total'] or 0
+        
+        # Total plays
+        cursor.execute("SELECT SUM(playback_cnt) as total FROM spaces")
+        total_plays = cursor.fetchone()['total'] or 0
+        
+        cursor.close()
+        
+        return render_template('admin.html',
+                             total_users=total_users,
+                             total_spaces=total_spaces,
+                             total_downloads=total_downloads,
+                             total_plays=total_plays)
+        
+    except Exception as e:
+        logger.error(f"Error in admin dashboard: {e}", exc_info=True)
+        flash('An error occurred loading the admin dashboard.', 'error')
+        return redirect(url_for('index'))
+
+# Admin API routes for AJAX operations
+@app.route('/admin/api/users')
+def admin_get_users():
+    """Get paginated list of users for admin."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+        search = request.args.get('search', '')
+        
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        # Build query
+        query = """
+            SELECT id, email, status, is_admin, country, login_count, 
+                   last_logged_in, created_at,
+                   (SELECT COUNT(*) FROM spaces WHERE user_id = users.id) as space_count
+            FROM users
+        """
+        
+        if search:
+            query += " WHERE email LIKE %s"
+            search_param = f"%{search}%"
+        
+        # Get total count
+        count_query = "SELECT COUNT(*) as total FROM users"
+        if search:
+            count_query += " WHERE email LIKE %s"
+            cursor.execute(count_query, (search_param,) if search else ())
+        else:
+            cursor.execute(count_query)
+        
+        total = cursor.fetchone()['total']
+        
+        # Get paginated results
+        query += " ORDER BY created_at DESC LIMIT %s OFFSET %s"
+        offset = (page - 1) * per_page
+        
+        if search:
+            cursor.execute(query, (search_param, per_page, offset))
+        else:
+            cursor.execute(query, (per_page, offset))
+        
+        users = cursor.fetchall()
+        cursor.close()
+        
+        # Convert datetime objects to strings
+        for user in users:
+            for field in ['created_at', 'last_logged_in']:
+                if user.get(field):
+                    user[field] = user[field].isoformat()
+        
+        return jsonify({
+            'users': users,
+            'total': total,
+            'page': page,
+            'per_page': per_page,
+            'pages': (total + per_page - 1) // per_page
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting users: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/users/<int:user_id>', methods=['PUT'])
+def admin_update_user(user_id):
+    """Update user details."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        data = request.get_json()
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        # Check if we're trying to remove admin flag or suspend
+        if ('is_admin' in data and not data['is_admin']) or ('status' in data and data['status'] != 1):
+            # Check if this is the last admin
+            cursor.execute("SELECT COUNT(*) as admin_count FROM users WHERE is_admin = 1 AND id != %s", (user_id,))
+            admin_count = cursor.fetchone()['admin_count']
+            
+            if admin_count == 0:
+                # This is the last admin
+                cursor.execute("SELECT is_admin FROM users WHERE id = %s", (user_id,))
+                user = cursor.fetchone()
+                if user and user['is_admin']:
+                    cursor.close()
+                    return jsonify({'error': 'Cannot remove admin privileges or suspend the last admin user'}), 400
+        
+        # Build update query
+        updates = []
+        params = []
+        
+        if 'status' in data:
+            updates.append("status = %s")
+            params.append(data['status'])
+        
+        if 'is_admin' in data:
+            updates.append("is_admin = %s")
+            params.append(1 if data['is_admin'] else 0)
+        
+        if updates:
+            query = f"UPDATE users SET {', '.join(updates)} WHERE id = %s"
+            params.append(user_id)
+            cursor.execute(query, params)
+            space.connection.commit()
+        
+        cursor.close()
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        logger.error(f"Error updating user: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/users/<int:user_id>', methods=['DELETE'])
+def admin_delete_user(user_id):
+    """Delete a user."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        # Prevent deleting self
+        if user_id == session.get('user_id'):
+            return jsonify({'error': 'Cannot delete your own account'}), 400
+        
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        # Check if this is an admin user
+        cursor.execute("SELECT is_admin FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+        
+        if user and user['is_admin']:
+            # Check if this is the last admin
+            cursor.execute("SELECT COUNT(*) as admin_count FROM users WHERE is_admin = 1 AND id != %s", (user_id,))
+            admin_count = cursor.fetchone()['admin_count']
+            
+            if admin_count == 0:
+                cursor.close()
+                return jsonify({'error': 'Cannot delete the last admin user'}), 400
+        
+        cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
+        space.connection.commit()
+        cursor.close()
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        logger.error(f"Error deleting user: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/spaces')
+def admin_get_spaces():
+    """Get paginated list of spaces for admin."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+        search = request.args.get('search', '')
+        
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        # Build query
+        query = """
+            SELECT s.*, s.title, sm.host,
+                   u.email as user_email
+            FROM spaces s
+            LEFT JOIN space_metadata sm ON s.space_id = sm.space_id
+            LEFT JOIN users u ON s.user_id = u.id
+        """
+        
+        if search:
+            query += " WHERE s.space_id LIKE %s OR s.title LIKE %s OR sm.host LIKE %s"
+            search_param = f"%{search}%"
+        
+        # Get total count
+        count_query = "SELECT COUNT(*) as total FROM spaces s"
+        if search:
+            count_query += " LEFT JOIN space_metadata sm ON s.space_id = sm.space_id WHERE s.space_id LIKE %s OR s.title LIKE %s OR sm.host LIKE %s"
+            cursor.execute(count_query, (search_param, search_param, search_param) if search else ())
+        else:
+            cursor.execute(count_query)
+        
+        total = cursor.fetchone()['total']
+        
+        # Get paginated results
+        query += " ORDER BY s.created_at DESC LIMIT %s OFFSET %s"
+        offset = (page - 1) * per_page
+        
+        if search:
+            cursor.execute(query, (search_param, search_param, search_param, per_page, offset))
+        else:
+            cursor.execute(query, (per_page, offset))
+        
+        spaces = cursor.fetchall()
+        cursor.close()
+        
+        # Convert datetime objects to strings
+        for space in spaces:
+            for field in ['created_at', 'downloaded_at', 'updated_at']:
+                if space.get(field):
+                    space[field] = space[field].isoformat()
+        
+        return jsonify({
+            'spaces': spaces,
+            'total': total,
+            'page': page,
+            'per_page': per_page,
+            'pages': (total + per_page - 1) // per_page
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting spaces: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/spaces/<space_id>', methods=['DELETE'])
+def admin_delete_space(space_id):
+    """Delete a space."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        space = get_space_component()
+        
+        # Delete the space (will cascade to related tables)
+        result = space.delete_space(space_id)
+        
+        if result:
+            return jsonify({'success': True})
+        else:
+            return jsonify({'error': 'Space not found'}), 404
+        
+    except Exception as e:
+        logger.error(f"Error deleting space: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/stats/<stat_type>')
+def admin_get_stats(stat_type):
+    """Get various statistics for admin dashboard."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        period = request.args.get('period', 'all')  # daily, weekly, monthly, all
+        
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        # Build date condition based on period
+        date_condition = ""
+        if period == 'daily':
+            date_condition = "WHERE DATE(created_at) = CURDATE()"
+        elif period == 'weekly':
+            date_condition = "WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)"
+        elif period == 'monthly':
+            date_condition = "WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)"
+        
+        if stat_type == 'submissions':
+            # Space submissions over time
+            if period == 'all':
+                query = """
+                    SELECT DATE(created_at) as date, COUNT(*) as count
+                    FROM spaces
+                    WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+                    GROUP BY DATE(created_at)
+                    ORDER BY date
+                """
+            else:
+                query = f"""
+                    SELECT DATE(created_at) as date, COUNT(*) as count
+                    FROM spaces
+                    {date_condition}
+                    GROUP BY DATE(created_at)
+                    ORDER BY date
+                """
+            
+            cursor.execute(query)
+            data = cursor.fetchall()
+            
+        elif stat_type == 'plays':
+            # Most played spaces
+            query = f"""
+                SELECT s.space_id, s.playback_cnt, s.download_cnt,
+                       s.title, sm.host
+                FROM spaces s
+                LEFT JOIN space_metadata sm ON s.space_id = sm.space_id
+                {date_condition}
+                ORDER BY s.playback_cnt DESC
+                LIMIT 20
+            """
+            cursor.execute(query)
+            data = cursor.fetchall()
+            
+        elif stat_type == 'downloads':
+            # Most downloaded spaces
+            query = f"""
+                SELECT s.space_id, s.download_cnt, s.playback_cnt,
+                       s.title, sm.host
+                FROM spaces s
+                LEFT JOIN space_metadata sm ON s.space_id = sm.space_id
+                {date_condition}
+                ORDER BY s.download_cnt DESC
+                LIMIT 20
+            """
+            cursor.execute(query)
+            data = cursor.fetchall()
+            
+        elif stat_type == 'active_users':
+            # Most active users
+            if period == 'all':
+                # By total login count
+                query = """
+                    SELECT u.id, u.email, u.login_count, u.country,
+                           COUNT(DISTINCT s.id) as space_count,
+                           SUM(s.download_cnt) as total_downloads,
+                           SUM(s.playback_cnt) as total_plays
+                    FROM users u
+                    LEFT JOIN spaces s ON u.id = s.user_id
+                    GROUP BY u.id
+                    ORDER BY u.login_count DESC
+                    LIMIT 20
+                """
+            else:
+                # By recent activity
+                query = f"""
+                    SELECT u.id, u.email, u.login_count, u.country,
+                           COUNT(DISTINCT s.id) as space_count,
+                           COUNT(DISTINCT CASE WHEN s.created_at >= DATE_SUB(CURDATE(), INTERVAL 
+                               {1 if period == 'daily' else 7 if period == 'weekly' else 30} DAY) 
+                               THEN s.id END) as recent_spaces
+                    FROM users u
+                    LEFT JOIN spaces s ON u.id = s.user_id
+                    WHERE u.last_logged_in >= DATE_SUB(CURDATE(), INTERVAL 
+                        {1 if period == 'daily' else 7 if period == 'weekly' else 30} DAY)
+                    GROUP BY u.id
+                    ORDER BY recent_spaces DESC
+                    LIMIT 20
+                """
+            cursor.execute(query)
+            data = cursor.fetchall()
+            
+        else:
+            return jsonify({'error': 'Invalid stat type'}), 400
+        
+        cursor.close()
+        
+        # Convert datetime objects to strings
+        for item in data:
+            if 'date' in item and item['date']:
+                item['date'] = item['date'].isoformat()
+        
+        return jsonify({
+            'data': data,
+            'period': period,
+            'type': stat_type
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting stats: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 # Route for FAQ page
 @app.route('/faq')

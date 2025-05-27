@@ -104,9 +104,12 @@
                                 <button id="transcribe-btn" class="btn btn-info btn-sm me-2" {% if space.transcripts %}data-has-transcript="true"{% endif %} data-bs-toggle="tooltip" data-bs-placement="top" title="Generate transcript from audio">
                                     <i class="bi bi-mic"></i> Transcribe
                                 </button>
-                                <a href="/download/{{ space.space_id }}?attachment=1" class="btn btn-primary btn-sm">
+                                <a href="/download/{{ space.space_id }}?attachment=1" class="btn btn-primary btn-sm me-2">
                                     <i class="bi bi-download"></i> Download
                                 </a>
+                                <button id="trim-btn" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#trimModal" title="Trim audio file">
+                                    <i class="bi bi-scissors"></i> Trim
+                                </button>
                             </div>
                         </div>
                         <div class="card-body">
@@ -638,6 +641,71 @@
         color: #888 !important;
     }
 </style>
+<!-- Trim Modal -->
+<div class="modal fade" id="trimModal" tabindex="-1" aria-labelledby="trimModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="trimModalLabel">Trim Audio</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> Select the start and end times to trim the audio. The original file will be modified.
+                </div>
+                
+                <div class="audio-preview mb-4">
+                    <audio id="trim-audio-preview" controls class="w-100">
+                        <source src="/download/{{ space.space_id }}" type="{{ content_type|default('audio/mpeg') }}">
+                    </audio>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="trim-start" class="form-label">Start Time</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="trim-start-min" min="0" value="0" style="max-width: 80px;">
+                                <span class="input-group-text">:</span>
+                                <input type="number" class="form-control" id="trim-start-sec" min="0" max="59" value="0" style="max-width: 80px;">
+                                <button class="btn btn-outline-secondary" type="button" id="set-current-start">
+                                    <i class="bi bi-cursor"></i> Current
+                                </button>
+                            </div>
+                            <div class="form-text">Format: MM:SS</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="trim-end" class="form-label">End Time</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="trim-end-min" min="0" value="0" style="max-width: 80px;">
+                                <span class="input-group-text">:</span>
+                                <input type="number" class="form-control" id="trim-end-sec" min="0" max="59" value="0" style="max-width: 80px;">
+                                <button class="btn btn-outline-secondary" type="button" id="set-current-end">
+                                    <i class="bi bi-cursor"></i> Current
+                                </button>
+                            </div>
+                            <div class="form-text">Format: MM:SS (0:0 = end of file)</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="trim-info">
+                    <p class="mb-2"><strong>Duration:</strong> <span id="trim-duration">--:--</span></p>
+                    <p class="mb-0"><strong>Selected Range:</strong> <span id="trim-range">--:-- to --:--</span></p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning" id="apply-trim-btn">
+                    <i class="bi bi-scissors"></i> Apply Trim
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -3206,6 +3274,137 @@
         
         // Load notes on page load
         loadNotes();
+        
+        // Trim Audio Functionality
+        const trimAudioPreview = document.getElementById('trim-audio-preview');
+        const trimStartMin = document.getElementById('trim-start-min');
+        const trimStartSec = document.getElementById('trim-start-sec');
+        const trimEndMin = document.getElementById('trim-end-min');
+        const trimEndSec = document.getElementById('trim-end-sec');
+        const trimDuration = document.getElementById('trim-duration');
+        const trimRange = document.getElementById('trim-range');
+        const applyTrimBtn = document.getElementById('apply-trim-btn');
+        const setCurrentStartBtn = document.getElementById('set-current-start');
+        const setCurrentEndBtn = document.getElementById('set-current-end');
+        
+        // Update trim info display
+        function updateTrimInfo() {
+            const startTime = parseInt(trimStartMin.value || 0) * 60 + parseInt(trimStartSec.value || 0);
+            const endTime = parseInt(trimEndMin.value || 0) * 60 + parseInt(trimEndSec.value || 0);
+            
+            if (trimAudioPreview && trimAudioPreview.duration) {
+                const duration = trimAudioPreview.duration;
+                const actualEndTime = (endTime === 0) ? duration : Math.min(endTime, duration);
+                
+                if (startTime < actualEndTime) {
+                    const trimmedDuration = actualEndTime - startTime;
+                    trimDuration.textContent = formatTime(trimmedDuration);
+                    trimRange.textContent = `${formatTime(startTime)} to ${formatTime(actualEndTime)}`;
+                } else {
+                    trimDuration.textContent = 'Invalid range';
+                    trimRange.textContent = 'Invalid range';
+                }
+            }
+        }
+        
+        // Set current time buttons
+        if (setCurrentStartBtn) {
+            setCurrentStartBtn.addEventListener('click', function() {
+                if (trimAudioPreview && trimAudioPreview.currentTime) {
+                    const time = Math.floor(trimAudioPreview.currentTime);
+                    trimStartMin.value = Math.floor(time / 60);
+                    trimStartSec.value = time % 60;
+                    updateTrimInfo();
+                }
+            });
+        }
+        
+        if (setCurrentEndBtn) {
+            setCurrentEndBtn.addEventListener('click', function() {
+                if (trimAudioPreview && trimAudioPreview.currentTime) {
+                    const time = Math.floor(trimAudioPreview.currentTime);
+                    trimEndMin.value = Math.floor(time / 60);
+                    trimEndSec.value = time % 60;
+                    updateTrimInfo();
+                }
+            });
+        }
+        
+        // Update info when values change
+        [trimStartMin, trimStartSec, trimEndMin, trimEndSec].forEach(input => {
+            if (input) {
+                input.addEventListener('input', updateTrimInfo);
+            }
+        });
+        
+        // Set end time to duration when modal opens
+        document.getElementById('trimModal').addEventListener('show.bs.modal', function() {
+            // Wait for audio to load
+            setTimeout(() => {
+                if (trimAudioPreview && trimAudioPreview.duration) {
+                    const duration = Math.floor(trimAudioPreview.duration);
+                    trimEndMin.value = Math.floor(duration / 60);
+                    trimEndSec.value = duration % 60;
+                    updateTrimInfo();
+                }
+            }, 500);
+        });
+        
+        // Apply trim
+        if (applyTrimBtn) {
+            applyTrimBtn.addEventListener('click', function() {
+                const startTime = parseInt(trimStartMin.value || 0) * 60 + parseInt(trimStartSec.value || 0);
+                const endTime = parseInt(trimEndMin.value || 0) * 60 + parseInt(trimEndSec.value || 0);
+                
+                if (startTime >= endTime && endTime !== 0) {
+                    showToast('End time must be after start time', 'warning');
+                    return;
+                }
+                
+                // Confirm action
+                if (!confirm('This will permanently modify the audio file. Are you sure you want to continue?')) {
+                    return;
+                }
+                
+                // Disable button and show loading
+                applyTrimBtn.disabled = true;
+                applyTrimBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Trimming...';
+                
+                // Send trim request
+                fetch(`/api/spaces/${spaceId}/trim`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        start_time: startTime,
+                        end_time: endTime || null  // null means end of file
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showToast('Audio trimmed successfully', 'success');
+                        // Close modal
+                        bootstrap.Modal.getInstance(document.getElementById('trimModal')).hide();
+                        // Reload page to refresh audio
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1500);
+                    } else {
+                        showToast(data.error || 'Failed to trim audio', 'danger');
+                        applyTrimBtn.disabled = false;
+                        applyTrimBtn.innerHTML = '<i class="bi bi-scissors"></i> Apply Trim';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error trimming audio:', error);
+                    showToast('Error trimming audio', 'danger');
+                    applyTrimBtn.disabled = false;
+                    applyTrimBtn.innerHTML = '<i class="bi bi-scissors"></i> Apply Trim';
+                });
+            });
+        }
     });
 </script>
 {% endblock %}

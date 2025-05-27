@@ -1,8 +1,24 @@
 #!/bin/bash
 # run.sh - Run both the Flask app and the background downloader
+# Usage: ./run.sh [dev|prod]
+# dev  - Development mode (opens browser automatically)
+# prod - Production mode (does not open browser)
 
 # Make the script exit on any error
 set -e
+
+# Parse command line arguments
+MODE="${1:-dev}"  # Default to dev mode if no argument provided
+
+# Validate mode
+if [[ "$MODE" != "dev" && "$MODE" != "prod" ]]; then
+    echo "Usage: $0 [dev|prod]"
+    echo "  dev  - Development mode (opens browser automatically)"
+    echo "  prod - Production mode (does not open browser)"
+    exit 1
+fi
+
+echo "Running in $MODE mode..."
 
 # Make sure the script is executable
 chmod +x app.py
@@ -132,4 +148,43 @@ trap cleanup SIGINT SIGTERM
 echo "Flask app is now running. Press Ctrl+C to stop."
 echo "Background downloader is running independently and will continue even if Flask is stopped."
 echo "You can access the web interface at: http://127.0.0.1:$PORT or http://localhost:$PORT"
+
+# Open browser in dev mode
+if [[ "$MODE" == "dev" ]]; then
+    echo "Opening browser in development mode..."
+    
+    # Wait a moment for the server to start
+    sleep 2
+    
+    # Check if Flask is actually running
+    if kill -0 $FLASK_PID 2>/dev/null; then
+        # Detect the operating system and open browser accordingly
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS
+            open "http://localhost:$PORT"
+        elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+            # Linux
+            if command -v xdg-open > /dev/null; then
+                xdg-open "http://localhost:$PORT"
+            elif command -v gnome-open > /dev/null; then
+                gnome-open "http://localhost:$PORT"
+            elif command -v kde-open > /dev/null; then
+                kde-open "http://localhost:$PORT"
+            else
+                echo "Could not detect a way to open the browser on this Linux system."
+                echo "Please manually open: http://localhost:$PORT"
+            fi
+        elif [[ "$OSTYPE" == "cygwin" || "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
+            # Windows
+            start "http://localhost:$PORT"
+        else
+            echo "Unknown operating system. Please manually open: http://localhost:$PORT"
+        fi
+    else
+        echo "Flask app failed to start. Not opening browser."
+    fi
+else
+    echo "Production mode - browser will not open automatically."
+fi
+
 wait $FLASK_PID
