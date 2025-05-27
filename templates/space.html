@@ -2,18 +2,193 @@
 
 {% block title %}{{ space.title if space.title else space.space_id }} - XSpace Downloader{% endblock %}
 
+{% block head %}
+<!-- SummerNote CSS -->
+<link href="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.css" rel="stylesheet">
+<style>
+    /* Volume slider styling for better visibility */
+    .form-range {
+        height: 0.5rem;
+        background-color: rgba(0, 0, 0, 0.1);
+        border-radius: 5px;
+        border: none;
+    }
+    
+    html[data-bs-theme="dark"] .form-range {
+        background-color: rgba(255, 255, 255, 0.1);
+    }
+    
+    .form-range::-webkit-slider-thumb {
+        background-color: var(--bs-primary);
+        border: none;
+    }
+    
+    .form-range::-moz-range-thumb {
+        background-color: var(--bs-primary);
+        border: none;
+    }
+    
+    .form-range::-webkit-slider-runnable-track {
+        background-color: transparent;
+    }
+    
+    .form-range::-moz-range-track {
+        background-color: transparent;
+    }
+    
+    /* Note item styling */
+    .note-item {
+        background-color: var(--bs-gray-100);
+    }
+    
+    html[data-bs-theme="dark"] .note-item {
+        background-color: rgba(255, 255, 255, 0.05);
+    }
+    
+    /* Mobile optimizations */
+    @media (max-width: 576px) {
+        /* Smaller buttons on mobile */
+        .btn-sm {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+        }
+        
+        /* Center title on mobile */
+        #space-title {
+            font-size: 1.2rem;
+        }
+        
+        /* Compact audio player controls */
+        .audio-controls .btn-sm {
+            padding: 0.375rem 0.75rem;
+        }
+        
+        /* Stack metadata items vertically on mobile */
+        .space-details .d-flex {
+            flex-direction: column;
+            align-items: start !important;
+            gap: 0.5rem !important;
+        }
+    }
+    
+    /* Edit button styling */
+    #edit-title-btn {
+        opacity: 0.5;
+        transition: opacity 0.2s;
+    }
+    
+    #edit-title-btn:hover {
+        opacity: 1;
+    }
+    
+    /* Transcript actions styling */
+    .transcript-actions {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
+    
+    .transcript-section {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 1.5rem;
+    }
+    
+    html[data-bs-theme="dark"] .transcript-section {
+        background-color: rgba(255, 255, 255, 0.05);
+    }
+    
+    .transcript-content {
+        white-space: pre-wrap;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        line-height: 1.6;
+    }
+    
+    /* Timestamp styling */
+    .timestamp-link {
+        color: #0066cc;
+        cursor: pointer;
+        text-decoration: none;
+        font-family: monospace;
+        font-size: 0.9em;
+    }
+    
+    .timestamp-link:hover {
+        text-decoration: underline;
+    }
+    
+    /* SummerNote dark mode text styling */
+    html[data-bs-theme="dark"] .note-editor {
+        background-color: rgba(255, 255, 255, 0.05);
+    }
+    
+    html[data-bs-theme="dark"] .note-editor .note-editable {
+        background-color: rgba(255, 255, 255, 0.05);
+        color: white;
+    }
+    
+    html[data-bs-theme="dark"] .note-editor .note-placeholder {
+        color: rgba(255, 255, 255, 0.5);
+    }
+    
+    html[data-bs-theme="dark"] .note-editor .note-toolbar {
+        background-color: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+    
+    /* Note editor container */
+    #note-editor-container {
+        margin-top: 1rem;
+    }
+    
+    /* Space status badges */
+    .status-completed { background-color: #28a745; }
+    .status-downloading { background-color: #17a2b8; }
+    .status-pending { background-color: #ffc107; color: #000; }
+    .status-failed { background-color: #dc3545; }
+    
+    /* Create clip button styling */
+    #create-clip-btn {
+        margin-left: auto;
+    }
+    
+    /* Clip item styling */
+    .clip-item {
+        transition: all 0.2s ease;
+    }
+    
+    .clip-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    /* Toast styling */
+    .toast-container {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1050;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="row">
     <div class="col-md-12">
         <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <div class="d-flex align-items-center">
-                    <h4 id="space-title" class="mb-0 me-2">{{ space.title if space.title else "Space " + space.space_id }}</h4>
-                    <button id="edit-title-btn" class="btn btn-link btn-sm p-0" title="Edit title">
-                        <i class="bi bi-pencil"></i>
-                    </button>
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <a href="{{ url_for('index') }}" class="btn btn-outline-primary btn-sm order-1 order-md-3">
+                        <i class="bi bi-house d-md-none"></i>
+                        <span class="d-none d-md-inline">Back to Home</span>
+                    </a>
+                    <div class="d-flex align-items-center justify-content-center flex-grow-1 order-2 order-md-1">
+                        <h4 id="space-title" class="mb-0 me-2 text-center">{{ space.title if space.title else "Space " + space.space_id }}</h4>
+                        <button id="edit-title-btn" class="btn btn-link btn-sm p-0" title="Edit title">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                    </div>
                 </div>
-                <a href="{{ url_for('index') }}" class="btn btn-outline-primary btn-sm">Back to Home</a>
             </div>
             <div class="card-body">
                 <div class="space-details mb-3">
@@ -100,15 +275,15 @@
                     <h5>Audio Player</h5>
                     <div class="card">
                         <div class="card-header bg-primary bg-opacity-25">
-                            <div class="d-flex justify-content-start align-items-center">
-                                <button id="transcribe-btn" class="btn btn-info btn-sm me-2" {% if space.transcripts %}data-has-transcript="true"{% endif %} data-bs-toggle="tooltip" data-bs-placement="top" title="Generate transcript from audio">
-                                    <i class="bi bi-mic"></i> Transcribe
+                            <div class="d-flex justify-content-center justify-content-md-start align-items-center gap-2">
+                                <button id="transcribe-btn" class="btn btn-info btn-sm" {% if space.transcripts %}data-has-transcript="true"{% endif %} data-bs-toggle="tooltip" data-bs-placement="top" title="Generate transcript from audio">
+                                    <i class="bi bi-mic"></i> <span class="d-none d-sm-inline">Transcribe</span>
                                 </button>
-                                <a href="/download/{{ space.space_id }}?attachment=1" class="btn btn-primary btn-sm me-2">
-                                    <i class="bi bi-download"></i> Download
+                                <a href="/download/{{ space.space_id }}?attachment=1" class="btn btn-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Download MP3">
+                                    <i class="bi bi-download"></i> <span class="d-none d-sm-inline">Download</span>
                                 </a>
-                                <button id="trim-btn" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#trimModal" title="Trim audio file">
-                                    <i class="bi bi-scissors"></i> Trim
+                                <button id="trim-btn" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#trimModal" data-bs-toggle="tooltip" data-bs-placement="top" title="Trim audio file">
+                                    <i class="bi bi-scissors"></i> <span class="d-none d-sm-inline">Trim</span>
                                 </button>
                             </div>
                         </div>
@@ -429,284 +604,6 @@
 </div>
 {% endblock %}
 
-{% block head %}
-<!-- SummerNote CSS -->
-<link href="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.css" rel="stylesheet">
-<style>
-    /* Edit button styling */
-    #edit-title-btn {
-        opacity: 0.5;
-        transition: opacity 0.2s;
-    }
-    
-    #edit-title-btn:hover {
-        opacity: 1;
-    }
-    
-    /* Transcript actions styling */
-    .transcript-actions {
-        display: flex;
-        gap: 8px;
-        align-items: center;
-        flex-wrap: wrap;
-    }
-    
-    .transcript-actions .btn-group {
-        display: flex;
-        align-items: center;
-    }
-    
-    .transcript-actions .form-select {
-        border-top-right-radius: 0;
-        border-bottom-right-radius: 0;
-        border-right: none;
-    }
-    
-    .transcript-actions #translate-btn {
-        border-top-left-radius: 0;
-        border-bottom-left-radius: 0;
-    }
-    
-    /* Make buttons more spacious on mobile */
-    @media (max-width: 768px) {
-        .transcript-actions {
-            justify-content: center;
-            gap: 4px;
-        }
-        
-        .transcript-actions .btn {
-            padding: 0.375rem 0.75rem;
-        }
-        
-        .transcript-actions .form-select {
-            max-width: 120px !important;
-            font-size: 0.875rem;
-        }
-    }
-    
-    /* Improve card header layout on mobile */
-    @media (max-width: 576px) {
-        .card-header .d-flex {
-            flex-direction: column;
-            gap: 10px;
-        }
-        
-        .transcript-actions {
-            width: 100%;
-            justify-content: center;
-        }
-    }
-    
-    /* Add subtle hover effects */
-    .transcript-actions .btn:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        transition: all 0.2s ease;
-    }
-    
-    /* Language selector styling */
-    #language-selector {
-        min-width: 120px;
-    }
-    
-    /* Compact space details styling */
-    .space-details {
-        padding: 10px 0;
-        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-    }
-    
-    .space-details code {
-        font-size: 0.9rem;
-        background-color: rgba(0, 0, 0, 0.05);
-        padding: 2px 6px;
-        border-radius: 4px;
-    }
-    
-    .space-details a:hover code {
-        background-color: rgba(0, 0, 0, 0.1);
-    }
-    
-    .job-details {
-        background-color: rgba(0, 0, 0, 0.02);
-        padding: 12px 15px;
-        border-radius: 8px;
-        border: 1px solid rgba(0, 0, 0, 0.05);
-    }
-    
-    .job-details h6 {
-        font-size: 0.875rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-    }
-    
-    /* Dark mode support */
-    @media (prefers-color-scheme: dark) {
-        .space-details {
-            border-color: rgba(255, 255, 255, 0.1);
-        }
-        
-        .space-details code {
-            background-color: rgba(255, 255, 255, 0.05);
-        }
-        
-        .space-details a:hover code {
-            background-color: rgba(255, 255, 255, 0.1);
-        }
-        
-        .job-details {
-            background-color: rgba(255, 255, 255, 0.02);
-            border-color: rgba(255, 255, 255, 0.1);
-        }
-    }
-    
-    /* SummerNote dark mode styles */
-    html[data-bs-theme="dark"] .note-editor {
-        background-color: #2b2b2b;
-        color: #fff;
-    }
-    
-    html[data-bs-theme="dark"] .note-editor .note-editing-area .note-editable {
-        background-color: #1a1a1a;
-        color: #fff;
-    }
-    
-    html[data-bs-theme="dark"] .note-editor .note-toolbar {
-        background-color: #333;
-        border-color: #555;
-    }
-    
-    html[data-bs-theme="dark"] .note-editor .note-btn {
-        background-color: #444;
-        color: #fff;
-        border-color: #555;
-    }
-    
-    html[data-bs-theme="dark"] .note-editor .note-btn:hover {
-        background-color: #555;
-        color: #fff;
-    }
-    
-    html[data-bs-theme="dark"] .note-editor .note-dropdown-menu {
-        background-color: #333;
-        color: #fff;
-        border-color: #555;
-    }
-    
-    html[data-bs-theme="dark"] .note-editor .note-dropdown-menu > li > a {
-        color: #fff;
-    }
-    
-    html[data-bs-theme="dark"] .note-editor .note-dropdown-menu > li > a:hover {
-        background-color: #444;
-        color: #fff;
-    }
-    
-    html[data-bs-theme="dark"] .note-editor .note-color .note-color-palette .note-color-btn {
-        border-color: #555;
-    }
-    
-    html[data-bs-theme="dark"] .note-editor .note-statusbar {
-        background-color: #333;
-        border-color: #555;
-        color: #aaa;
-    }
-    
-    html[data-bs-theme="dark"] .note-editor.note-frame {
-        border-color: #555;
-    }
-    
-    /* Ensure text in the editor is white in dark mode */
-    html[data-bs-theme="dark"] .note-editable {
-        color: #fff !important;
-    }
-    
-    html[data-bs-theme="dark"] .note-editable p,
-    html[data-bs-theme="dark"] .note-editable div,
-    html[data-bs-theme="dark"] .note-editable span,
-    html[data-bs-theme="dark"] .note-editable h1,
-    html[data-bs-theme="dark"] .note-editable h2,
-    html[data-bs-theme="dark"] .note-editable h3,
-    html[data-bs-theme="dark"] .note-editable h4,
-    html[data-bs-theme="dark"] .note-editable h5,
-    html[data-bs-theme="dark"] .note-editable h6,
-    html[data-bs-theme="dark"] .note-editable li,
-    html[data-bs-theme="dark"] .note-editable td,
-    html[data-bs-theme="dark"] .note-editable th {
-        color: #fff !important;
-    }
-    
-    /* Placeholder text in dark mode */
-    html[data-bs-theme="dark"] .note-editable.note-placeholder {
-        color: #888 !important;
-    }
-</style>
-<!-- Trim Modal -->
-<div class="modal fade" id="trimModal" tabindex="-1" aria-labelledby="trimModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="trimModalLabel">Trim Audio</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="alert alert-info">
-                    <i class="bi bi-info-circle"></i> Select the start and end times to trim the audio. The original file will be modified.
-                </div>
-                
-                <div class="audio-preview mb-4">
-                    <audio id="trim-audio-preview" controls class="w-100">
-                        <source src="/download/{{ space.space_id }}" type="{{ content_type|default('audio/mpeg') }}">
-                    </audio>
-                </div>
-                
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <label for="trim-start" class="form-label">Start Time</label>
-                            <div class="input-group">
-                                <input type="number" class="form-control" id="trim-start-min" min="0" value="0" style="max-width: 80px;">
-                                <span class="input-group-text">:</span>
-                                <input type="number" class="form-control" id="trim-start-sec" min="0" max="59" value="0" style="max-width: 80px;">
-                                <button class="btn btn-outline-secondary" type="button" id="set-current-start">
-                                    <i class="bi bi-cursor"></i> Current
-                                </button>
-                            </div>
-                            <div class="form-text">Format: MM:SS</div>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <label for="trim-end" class="form-label">End Time</label>
-                            <div class="input-group">
-                                <input type="number" class="form-control" id="trim-end-min" min="0" value="0" style="max-width: 80px;">
-                                <span class="input-group-text">:</span>
-                                <input type="number" class="form-control" id="trim-end-sec" min="0" max="59" value="0" style="max-width: 80px;">
-                                <button class="btn btn-outline-secondary" type="button" id="set-current-end">
-                                    <i class="bi bi-cursor"></i> Current
-                                </button>
-                            </div>
-                            <div class="form-text">Format: MM:SS (0:0 = end of file)</div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="trim-info">
-                    <p class="mb-2"><strong>Duration:</strong> <span id="trim-duration">--:--</span></p>
-                    <p class="mb-0"><strong>Selected Range:</strong> <span id="trim-range">--:-- to --:--</span></p>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-warning" id="apply-trim-btn">
-                    <i class="bi bi-scissors"></i> Apply Trim
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-{% endblock %}
 
 {% block scripts %}
 <script>
@@ -3137,8 +3034,10 @@
                                     <div class="note-content">${note.notes}</div>
                                     <div class="note-meta mt-2 d-flex justify-content-between align-items-center">
                                         <small class="text-muted">
+                                            by <strong>${note.author}</strong> • 
                                             Last updated: ${new Date(note.updated_at).toLocaleString()}
                                         </small>
+                                        ${note.can_edit ? `
                                         <div>
                                             <button class="btn btn-sm btn-outline-primary edit-note-btn" data-note-id="${note.id}">
                                                 <i class="bi bi-pencil"></i> Edit
@@ -3146,7 +3045,7 @@
                                             <button class="btn btn-sm btn-outline-danger delete-note-btn" data-note-id="${note.id}">
                                                 <i class="bi bi-trash"></i> Delete
                                             </button>
-                                        </div>
+                                        </div>` : ''}
                                     </div>
                                 </div>`;
                         });

@@ -77,13 +77,13 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
         
+        html[data-bs-theme="dark"] .navbar-toggler-icon {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28255, 255, 255, 0.75%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+        }
+        
         .navbar-content {
             max-width: 1400px;
             margin: 0 auto;
-            padding: 15px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
         }
         
         .navbar-brand {
@@ -98,50 +98,31 @@
         }
         
         .navbar-nav {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            margin: 0;
-            padding: 0;
-            list-style: none;
-            flex-direction: row;
-            flex-wrap: nowrap;
+            gap: 5px;
         }
         
-        .navbar-nav li {
-            display: inline-flex;
+        .navbar-nav .nav-link {
+            padding: 0.5rem 1rem;
+            color: var(--bs-body-color);
+            border-radius: 0.25rem;
+            transition: background-color 0.2s;
+        }
+        
+        .navbar-nav .nav-link:hover {
+            background-color: rgba(0, 0, 0, 0.05);
+        }
+        
+        html[data-bs-theme="dark"] .navbar-nav .nav-link:hover {
+            background-color: rgba(255, 255, 255, 0.05);
         }
         
         @media (max-width: 768px) {
             body {
-                padding-top: 120px; /* More space for wrapped navbar */
-            }
-            
-            .navbar-content {
-                padding: 10px 15px;
-                flex-wrap: wrap;
+                padding-top: 80px; /* Space for mobile navbar */
             }
             
             .navbar-brand {
                 font-size: 1.2rem;
-                width: 100%;
-                margin-bottom: 10px;
-            }
-            
-            .navbar-nav {
-                gap: 5px;
-                width: 100%;
-                justify-content: center;
-                flex-wrap: wrap;
-            }
-            
-            .navbar-nav .btn {
-                padding: 0.25rem 0.5rem;
-                font-size: 0.875rem;
-            }
-            
-            .navbar-nav li {
-                margin-bottom: 5px;
             }
         }
         
@@ -266,44 +247,53 @@
 </head>
 <body>
     <!-- Sticky Navigation -->
-    <nav class="navbar-sticky">
-        <div class="navbar-content">
+    <nav class="navbar navbar-expand-lg navbar-sticky">
+        <div class="container-fluid navbar-content">
             <a href="{{ url_for('index') }}" class="navbar-brand">
-                <i class="bi bi-broadcast"></i> XSpace Downloader
+                <i class="bi bi-broadcast"></i> <span class="d-none d-sm-inline">XSpace Downloader</span>
+                <span class="d-sm-none">XSpace</span>
             </a>
             
-            <div class="navbar-nav">
-                <a href="{{ url_for('index') }}" class="btn btn-outline-primary btn-sm">
-                    <i class="bi bi-house"></i> <span class="d-none d-lg-inline">Home</span>
-                </a>
-                <a href="{{ url_for('view_queue') }}" class="btn btn-outline-success btn-sm">
-                    <i class="bi bi-hourglass-split"></i> <span class="d-none d-lg-inline">Queue</span>
-                </a>
-                <a href="{{ url_for('all_spaces') }}" class="btn btn-outline-info btn-sm">
-                    <i class="bi bi-collection"></i> <span class="d-none d-lg-inline">All Spaces</span>
-                </a>
-                <a href="{{ url_for('faq') }}" class="btn btn-outline-secondary btn-sm">
-                    <i class="bi bi-question-circle"></i> <span class="d-none d-lg-inline">FAQ</span>
-                </a>
-                <a href="{{ url_for('about') }}" class="btn btn-outline-secondary btn-sm">
-                    <i class="bi bi-info-circle"></i> <span class="d-none d-lg-inline">About</span>
-                </a>
-                {% if session.get('user_id') %}
-                    {% if session.get('is_admin') %}
-                    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-warning btn-sm">
-                        <i class="bi bi-speedometer2"></i> <span class="d-none d-lg-inline">Admin</span>
-                    </a>
-                    <a href="{{ url_for('setup') }}" class="btn btn-outline-warning btn-sm">
-                        <i class="bi bi-gear"></i> <span class="d-none d-lg-inline">Setup</span>
-                    </a>
-                    {% endif %}
-                <a href="{{ url_for('logout') }}" class="btn btn-outline-danger btn-sm">
-                    <i class="bi bi-box-arrow-right"></i> <span class="d-none d-lg-inline">Logout</span>
-                </a>
-                {% endif %}
-                <div class="theme-toggle-container">
+            <div class="d-flex align-items-center order-lg-2">
+                <div class="theme-toggle-container me-2">
                     <i class="bi bi-sun-fill theme-toggle" id="light-mode-toggle"></i>
                     <i class="bi bi-moon-fill theme-toggle" id="dark-mode-toggle"></i>
+                </div>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            
+            <div class="collapse navbar-collapse order-lg-1" id="navbarNav">
+                <div class="navbar-nav ms-auto">
+                    <a href="{{ url_for('index') }}" class="nav-link">
+                        <i class="bi bi-house"></i> Home
+                    </a>
+                    <a href="{{ url_for('view_queue') }}" class="nav-link">
+                        <i class="bi bi-hourglass-split"></i> Queue
+                    </a>
+                    <a href="{{ url_for('all_spaces') }}" class="nav-link">
+                        <i class="bi bi-collection"></i> All Spaces
+                    </a>
+                    <a href="{{ url_for('faq') }}" class="nav-link">
+                        <i class="bi bi-question-circle"></i> FAQ
+                    </a>
+                    <a href="{{ url_for('about') }}" class="nav-link">
+                        <i class="bi bi-info-circle"></i> About
+                    </a>
+                    {% if session.get('user_id') %}
+                        {% if session.get('is_admin') %}
+                        <a href="{{ url_for('admin_dashboard') }}" class="nav-link text-warning">
+                            <i class="bi bi-speedometer2"></i> Admin
+                        </a>
+                        <a href="{{ url_for('setup') }}" class="nav-link text-warning">
+                            <i class="bi bi-gear"></i> Setup
+                        </a>
+                        {% endif %}
+                    <a href="{{ url_for('logout') }}" class="nav-link text-danger">
+                        <i class="bi bi-box-arrow-right"></i> Logout
+                    </a>
+                    {% endif %}
                 </div>
             </div>
         </div>
