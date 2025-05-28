@@ -1,0 +1,28 @@
+{
+    "id": "abae2f0d-3303-4ea6-bc75-fe08569f9f67",
+    "space_id": "1lDxLnrWjwkGm",
+    "file_path": "./downloads/1lDxLnrWjwkGm.mp3",
+    "language": "en",
+    "options": {
+        "model": "base",
+        "detect_language": false,
+        "translate_to": null,
+        "overwrite": true
+    },
+    "status": "completed",
+    "progress": 100,
+    "created_at": "2025-05-27T23:14:05.186690",
+    "updated_at": "2025-05-27T23:24:01.736480",
+    "result": {
+        "transcript_id": 49,
+        "space_id": "1lDxLnrWjwkGm",
+        "language": "en-EN",
+        "text_sample": "sorry I didn't see you I didn't get the notification what's up oh man a no Twitter doesn't like me so I am in between the blue check review again so I noticed that whenever I change my profile picture or something and I go to the review when you read the review you're basically in a prison you're a no man land this the worst yeah what's going on brother what's up chin the chin the chin I need your help on something I was wondering if you don't mind helping me. Like I'm trying to build a chatbot,...",
+        "audio_duration_minutes": 178.9,
+        "audio_duration_seconds": 10731.0,
+        "detected_language": {
+            "code": "en",
+            "name": "english"
+        }
+    }
+}

@@ -73,6 +73,8 @@ def main():
     parser.add_argument("--quiet", "-q", action="store_true", help="Suppress all non-essential output")
     parser.add_argument("--batch", "-b", action="store_true", 
                        help="Treat audio_file as a directory and transcribe all audio files")
+    parser.add_argument("--timecodes", "-tc", action="store_true",
+                       help="Include timecodes in the transcript output")
     
     args = parser.parse_args()
     
@@ -110,7 +112,8 @@ def main():
                     output_directory=output_dir,
                     language=args.language,
                     recursive=True,
-                    verbose=False  # Force verbose to False in quiet mode
+                    verbose=False,  # Force verbose to False in quiet mode
+                    include_timecodes=args.timecodes
                 )
         else:
             results = stt.batch_transcribe(
@@ -118,7 +121,8 @@ def main():
                 output_directory=output_dir,
                 language=args.language,
                 recursive=True,
-                verbose=args.verbose
+                verbose=args.verbose,
+                include_timecodes=args.timecodes
             )
         
         # Print summary of results
@@ -149,7 +153,8 @@ def main():
                     task=args.task,
                     verbose=False,  # Force verbose to False in quiet mode
                     output_file=output_file,
-                    output_format=args.format
+                    output_format=args.format,
+                    include_timecodes=args.timecodes
                 )
         else:
             # Normal mode - no suppression
@@ -159,7 +164,8 @@ def main():
                 task=args.task,
                 verbose=args.verbose,
                 output_file=output_file,
-                output_format=args.format
+                output_format=args.format,
+                include_timecodes=args.timecodes
             )
         
         if result is None:

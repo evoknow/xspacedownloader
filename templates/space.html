@@ -289,43 +289,47 @@
                     {# Display metadata if available #}
                     {% if space.metadata and (space.metadata.host_handle or space.metadata.speakers) %}
                     <div class="metadata-display mt-3">
-                        {% if space.metadata.host_handle %}
-                        <div class="mb-3">
-                            <strong>Host:</strong><br>
-                            <a href="https://x.com/{{ space.metadata.host_handle[1:] }}" 
-                               target="_blank" 
-                               class="text-decoration-none"
-                               data-bs-toggle="tooltip" 
-                               data-bs-placement="top" 
-                               title="{{ space.metadata.host_handle }}">
-                                <img src="https://unavatar.io/twitter/{{ space.metadata.host_handle[1:] }}" 
-                                     alt="{{ space.metadata.host_handle }}" 
-                                     class="rounded-circle"
-                                     style="width: 48px; height: 48px; border: 2px solid #511fb2;"
-                                     onerror="this.src='https://ui-avatars.com/api/?name={{ space.metadata.host_handle[1:] }}&size=48&background=0D8ABC&color=fff'">
-                            </a>
+                        <div class="d-flex align-items-center gap-3 flex-wrap">
+                            {% if space.metadata.host_handle %}
+                            <div class="d-flex align-items-center gap-2">
+                                <strong>Host:</strong>
+                                <a href="https://x.com/{{ space.metadata.host_handle[1:] }}" 
+                                   target="_blank" 
+                                   class="text-decoration-none"
+                                   data-bs-toggle="tooltip" 
+                                   data-bs-placement="top" 
+                                   title="{{ space.metadata.host_handle }}">
+                                    <img src="https://unavatar.io/twitter/{{ space.metadata.host_handle[1:] }}" 
+                                         alt="{{ space.metadata.host_handle }}" 
+                                         class="rounded-circle"
+                                         style="width: 32px; height: 32px; border: 2px solid #511fb2;"
+                                         onerror="this.src='https://ui-avatars.com/api/?name={{ space.metadata.host_handle[1:] }}&size=32&background=0D8ABC&color=fff'">
+                                </a>
+                            </div>
+                            {% endif %}
+                            
+                            {% if space.metadata.speakers %}
+                            <div class="d-flex align-items-center gap-2">
+                                <strong>Speakers:</strong>
+                                <div class="d-flex gap-1">
+                                    {% for speaker in space.metadata.speakers %}
+                                    <a href="https://x.com/{{ speaker[1:] }}" 
+                                       target="_blank" 
+                                       class="text-decoration-none"
+                                       data-bs-toggle="tooltip" 
+                                       data-bs-placement="top" 
+                                       title="{{ speaker }}">
+                                        <img src="https://unavatar.io/twitter/{{ speaker[1:] }}" 
+                                             alt="{{ speaker }}" 
+                                             class="rounded-circle"
+                                             style="width: 32px; height: 32px; border: 2px solid #511fb2;"
+                                             onerror="this.src='https://ui-avatars.com/api/?name={{ speaker[1:] }}&size=32&background=0D8ABC&color=fff'">
+                                    </a>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endif %}
                         </div>
-                        {% endif %}
-                        
-                        {% if space.metadata.speakers %}
-                        <div>
-                            <strong>Speakers:</strong><br>
-                            {% for speaker in space.metadata.speakers %}
-                            <a href="https://x.com/{{ speaker[1:] }}" 
-                               target="_blank" 
-                               class="text-decoration-none me-2"
-                               data-bs-toggle="tooltip" 
-                               data-bs-placement="top" 
-                               title="{{ speaker }}">
-                                <img src="https://unavatar.io/twitter/{{ speaker[1:] }}" 
-                                     alt="{{ speaker }}" 
-                                     class="rounded-circle"
-                                     style="width: 48px; height: 48px; border: 2px solid #511fb2;"
-                                     onerror="this.src='https://ui-avatars.com/api/?name={{ speaker[1:] }}&size=48&background=0D8ABC&color=fff'">
-                            </a>
-                            {% endfor %}
-                        </div>
-                        {% endif %}
                     </div>
                     {% endif %}
                 </div>

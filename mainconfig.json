@@ -33,5 +33,11 @@
             "endpoint": "https://api.anthropic.com/v1/messages",
             "model": "claude-3-sonnet-20240229"
         }
+    },
+    "rate_limits": {
+        "daily_limit": 100,
+        "hourly_limit": 10,
+        "enabled": false,
+        "comment": "Rate limiting configuration for download requests. Set enabled to false to disable rate limiting."
     }
 }

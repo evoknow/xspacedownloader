@@ -345,7 +345,19 @@ class Space:
                 """
                 cursor.execute(insert_query, (space_id, language, transcript_text))
                 self.connection.commit()
-                return cursor.lastrowid
+                transcript_id = cursor.lastrowid
+                
+                # Generate and save tags for original transcript only (not translations)
+                if language.startswith('en'):
+                    try:
+                        tags = self.generate_tags_from_transcript(transcript_text)
+                        if tags:
+                            self.add_tags_to_space(space_id, tags)
+                            logger.info(f"Generated {len(tags)} tags for space {space_id}")
+                    except Exception as tag_error:
+                        logger.error(f"Error generating tags: {tag_error}")
+                
+                return transcript_id
                 
         except Exception as e:
             logger.error(f"Error saving transcript: {e}")
@@ -388,7 +400,7 @@ class Space:
                 cursor.close()
     
     def transcribe_space(self, space_id, model_name="base", language=None, task="transcribe", 
-                        detect_language=False, translate_to=None):
+                        detect_language=False, translate_to=None, include_timecodes=False):
         """
         Transcribe a space's audio file with options for language detection and translation.
         
@@ -399,6 +411,7 @@ class Space:
             task (str): Task to perform - 'transcribe' (keep original language) or 'translate' (to English)
             detect_language (bool): Whether to explicitly detect the language first before transcription
             translate_to (str): Language code to translate the content to after transcription
+            include_timecodes (bool): Whether to include timecodes in the transcript text
             
         Returns:
             dict: Transcription result with transcript ID and text
@@ -454,7 +467,8 @@ class Space:
                 task=task,
                 verbose=False,
                 detect_language=detect_language,
-                translate_to=translate_to
+                translate_to=translate_to,
+                include_timecodes=include_timecodes
             )
             
             if not result or not isinstance(result, dict) or "text" not in result:
@@ -2286,4 +2300,306 @@ class Space:
             
         except Exception as e:
             logger.error(f"Error getting favorites: {e}")
+            return []
+    
+    def normalize_tag_slug(self, tag_name):
+        """
+        Normalize a tag name into a URL-friendly slug.
+        
+        Args:
+            tag_name (str): The tag name to normalize
+            
+        Returns:
+            str: Normalized tag slug
+        """
+        # Convert to lowercase and replace spaces with hyphens
+        slug = tag_name.lower().strip()
+        # Remove special characters except hyphens
+        slug = re.sub(r'[^a-z0-9\-\s]', '', slug)
+        # Replace multiple spaces/hyphens with single hyphen
+        slug = re.sub(r'[\s\-]+', '-', slug)
+        # Remove leading/trailing hyphens
+        slug = slug.strip('-')
+        return slug
+    
+    def create_or_get_tag(self, tag_name):
+        """
+        Create a new tag or get existing one.
+        
+        Args:
+            tag_name (str): The tag name
+            
+        Returns:
+            int: Tag ID, or None on error
+        """
+        try:
+            # Check if connection is active
+            if not self.connection or not self.connection.is_connected():
+                logger.warning("Database connection lost, reconnecting...")
+                with open("db_config.json", 'r') as f:
+                    config = json.load(f)
+                db_config = config["mysql"].copy()
+                if 'use_ssl' in db_config:
+                    del db_config['use_ssl']
+                self.connection = mysql.connector.connect(**db_config)
+            
+            cursor = self.connection.cursor()
+            tag_slug = self.normalize_tag_slug(tag_name)
+            
+            # Check if tag exists
+            cursor.execute("SELECT id FROM tags WHERE tag_slug = %s", (tag_slug,))
+            result = cursor.fetchone()
+            
+            if result:
+                cursor.close()
+                return result[0]
+            
+            # Create new tag
+            cursor.execute(
+                "INSERT INTO tags (tag_slug, tag_name) VALUES (%s, %s)",
+                (tag_slug, tag_name.strip())
+            )
+            tag_id = cursor.lastrowid
+            self.connection.commit()
+            cursor.close()
+            
+            logger.info(f"Created new tag: {tag_name} (slug: {tag_slug})")
+            return tag_id
+            
+        except Exception as e:
+            logger.error(f"Error creating/getting tag: {e}")
+            if self.connection and self.connection.is_connected():
+                self.connection.rollback()
+            return None
+    
+    def add_tags_to_space(self, space_id, tag_names):
+        """
+        Add multiple tags to a space.
+        
+        Args:
+            space_id (str): The space ID
+            tag_names (list): List of tag names
+            
+        Returns:
+            dict: Result with success status and added tags
+        """
+        try:
+            # Check if connection is active
+            if not self.connection or not self.connection.is_connected():
+                logger.warning("Database connection lost, reconnecting...")
+                with open("db_config.json", 'r') as f:
+                    config = json.load(f)
+                db_config = config["mysql"].copy()
+                if 'use_ssl' in db_config:
+                    del db_config['use_ssl']
+                self.connection = mysql.connector.connect(**db_config)
+            
+            added_tags = []
+            cursor = self.connection.cursor()
+            
+            for tag_name in tag_names:
+                if not tag_name or not tag_name.strip():
+                    continue
+                    
+                # Get or create tag
+                tag_id = self.create_or_get_tag(tag_name)
+                if not tag_id:
+                    continue
+                
+                try:
+                    # Add space-tag relationship
+                    cursor.execute(
+                        "INSERT INTO space_tags (space_id, tag_id) VALUES (%s, %s)",
+                        (space_id, tag_id)
+                    )
+                    added_tags.append({
+                        'id': tag_id,
+                        'name': tag_name.strip(),
+                        'slug': self.normalize_tag_slug(tag_name)
+                    })
+                except mysql.connector.IntegrityError:
+                    # Tag already associated with space
+                    pass
+            
+            self.connection.commit()
+            cursor.close()
+            
+            logger.info(f"Added {len(added_tags)} tags to space {space_id}")
+            return {
+                "success": True,
+                "added_tags": added_tags
+            }
+            
+        except Exception as e:
+            logger.error(f"Error adding tags to space: {e}")
+            if self.connection and self.connection.is_connected():
+                self.connection.rollback()
+            return {
+                "success": False,
+                "error": str(e),
+                "added_tags": []
+            }
+    
+    def get_space_tags(self, space_id):
+        """
+        Get all tags for a space.
+        
+        Args:
+            space_id (str): The space ID
+            
+        Returns:
+            list: List of tags
+        """
+        try:
+            # Check if connection is active
+            if not self.connection or not self.connection.is_connected():
+                logger.warning("Database connection lost, reconnecting...")
+                with open("db_config.json", 'r') as f:
+                    config = json.load(f)
+                db_config = config["mysql"].copy()
+                if 'use_ssl' in db_config:
+                    del db_config['use_ssl']
+                self.connection = mysql.connector.connect(**db_config)
+            
+            cursor = self.connection.cursor(dictionary=True)
+            
+            query = """
+                SELECT t.id, t.tag_name, t.tag_slug
+                FROM tags t
+                JOIN space_tags st ON t.id = st.tag_id
+                WHERE st.space_id = %s
+                ORDER BY t.tag_name
+            """
+            cursor.execute(query, (space_id,))
+            tags = cursor.fetchall()
+            cursor.close()
+            
+            return tags
+            
+        except Exception as e:
+            logger.error(f"Error getting space tags: {e}")
+            return []
+    
+    def get_spaces_by_tag(self, tag_slug):
+        """
+        Get all spaces with a specific tag.
+        
+        Args:
+            tag_slug (str): The tag slug
+            
+        Returns:
+            dict: Tag info and list of spaces
+        """
+        try:
+            # Check if connection is active
+            if not self.connection or not self.connection.is_connected():
+                logger.warning("Database connection lost, reconnecting...")
+                with open("db_config.json", 'r') as f:
+                    config = json.load(f)
+                db_config = config["mysql"].copy()
+                if 'use_ssl' in db_config:
+                    del db_config['use_ssl']
+                self.connection = mysql.connector.connect(**db_config)
+            
+            cursor = self.connection.cursor(dictionary=True)
+            
+            # Get tag info
+            cursor.execute("SELECT * FROM tags WHERE tag_slug = %s", (tag_slug,))
+            tag = cursor.fetchone()
+            
+            if not tag:
+                cursor.close()
+                return {
+                    "success": False,
+                    "error": "Tag not found",
+                    "tag": None,
+                    "spaces": []
+                }
+            
+            # Get spaces with this tag
+            query = """
+                SELECT s.*, st.created_at as tagged_at
+                FROM spaces s
+                JOIN space_tags st ON s.space_id = st.space_id
+                WHERE st.tag_id = %s AND s.status = 'completed'
+                ORDER BY st.created_at DESC
+            """
+            cursor.execute(query, (tag['id'],))
+            spaces = cursor.fetchall()
+            
+            # Convert datetime objects to strings
+            for space in spaces:
+                if space['created_at']:
+                    space['created_at'] = space['created_at'].isoformat()
+                if space['downloaded_at']:
+                    space['downloaded_at'] = space['downloaded_at'].isoformat()
+                if space['updated_at']:
+                    space['updated_at'] = space['updated_at'].isoformat()
+                if space['tagged_at']:
+                    space['tagged_at'] = space['tagged_at'].isoformat()
+            
+            cursor.close()
+            
+            return {
+                "success": True,
+                "tag": tag,
+                "spaces": spaces
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting spaces by tag: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "tag": None,
+                "spaces": []
+            }
+    
+    def generate_tags_from_transcript(self, transcript_text, max_tags=5):
+        """
+        Generate tags from transcript using AI.
+        
+        Args:
+            transcript_text (str): The transcript text
+            max_tags (int): Maximum number of tags to generate
+            
+        Returns:
+            list: List of generated tag names
+        """
+        try:
+            # Import AI component
+            from components.AI import AI
+            
+            ai = AI()
+            
+            # Prepare prompt for tag generation
+            prompt = f"""Analyze this transcript and generate {max_tags} relevant tags that capture the main topics, themes, and key concepts discussed. 
+
+Tags should be:
+- Short (1-3 words)
+- Specific and descriptive
+- Relevant to the content
+- Useful for categorization and search
+
+Return ONLY the tags as a comma-separated list, nothing else.
+
+Transcript:
+{transcript_text[:3000]}...
+"""
+            
+            # Generate tags using AI
+            result = ai.generate_text(prompt, max_tokens=100)
+            
+            if result.get('success') and result.get('text'):
+                # Parse tags from response
+                tags_text = result['text'].strip()
+                tags = [tag.strip() for tag in tags_text.split(',') if tag.strip()]
+                # Limit to max_tags
+                return tags[:max_tags]
+            else:
+                logger.warning(f"AI tag generation failed: {result.get('error', 'Unknown error')}")
+                return []
+                
+        except Exception as e:
+            logger.error(f"Error generating tags from transcript: {e}")
             return []

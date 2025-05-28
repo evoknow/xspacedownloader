@@ -88,13 +88,36 @@ CORS(app)
 # Secret key for sessions and flashing messages
 app.secret_key = os.environ.get('SECRET_KEY', 'xspacedownloaderdevkey')
 
+# Load rate limit configuration
+rate_limit_config = {}
+try:
+    with open('mainconfig.json', 'r') as f:
+        main_config = json.load(f)
+        rate_limit_config = main_config.get('rate_limits', {})
+except Exception as e:
+    logger.warning(f"Could not load rate limit config: {e}")
+
+# Set up rate limits based on configuration
+rate_limits_enabled = rate_limit_config.get('enabled', True)
+daily_limit = rate_limit_config.get('daily_limit', 200)
+hourly_limit = rate_limit_config.get('hourly_limit', 50)
+
 # Initialize rate limiter
-limiter = Limiter(
-    app=app,
-    key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"],
-    storage_uri="memory://"
-)
+if rate_limits_enabled:
+    limiter = Limiter(
+        app=app,
+        key_func=get_remote_address,
+        default_limits=[f"{daily_limit} per day", f"{hourly_limit} per hour"],
+        storage_uri="memory://"
+    )
+else:
+    # Disable rate limiting by setting very high limits
+    limiter = Limiter(
+        app=app,
+        key_func=get_remote_address,
+        default_limits=["1000000 per day"],
+        storage_uri="memory://"
+    )
 
 # Default configuration
 app.config.update(
@@ -3935,7 +3958,8 @@ def admin_dashboard():
                              total_users=total_users,
                              total_spaces=total_spaces,
                              total_downloads=total_downloads,
-                             total_plays=total_plays)
+                             total_plays=total_plays,
+                             rate_limits=rate_limit_config)
         
     except Exception as e:
         logger.error(f"Error in admin dashboard: {e}", exc_info=True)
@@ -4183,6 +4207,54 @@ def admin_delete_space(space_id):
     except Exception as e:
         logger.error(f"Error deleting space: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/update_rate_limits', methods=['POST'])
+def admin_update_rate_limits():
+    """Update rate limit configuration."""
+    try:
+        # Check if user is logged in and is admin
+        if not session.get('user_id') or not session.get('is_admin'):
+            return jsonify({'success': False, 'error': 'Admin access required'}), 403
+        
+        data = request.get_json()
+        
+        # Validate inputs
+        daily_limit = int(data.get('daily_limit', 200))
+        hourly_limit = int(data.get('hourly_limit', 50))
+        enabled = bool(data.get('enabled', True))
+        
+        # Load current config
+        with open('mainconfig.json', 'r') as f:
+            config = json.load(f)
+        
+        # Update rate limits
+        config['rate_limits'] = {
+            'daily_limit': daily_limit,
+            'hourly_limit': hourly_limit,
+            'enabled': enabled,
+            'comment': 'Rate limiting configuration for download requests. Set enabled to false to disable rate limiting.'
+        }
+        
+        # Save config
+        with open('mainconfig.json', 'w') as f:
+            json.dump(config, f, indent=4)
+        
+        # Update global rate limit config
+        global rate_limit_config
+        rate_limit_config = config['rate_limits']
+        
+        # Note: Rate limiter will use new values on app restart
+        # For immediate effect, app needs to be restarted
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Rate limits updated successfully. Restart app for changes to take effect.',
+            'rate_limits': rate_limit_config
+        })
+        
+    except Exception as e:
+        logger.error(f"Error updating rate limits: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/admin/api/stats/<stat_type>')
 def admin_get_stats(stat_type):

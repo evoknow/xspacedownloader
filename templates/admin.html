@@ -69,6 +69,11 @@
                 <i class="bi bi-graph-up"></i> Statistics
             </button>
         </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings" type="button" role="tab">
+                <i class="bi bi-gear"></i> Settings
+            </button>
+        </li>
     </ul>
     
     <!-- Tab Content -->
@@ -254,6 +259,58 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Settings Tab -->
+        <div class="tab-pane fade" id="settings" role="tabpanel">
+            <div class="card mt-3">
+                <div class="card-body">
+                    <h5 class="card-title">System Settings</h5>
+                    
+                    <!-- Rate Limiting Section -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h6 class="mb-0"><i class="bi bi-shield-check"></i> Rate Limiting Configuration</h6>
+                        </div>
+                        <div class="card-body">
+                            <form id="rateLimitForm">
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label for="dailyLimit" class="form-label">Daily Request Limit</label>
+                                        <input type="number" class="form-control" id="dailyLimit" 
+                                               value="{{ rate_limits.daily_limit if rate_limits else 200 }}" 
+                                               min="1" max="10000">
+                                        <div class="form-text">Maximum requests per day per IP address</div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="hourlyLimit" class="form-label">Hourly Request Limit</label>
+                                        <input type="number" class="form-control" id="hourlyLimit" 
+                                               value="{{ rate_limits.hourly_limit if rate_limits else 50 }}" 
+                                               min="1" max="1000">
+                                        <div class="form-text">Maximum requests per hour per IP address</div>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="rateLimitEnabled" 
+                                               {% if not rate_limits or rate_limits.enabled %}checked{% endif %}>
+                                        <label class="form-check-label" for="rateLimitEnabled">
+                                            Enable Rate Limiting
+                                        </label>
+                                    </div>
+                                    <div class="form-text">When disabled, no rate limits will be applied</div>
+                                </div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-save"></i> Save Rate Limit Settings
+                                </button>
+                                <div class="alert alert-info mt-3" style="display: none;" id="rateLimitMessage"></div>
+                            </form>
+                        </div>
+                    </div>
+                    
+                    <!-- Other settings can be added here -->
                 </div>
             </div>
         </div>
@@ -627,5 +684,45 @@ function displayPagination(elementId, currentPage, totalPages, loadFunction) {
     
     pagination.innerHTML = html;
 }
+
+// Rate Limit Settings
+document.getElementById('rateLimitForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const messageDiv = document.getElementById('rateLimitMessage');
+    messageDiv.style.display = 'none';
+    
+    const data = {
+        daily_limit: parseInt(document.getElementById('dailyLimit').value),
+        hourly_limit: parseInt(document.getElementById('hourlyLimit').value),
+        enabled: document.getElementById('rateLimitEnabled').checked
+    };
+    
+    try {
+        const response = await fetch('/admin/api/update_rate_limits', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            messageDiv.className = 'alert alert-success mt-3';
+            messageDiv.textContent = result.message;
+            messageDiv.style.display = 'block';
+        } else {
+            messageDiv.className = 'alert alert-danger mt-3';
+            messageDiv.textContent = 'Error: ' + (result.error || 'Failed to update settings');
+            messageDiv.style.display = 'block';
+        }
+    } catch (error) {
+        messageDiv.className = 'alert alert-danger mt-3';
+        messageDiv.textContent = 'Error: ' + error.message;
+        messageDiv.style.display = 'block';
+    }
+});
 </script>
 {% endblock %}

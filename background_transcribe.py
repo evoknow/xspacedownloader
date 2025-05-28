@@ -266,11 +266,13 @@ class TranscriptionWorker:
             language = job_data.get('language') or job_options.get('language', 'en-US')
             detect_language = job_data.get('detect_language', job_options.get('detect_language', False))
             translate_to = job_data.get('translate_to', job_options.get('translate_to'))
+            include_timecodes = job_data.get('include_timecodes', job_options.get('include_timecodes', False))
             
             options = {
                 'language': language,
                 'detect_language': detect_language,
-                'verbose': True
+                'verbose': True,
+                'include_timecodes': include_timecodes
             }
             
             if translate_to:

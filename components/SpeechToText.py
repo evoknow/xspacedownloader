@@ -59,7 +59,7 @@ class SpeechToText:
     
     def transcribe(self, audio_file, language=None, task="transcribe", verbose=False, 
                    output_file=None, output_format='txt', detect_language=False,
-                   translate_to=None):
+                   translate_to=None, include_timecodes=False):
         """
         Transcribe an audio file to text, with options for language detection and translation.
         
@@ -78,6 +78,9 @@ class SpeechToText:
                                      If provided, transcription will be done in two steps: first transcribe
                                      in the original language, then translate to the target language.
                                      This requires running multiple passes of the model.
+            include_timecodes (bool, optional): Whether to include timecodes in the transcript text.
+                                              Default is False. When True, each segment will be prefixed
+                                              with its timestamp in [HH:MM:SS] format.
                                          
         Returns:
             dict: Transcription result with transcript text, detected language, and translation if requested.
@@ -172,13 +175,17 @@ class SpeechToText:
             audio_duration = self._get_audio_duration(str(audio_path))
             if audio_duration and audio_duration > 600:  # 10 minutes threshold for chunking
                 logger.info(f"Audio duration {audio_duration:.1f}s exceeds threshold, using chunked transcription")
-                result = self._transcribe_chunked(str(audio_path), transcribe_options)
+                result = self._transcribe_chunked(str(audio_path), transcribe_options, include_timecodes)
             else:
                 # Perform single transcription for shorter files
                 result = self.model.transcribe(str(audio_path), **transcribe_options)
             
             # Store the original transcript
             original_transcript = result["text"]
+            
+            # Generate timecoded transcript if requested
+            if include_timecodes and "segments" in result:
+                original_transcript = self._format_transcript_with_timecodes(result["segments"])
             
             # Update result with detected language if not already set
             if not detected_language_code:
@@ -227,6 +234,11 @@ class SpeechToText:
                             }
                             translate_result = self.model.transcribe(str(audio_path), **translate_options)
                             translated_text = translate_result["text"]
+                            
+                            # Apply timecodes to translated text if requested
+                            if include_timecodes and "segments" in translate_result:
+                                translated_text = self._format_transcript_with_timecodes(translate_result["segments"])
+                            
                             logger.info(f"Successfully translated to English")
                         except Exception as e:
                             logger.error(f"Failed to translate to English: {e}")
@@ -374,9 +386,36 @@ class SpeechToText:
         else:
             return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
 
+    def _format_transcript_with_timecodes(self, segments):
+        """
+        Format transcript segments with timecodes.
+        
+        Args:
+            segments (list): List of segment dictionaries with 'start', 'end', and 'text' keys.
+            
+        Returns:
+            str: Formatted transcript with timecodes.
+        """
+        transcript_lines = []
+        
+        for segment in segments:
+            start_time = segment.get("start", 0)
+            text = segment.get("text", "").strip()
+            
+            if text:  # Only include segments with actual text
+                # Format timestamp as [HH:MM:SS]
+                hours = int(start_time // 3600)
+                minutes = int((start_time % 3600) // 60)
+                seconds = int(start_time % 60)
+                
+                timecode = f"[{hours:02d}:{minutes:02d}:{seconds:02d}]"
+                transcript_lines.append(f"{timecode} {text}")
+        
+        return "\n".join(transcript_lines)
+
     def batch_transcribe(self, audio_directory, output_directory=None, 
                          language=None, file_extensions=None, recursive=False, verbose=False,
-                         detect_language=False, translate_to=None):
+                         detect_language=False, translate_to=None, include_timecodes=False):
         """
         Transcribe multiple audio files in a directory.
         
@@ -393,6 +432,8 @@ class SpeechToText:
                 Default is False.
             translate_to (str, optional): Language code to translate content to after transcription.
                 If provided, transcription will be done in the original language, then translated.
+            include_timecodes (bool, optional): Whether to include timecodes in the transcript text.
+                Default is False.
             
         Returns:
             dict: Dictionary mapping audio file paths to their transcription results.
@@ -446,7 +487,8 @@ class SpeechToText:
                 output_format='txt',
                 verbose=verbose,
                 detect_language=detect_language,
-                translate_to=translate_to
+                translate_to=translate_to,
+                include_timecodes=include_timecodes
             )
             
             if result:
@@ -476,7 +518,7 @@ class SpeechToText:
             logger.warning(f"Could not determine audio duration for {audio_file}: {e}")
             return None
     
-    def _transcribe_chunked(self, audio_file, transcribe_options):
+    def _transcribe_chunked(self, audio_file, transcribe_options, include_timecodes=False):
         """
         Transcribe a large audio file by splitting it into chunks using pydub.
         This prevents context loss that can occur with simple text chunking.
@@ -484,6 +526,7 @@ class SpeechToText:
         Args:
             audio_file (str): Path to the audio file
             transcribe_options (dict): Options for transcription
+            include_timecodes (bool): Whether to include timecodes in the output text
             
         Returns:
             dict: Combined transcription result
@@ -528,8 +571,14 @@ class SpeechToText:
                     total_duration += len(chunk) / 1000.0
             
             # Combine results
+            text_output = " ".join(full_text_parts)
+            
+            # Generate timecoded text if requested
+            if include_timecodes and all_segments:
+                text_output = self._format_transcript_with_timecodes(all_segments)
+            
             combined_result = {
-                "text": " ".join(full_text_parts),
+                "text": text_output,
                 "segments": all_segments,
                 "duration": total_duration,
                 "language": transcribe_options.get("language", "unknown")
