@@ -389,6 +389,18 @@ def all_spaces():
                     job['has_translation'] = len(transcripts) > 1 if transcripts else False
                     job['has_summary'] = any(t.get('summary') for t in transcripts)
                     job['title'] = space_details.get('title', '')
+                    
+                    # Get review data
+                    review_result = space.get_reviews(job['space_id'])
+                    if review_result['success']:
+                        job['average_rating'] = review_result['average_rating']
+                        job['total_reviews'] = review_result['total_reviews']
+                    else:
+                        job['average_rating'] = 0
+                        job['total_reviews'] = 0
+                else:
+                    job['average_rating'] = 0
+                    job['total_reviews'] = 0
             except Exception as e:
                 logger.warning(f"Error getting metadata for space {job.get('space_id')}: {e}")
                 job['has_transcript'] = False
@@ -396,6 +408,8 @@ def all_spaces():
                 job['has_summary'] = False
                 job['transcript_count'] = 0
                 job['title'] = ''
+                job['average_rating'] = 0
+                job['total_reviews'] = 0
         
         return render_template('all_spaces.html', spaces=completed_spaces)
         
