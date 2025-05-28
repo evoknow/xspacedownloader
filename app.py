@@ -508,6 +508,37 @@ def view_queue():
                 job['progress_percent'] = job.download_cnt
             else:
                 job['progress_percent'] = 0
+            
+            # Calculate ETA for downloads
+            if job.get('progress_percent', 0) > 0 and job.get('created_at'):
+                try:
+                    # Calculate elapsed time
+                    created_at = datetime.fromisoformat(str(job['created_at']))
+                    elapsed = (datetime.now() - created_at).total_seconds()
+                    
+                    # Calculate remaining time based on progress
+                    progress = job['progress_percent']
+                    if progress > 0 and progress < 100:
+                        total_estimated_seconds = (elapsed / progress) * 100
+                        remaining_seconds = total_estimated_seconds - elapsed
+                        
+                        # Convert to human-readable format
+                        if remaining_seconds > 0:
+                            if remaining_seconds > 3600:  # More than 1 hour
+                                hours = int(remaining_seconds // 3600)
+                                minutes = int((remaining_seconds % 3600) // 60)
+                                job['eta'] = f"{hours}h {minutes}m"
+                            elif remaining_seconds > 60:  # More than 1 minute
+                                minutes = int(remaining_seconds // 60)
+                                seconds = int(remaining_seconds % 60)
+                                job['eta'] = f"{minutes}m {seconds}s"
+                            else:
+                                job['eta'] = f"{int(remaining_seconds)}s"
+                    elif progress >= 100:
+                        job['eta'] = "Completing..."
+                except Exception as e:
+                    logger.debug(f"Error calculating download ETA: {e}")
+            
             queue_jobs.append(job)
         
         # Sort by created_at (oldest first, so they appear in queue order)
@@ -521,8 +552,8 @@ def view_queue():
                 try:
                     with open(job_file, 'r') as f:
                         job_data = json.load(f)
-                        # Only include pending or in_progress transcription jobs
-                        if job_data.get('status') in ['pending', 'in_progress']:
+                        # Only include pending, in_progress, or processing transcription jobs
+                        if job_data.get('status') in ['pending', 'in_progress', 'processing']:
                             # Get space details for title
                             space_details = space.get_space(job_data.get('space_id'))
                             if space_details:
@@ -533,10 +564,47 @@ def view_queue():
                             if job_data.get('status') == 'pending':
                                 job_data['status_label'] = 'Pending Transcription'
                                 job_data['status_class'] = 'warning'
+                            elif job_data.get('status') == 'processing':
+                                job_data['status_label'] = 'Processing'
+                                job_data['status_class'] = 'info'
+                                job_data['progress_percent'] = job_data.get('progress', 0)
                             else:
                                 job_data['status_label'] = 'Transcribing'
                                 job_data['status_class'] = 'success'
                                 job_data['progress_percent'] = job_data.get('progress', 0)
+                            
+                            # Check if this is a translation job
+                            if job_data.get('translate_to') or (job_data.get('options', {}).get('translate_to')):
+                                target_lang = job_data.get('translate_to') or job_data.get('options', {}).get('translate_to')
+                                job_data['is_translation'] = True
+                                job_data['target_language'] = target_lang
+                                if job_data.get('status') == 'pending':
+                                    job_data['status_label'] = 'Pending Translation'
+                                elif job_data.get('status') == 'processing':
+                                    job_data['status_label'] = f'Translating to {target_lang}'
+                            
+                            # Calculate ETA for transcription/translation jobs
+                            if job_data.get('status') == 'processing' and job_data.get('progress', 0) > 0:
+                                result = job_data.get('result', {})
+                                if result.get('processing_elapsed_seconds') and result.get('estimated_audio_minutes'):
+                                    elapsed_seconds = result['processing_elapsed_seconds']
+                                    progress = job_data.get('progress', 0)
+                                    
+                                    # Calculate remaining time based on current progress
+                                    if progress > 0:
+                                        total_estimated_seconds = (elapsed_seconds / progress) * 100
+                                        remaining_seconds = total_estimated_seconds - elapsed_seconds
+                                        
+                                        # Convert to human-readable format
+                                        if remaining_seconds > 0:
+                                            minutes = int(remaining_seconds // 60)
+                                            seconds = int(remaining_seconds % 60)
+                                            if minutes > 0:
+                                                job_data['eta'] = f"{minutes}m {seconds}s"
+                                            else:
+                                                job_data['eta'] = f"{seconds}s"
+                                        else:
+                                            job_data['eta'] = "Almost done"
                             
                             transcript_jobs.append(job_data)
                 except Exception as e:
@@ -545,7 +613,15 @@ def view_queue():
         # Sort transcript jobs by created_at
         transcript_jobs.sort(key=lambda x: x.get('created_at', ''))
         
-        return render_template('queue.html', queue_jobs=queue_jobs, transcript_jobs=transcript_jobs)
+        # Separate transcription and translation jobs
+        transcription_only_jobs = [job for job in transcript_jobs if not job.get('is_translation')]
+        translation_jobs = [job for job in transcript_jobs if job.get('is_translation')]
+        
+        return render_template('queue.html', 
+                             queue_jobs=queue_jobs, 
+                             transcript_jobs=transcript_jobs,
+                             transcription_only_jobs=transcription_only_jobs,
+                             translation_jobs=translation_jobs)
         
     except Exception as e:
         logger.error(f"Error viewing queue: {e}", exc_info=True)
@@ -1426,7 +1502,7 @@ def api_queue_status():
             elif isinstance(job, dict):
                 progress = job.get('progress', job.get('download_cnt', 0))
                 
-            queue_jobs.append({
+            job_data = {
                 'id': job.get('id'),
                 'space_id': job.get('space_id'),
                 'title': job.get('title', ''),
@@ -1437,7 +1513,31 @@ def api_queue_status():
                 'space_url': job.get('space_url', ''),
                 'progress_percent': progress,
                 'progress_in_size': job.get('progress_in_size', 0)
-            })
+            }
+            
+            # Calculate ETA for downloads
+            if progress > 0 and progress < 100:
+                try:
+                    created_at = datetime.fromisoformat(job_data['created_at'])
+                    elapsed = (datetime.now() - created_at).total_seconds()
+                    total_estimated_seconds = (elapsed / progress) * 100
+                    remaining_seconds = total_estimated_seconds - elapsed
+                    
+                    if remaining_seconds > 0:
+                        if remaining_seconds > 3600:
+                            hours = int(remaining_seconds // 3600)
+                            minutes = int((remaining_seconds % 3600) // 60)
+                            job_data['eta'] = f"{hours}h {minutes}m"
+                        elif remaining_seconds > 60:
+                            minutes = int(remaining_seconds // 60)
+                            seconds = int(remaining_seconds % 60)
+                            job_data['eta'] = f"{minutes}m {seconds}s"
+                        else:
+                            job_data['eta'] = f"{int(remaining_seconds)}s"
+                except Exception:
+                    pass
+            
+            queue_jobs.append(job_data)
         
         # Sort by created_at (oldest first)
         queue_jobs.sort(key=lambda x: x.get('created_at', ''))
@@ -3121,6 +3221,122 @@ def api_get_transcripts_for_space(space_id):
     except Exception as e:
         logger.error(f"Error getting transcripts for space {space_id}: {e}", exc_info=True)
         return jsonify({'error': 'An unexpected error occurred'}), 500
+
+@app.route('/api/top_stats/<stat_type>')
+def api_top_stats(stat_type):
+    """Get top 10 spaces by plays, downloads, or top hosts."""
+    try:
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        if stat_type == 'plays':
+            # Get top 10 spaces by play count
+            query = """
+                SELECT 
+                    s.space_id,
+                    COALESCE(s.title, s.space_id) as title,
+                    COALESCE(sm.host_handle, sm.host, 'Unknown') as host_name,
+                    NULL as host_pic,
+                    s.playback_cnt as play_count,
+                    s.download_cnt as download_count,
+                    s.created_at
+                FROM spaces s
+                LEFT JOIN space_metadata sm ON s.space_id = sm.space_id
+                WHERE s.playback_cnt > 0
+                ORDER BY s.playback_cnt DESC
+                LIMIT 10
+            """
+            cursor.execute(query)
+            results = cursor.fetchall()
+            
+        elif stat_type == 'downloads':
+            # Get top 10 spaces by download count
+            query = """
+                SELECT 
+                    s.space_id,
+                    COALESCE(s.title, s.space_id) as title,
+                    COALESCE(sm.host_handle, sm.host, 'Unknown') as host_name,
+                    NULL as host_pic,
+                    s.playback_cnt as play_count,
+                    s.download_cnt as download_count,
+                    s.created_at
+                FROM spaces s
+                LEFT JOIN space_metadata sm ON s.space_id = sm.space_id
+                WHERE s.download_cnt > 0
+                ORDER BY s.download_cnt DESC
+                LIMIT 10
+            """
+            cursor.execute(query)
+            results = cursor.fetchall()
+            
+        elif stat_type == 'hosts':
+            # Get top 10 hosts by number of spaces
+            query = """
+                SELECT 
+                    COALESCE(sm.host_handle, sm.host, 'Unknown') as host_name,
+                    NULL as host_pic,
+                    COUNT(DISTINCT s.id) as space_count,
+                    SUM(s.playback_cnt) as total_plays,
+                    SUM(s.download_cnt) as total_downloads,
+                    MAX(s.created_at) as latest_space
+                FROM spaces s
+                LEFT JOIN space_metadata sm ON s.space_id = sm.space_id
+                WHERE s.title IS NOT NULL AND (sm.host_handle IS NOT NULL OR sm.host IS NOT NULL)
+                GROUP BY sm.host_handle, sm.host
+                ORDER BY space_count DESC
+                LIMIT 10
+            """
+            cursor.execute(query)
+            results = cursor.fetchall()
+            
+        elif stat_type == 'users':
+            # Get top 10 users by activity
+            query = """
+                SELECT 
+                    u.id as user_id,
+                    u.email,
+                    u.login_count,
+                    COUNT(DISTINCT s.id) as submission_count,
+                    SUM(s.playback_cnt) as total_plays,
+                    SUM(s.download_cnt) as total_downloads
+                FROM users u
+                LEFT JOIN spaces s ON u.id = s.user_id
+                WHERE u.status = 1
+                GROUP BY u.id, u.email, u.login_count
+                ORDER BY (u.login_count + COUNT(DISTINCT s.id) + COALESCE(SUM(s.playback_cnt), 0) + COALESCE(SUM(s.download_cnt), 0)) DESC
+                LIMIT 10
+            """
+            cursor.execute(query)
+            results = cursor.fetchall()
+            
+            # Add MD5 hash for Gravatar
+            import hashlib
+            for result in results:
+                if result.get('email'):
+                    email_hash = hashlib.md5(result['email'].lower().strip().encode()).hexdigest()
+                    result['email_hash'] = email_hash
+                    # Don't send actual email to frontend for privacy
+                    result.pop('email', None)
+            
+        else:
+            return jsonify({'error': 'Invalid stat type'}), 400
+        
+        cursor.close()
+        
+        # Convert datetime objects to strings
+        for result in results:
+            for key, value in result.items():
+                if hasattr(value, 'isoformat'):
+                    result[key] = value.isoformat()
+        
+        return jsonify({
+            'type': stat_type,
+            'results': results
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting top stats: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 # Helper function to generate secure tokens
 def generate_secure_token(length=6):

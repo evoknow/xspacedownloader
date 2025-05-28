@@ -218,6 +218,144 @@
     </div>
 </div>
 {% endif %}
+
+<!-- Top Stats Section -->
+<div class="row mt-5">
+    <div class="col-md-12">
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-graph-up"></i> Popular Spaces & Hosts</h5>
+            </div>
+            <div class="card-body">
+                <!-- Tab Navigation -->
+                <ul class="nav nav-tabs" id="topStatsTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="top-plays-tab" data-bs-toggle="tab" data-bs-target="#top-plays" type="button" role="tab" aria-controls="top-plays" aria-selected="true">
+                            <i class="bi bi-play-circle"></i> Top Plays
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="top-downloads-tab" data-bs-toggle="tab" data-bs-target="#top-downloads" type="button" role="tab" aria-controls="top-downloads" aria-selected="false">
+                            <i class="bi bi-download"></i> Top Downloads
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="top-hosts-tab" data-bs-toggle="tab" data-bs-target="#top-hosts" type="button" role="tab" aria-controls="top-hosts" aria-selected="false">
+                            <i class="bi bi-person-circle"></i> Top Hosts
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="top-users-tab" data-bs-toggle="tab" data-bs-target="#top-users" type="button" role="tab" aria-controls="top-users" aria-selected="false">
+                            <i class="bi bi-people-fill"></i> Top Users
+                        </button>
+                    </li>
+                </ul>
+                
+                <!-- Tab Content -->
+                <div class="tab-content" id="topStatsContent">
+                    <!-- Top Plays Tab -->
+                    <div class="tab-pane fade show active" id="top-plays" role="tabpanel" aria-labelledby="top-plays-tab">
+                        <div class="loading-spinner text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                        <div class="stats-content" style="display: none;">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th width="5%">#</th>
+                                            <th width="60%">Space</th>
+                                            <th width="20%">Host</th>
+                                            <th width="15%" class="text-end">Plays</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="stats-list"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Top Downloads Tab -->
+                    <div class="tab-pane fade" id="top-downloads" role="tabpanel" aria-labelledby="top-downloads-tab">
+                        <div class="loading-spinner text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                        <div class="stats-content" style="display: none;">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th width="5%">#</th>
+                                            <th width="60%">Space</th>
+                                            <th width="20%">Host</th>
+                                            <th width="15%" class="text-end">Downloads</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="stats-list"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Top Hosts Tab -->
+                    <div class="tab-pane fade" id="top-hosts" role="tabpanel" aria-labelledby="top-hosts-tab">
+                        <div class="loading-spinner text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                        <div class="stats-content" style="display: none;">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th width="5%">#</th>
+                                            <th width="35%">Host</th>
+                                            <th width="20%" class="text-center">Spaces</th>
+                                            <th width="20%" class="text-center">Total Plays</th>
+                                            <th width="20%" class="text-center">Total Downloads</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="stats-list"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Top Users Tab -->
+                    <div class="tab-pane fade" id="top-users" role="tabpanel" aria-labelledby="top-users-tab">
+                        <div class="loading-spinner text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                        <div class="stats-content" style="display: none;">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th width="5%">#</th>
+                                            <th width="25%">User</th>
+                                            <th width="15%" class="text-center">Logins</th>
+                                            <th width="15%" class="text-center">Submissions</th>
+                                            <th width="20%" class="text-center">Total Plays</th>
+                                            <th width="20%" class="text-center">Total Downloads</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="stats-list"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -326,6 +464,170 @@
         // Initial count update
         updateShowingCount();
         {% endif %}
+        
+        // Top Stats functionality
+        const topStatsData = {
+            plays: null,
+            downloads: null,
+            hosts: null,
+            users: null
+        };
+        
+        // Function to load top stats
+        async function loadTopStats(type) {
+            const tabPane = document.getElementById(`top-${type}`);
+            const spinner = tabPane.querySelector('.loading-spinner');
+            const content = tabPane.querySelector('.stats-content');
+            const tbody = tabPane.querySelector('.stats-list');
+            
+            // Check if data is already loaded
+            if (topStatsData[type]) {
+                displayStats(type, topStatsData[type]);
+                return;
+            }
+            
+            // Show loading spinner
+            spinner.style.display = 'block';
+            content.style.display = 'none';
+            
+            try {
+                const response = await fetch(`/api/top_stats/${type}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    topStatsData[type] = data.results;
+                    displayStats(type, data.results);
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Failed to load data</td></tr>';
+                    spinner.style.display = 'none';
+                    content.style.display = 'block';
+                }
+            } catch (error) {
+                console.error(`Error loading top ${type}:`, error);
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error loading data</td></tr>';
+                spinner.style.display = 'none';
+                content.style.display = 'block';
+            }
+        }
+        
+        // Function to display stats
+        function displayStats(type, results) {
+            const tabPane = document.getElementById(`top-${type}`);
+            const spinner = tabPane.querySelector('.loading-spinner');
+            const content = tabPane.querySelector('.stats-content');
+            const tbody = tabPane.querySelector('.stats-list');
+            
+            tbody.innerHTML = '';
+            
+            if (results.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No data available</td></tr>';
+            } else {
+                results.forEach((item, index) => {
+                    if (type === 'hosts') {
+                        const profileUrl = item.host_name !== 'Unknown' ? `https://x.com/${item.host_name}` : '#';
+                        const profilePicUrl = item.host_name !== 'Unknown' ? `https://unavatar.io/twitter/${item.host_name}` : null;
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>${index + 1}</td>
+                                <td>
+                                    ${item.host_name !== 'Unknown' ? `
+                                        <a href="${profileUrl}" target="_blank" class="text-decoration-none d-inline-flex align-items-center">
+                                            ${profilePicUrl ? 
+                                                `<img src="${profilePicUrl}" alt="${item.host_name}" class="rounded-circle me-2" style="width: 32px; height: 32px;" 
+                                                     onerror="this.onerror=null; this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2232%22 height=%2232%22 viewBox=%220 0 32 32%22><rect width=%2232%22 height=%2232%22 fill=%22%236c757d%22 rx=%2216%22/><path fill=%22white%22 d=%22M16 8a4 4 0 100 8 4 4 0 000-8zm0 10c-4.42 0-8 1.79-8 4v2h16v-2c0-2.21-3.58-4-8-4z%22/></svg>';">` : 
+                                                `<div class="rounded-circle bg-secondary d-inline-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px;">
+                                                    <i class="bi bi-person-fill text-white" style="font-size: 16px;"></i>
+                                                </div>`
+                                            }
+                                            <strong>${item.host_name}</strong>
+                                        </a>
+                                    ` : `<strong>${item.host_name}</strong>`}
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-primary">${item.space_count}</span>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-success">${item.total_plays ? item.total_plays.toLocaleString() : '0'}</span>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-info">${item.total_downloads ? item.total_downloads.toLocaleString() : '0'}</span>
+                                </td>
+                            </tr>
+                        `;
+                    } else if (type === 'users') {
+                        const gravatarUrl = item.email_hash ? `https://www.gravatar.com/avatar/${item.email_hash}?d=identicon&s=32` : null;
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>${index + 1}</td>
+                                <td>
+                                    <div class="d-inline-flex align-items-center">
+                                        ${gravatarUrl ? 
+                                            `<img src="${gravatarUrl}" alt="User ${item.user_id}" class="rounded-circle me-2" style="width: 32px; height: 32px;">` : 
+                                            `<div class="rounded-circle bg-secondary d-inline-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px;">
+                                                <i class="bi bi-person-fill text-white" style="font-size: 16px;"></i>
+                                            </div>`
+                                        }
+                                        <strong>User #${item.user_id}</strong>
+                                    </div>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-secondary">${item.login_count ? item.login_count.toLocaleString() : '0'}</span>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-primary">${item.submission_count ? item.submission_count.toLocaleString() : '0'}</span>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-success">${item.total_plays ? item.total_plays.toLocaleString() : '0'}</span>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-info">${item.total_downloads ? item.total_downloads.toLocaleString() : '0'}</span>
+                                </td>
+                            </tr>
+                        `;
+                    } else {
+                        const countField = type === 'plays' ? 'play_count' : 'download_count';
+                        const hostProfileUrl = item.host_name && item.host_name !== 'Unknown' ? `https://x.com/${item.host_name}` : null;
+                        const hostProfilePicUrl = item.host_name && item.host_name !== 'Unknown' ? `https://unavatar.io/twitter/${item.host_name}` : null;
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>${index + 1}</td>
+                                <td>
+                                    <a href="/space/${item.space_id}" class="text-decoration-none">
+                                        <strong>${item.title || 'Untitled Space'}</strong>
+                                    </a>
+                                </td>
+                                <td>
+                                    ${hostProfileUrl ? `
+                                        <a href="${hostProfileUrl}" target="_blank" class="text-decoration-none d-inline-flex align-items-center">
+                                            <img src="${hostProfilePicUrl}" alt="${item.host_name}" class="rounded-circle me-2" style="width: 24px; height: 24px;" 
+                                                 onerror="this.onerror=null; this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2224%22 viewBox=%220 0 24 24%22><rect width=%2224%22 height=%2224%22 fill=%22%236c757d%22 rx=%2212%22/><path fill=%22white%22 d=%22M12 6a3 3 0 100 6 3 3 0 000-6zm0 7.5c-3.315 0-6 1.343-6 3v1.5h12v-1.5c0-1.657-2.685-3-6-3z%22/></svg>';">
+                                            <small>${item.host_name}</small>
+                                        </a>
+                                    ` : `<small>${item.host_name || 'Unknown'}</small>`}
+                                </td>
+                                <td class="text-end">
+                                    <span class="badge bg-${type === 'plays' ? 'success' : 'info'}">${item[countField] ? item[countField].toLocaleString() : '0'}</span>
+                                </td>
+                            </tr>
+                        `;
+                    }
+                });
+            }
+            
+            spinner.style.display = 'none';
+            content.style.display = 'block';
+        }
+        
+        // Load initial tab data
+        loadTopStats('plays');
+        
+        // Handle tab changes
+        document.querySelectorAll('#topStatsTabs button[data-bs-toggle="tab"]').forEach(tab => {
+            tab.addEventListener('shown.bs.tab', function (event) {
+                const type = event.target.id.replace('-tab', '').replace('top-', '');
+                loadTopStats(type);
+            });
+        });
     });
 </script>
 {% endblock %}
