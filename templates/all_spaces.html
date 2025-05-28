@@ -80,6 +80,7 @@
                                 <th class="sort" data-sort="space-title" style="cursor: pointer;">
                                     Space <i class="bi bi-arrow-down-up ms-1"></i>
                                 </th>
+                                <th class="d-none d-md-table-cell">Host</th>
                                 <th class="d-none d-md-table-cell sort" data-sort="space-date" style="cursor: pointer;">
                                     Downloaded <i class="bi bi-arrow-down-up ms-1"></i>
                                 </th>
@@ -108,6 +109,24 @@
                                         <br><small class="text-muted space-id">{{ space.space_id }}</small>
                                         {% endif %}
                                     </div>
+                                </td>
+                                <td class="d-none d-md-table-cell">
+                                    {% if space.metadata and space.metadata.host_handle %}
+                                    <a href="https://x.com/{{ space.metadata.host_handle[1:] if space.metadata.host_handle.startswith('@') else space.metadata.host_handle }}" 
+                                       target="_blank" 
+                                       class="text-decoration-none"
+                                       data-bs-toggle="tooltip" 
+                                       data-bs-placement="top" 
+                                       title="{{ space.metadata.host_handle }}">
+                                        <img src="https://unavatar.io/twitter/{{ space.metadata.host_handle[1:] if space.metadata.host_handle.startswith('@') else space.metadata.host_handle }}" 
+                                             alt="{{ space.metadata.host_handle }}" 
+                                             class="rounded-circle"
+                                             style="width: 32px; height: 32px; border: 2px solid #511fb2;"
+                                             onerror="this.src='https://ui-avatars.com/api/?name={{ space.metadata.host_handle[1:] if space.metadata.host_handle.startswith('@') else space.metadata.host_handle }}&size=32&background=0D8ABC&color=fff'">
+                                    </a>
+                                    {% else %}
+                                    <span class="text-muted">—</span>
+                                    {% endif %}
                                 </td>
                                 <td class="d-none d-md-table-cell">
                                     <small class="text-muted relative-time" data-datetime="{{ space.updated_at }}">
@@ -167,10 +186,10 @@
                                 <td>
                                     <div class="btn-group btn-group-sm" role="group">
                                         {% if space.file_exists %}
-                                        <a href="{{ url_for('space_page', space_id=space.space_id) }}" class="btn btn-success" data-bs-toggle="tooltip" data-bs-placement="top" title="Listen to audio">
+                                        <a href="{{ url_for('space_page', space_id=space.space_id) }}" class="btn btn-success track-play" data-space-id="{{ space.space_id }}" data-bs-toggle="tooltip" data-bs-placement="top" title="Listen to audio">
                                             <i class="bi bi-play-circle"></i>
                                         </a>
-                                        <a href="/download/{{ space.space_id }}?attachment=1" class="btn btn-outline-primary" data-bs-toggle="tooltip" data-bs-placement="top" title="Download MP3">
+                                        <a href="/download/{{ space.space_id }}?attachment=1" class="btn btn-outline-primary track-download" data-space-id="{{ space.space_id }}" data-bs-toggle="tooltip" data-bs-placement="top" title="Download MP3">
                                             <i class="bi bi-download"></i>
                                         </a>
                                         {% else %}
@@ -338,6 +357,60 @@
         // Initial count update
         updateShowingCount();
         {% endif %}
+        
+        // Track play button clicks
+        document.querySelectorAll('.track-play').forEach(button => {
+            button.addEventListener('click', function(e) {
+                const spaceId = this.getAttribute('data-space-id');
+                const playsCell = this.closest('tr').querySelector('.space-plays');
+                
+                // Track the play
+                fetch(`/api/track_play/${spaceId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                }).then(response => response.json())
+                .then(data => {
+                    if (data.counted) {
+                        // Update the play count in the table
+                        const currentPlays = parseInt(playsCell.textContent) || 0;
+                        playsCell.textContent = currentPlays + 1;
+                    } else if (data.reason) {
+                        console.log('Play not counted:', data.reason);
+                    }
+                }).catch(error => {
+                    console.error('Error tracking play:', error);
+                });
+            });
+        });
+        
+        // Track download button clicks
+        document.querySelectorAll('.track-download').forEach(button => {
+            button.addEventListener('click', function(e) {
+                const spaceId = this.getAttribute('data-space-id');
+                const downloadsCell = this.closest('tr').querySelector('.space-downloads');
+                
+                // Track the download
+                fetch(`/api/track_download/${spaceId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                }).then(response => response.json())
+                .then(data => {
+                    if (data.counted) {
+                        // Update the download count in the table
+                        const currentDownloads = parseInt(downloadsCell.textContent) || 0;
+                        downloadsCell.textContent = currentDownloads + 1;
+                    } else if (data.reason) {
+                        console.log('Download not counted:', data.reason);
+                    }
+                }).catch(error => {
+                    console.error('Error tracking download:', error);
+                });
+            });
+        });
     });
 </script>
 {% endblock %}

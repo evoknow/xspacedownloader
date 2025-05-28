@@ -382,6 +382,117 @@
                         </div>
                     </div>
                     
+                    <!-- Usage Tracking Questions -->
+                    <h5 class="mt-5 mb-3 text-primary">Usage Tracking & Analytics</h5>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq_tracking1">
+                                How are play counts tracked?
+                            </button>
+                        </h2>
+                        <div id="faq_tracking1" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                To ensure accurate and fair play count statistics, we have implemented the following tracking rules:
+                                <ul>
+                                    <li><strong>30-minute cooldown:</strong> Each user can only count one play per space every 30 minutes</li>
+                                    <li><strong>Minimum duration:</strong> You must listen for at least 30 seconds for the play to be counted</li>
+                                    <li><strong>User identification:</strong> We track by user account (if logged in), browser cookie, and IP address</li>
+                                    <li><strong>Real listening time:</strong> Pausing and resuming accumulates listening time accurately</li>
+                                </ul>
+                                This prevents artificial inflation of play counts while ensuring legitimate listening is properly tracked.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq_tracking2">
+                                How are download counts tracked?
+                            </button>
+                        </h2>
+                        <div id="faq_tracking2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Download counts are protected against manipulation with these measures:
+                                <ul>
+                                    <li><strong>Daily limit:</strong> Each user can only count one download per space per day</li>
+                                    <li><strong>IP rate limiting:</strong> Maximum 10 downloads per IP address per hour (across all spaces)</li>
+                                    <li><strong>User tracking:</strong> Downloads are tracked by user account, browser cookie, and IP address</li>
+                                    <li><strong>Audit trail:</strong> All download attempts are logged for security monitoring</li>
+                                </ul>
+                                You can still download the same space multiple times, but only the first download per day will increment the public count.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq_tracking3">
+                                Why wasn't my play/download counted?
+                            </button>
+                        </h2>
+                        <div id="faq_tracking3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Your interaction might not be counted if:
+                                <ul>
+                                    <li><strong>For plays:</strong> You've already played this space within the last 30 minutes</li>
+                                    <li><strong>For plays:</strong> You listened for less than 30 seconds</li>
+                                    <li><strong>For downloads:</strong> You've already downloaded this space today</li>
+                                    <li><strong>For downloads:</strong> You've exceeded the hourly download limit (10 per hour)</li>
+                                    <li><strong>Rate limiting:</strong> You've made too many requests to the tracking system</li>
+                                </ul>
+                                Don't worry - you can still listen to or download the content; it just won't increment the public statistics. Check your browser's developer console for specific reasons if you're curious.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq_tracking4">
+                                What data is collected for tracking?
+                            </button>
+                        </h2>
+                        <div id="faq_tracking4" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                For accurate and secure tracking, we collect minimal data:
+                                <ul>
+                                    <li><strong>User identification:</strong> Your user ID (if logged in), browser cookie, and IP address</li>
+                                    <li><strong>Timestamps:</strong> When you played or downloaded content</li>
+                                    <li><strong>Play duration:</strong> How long you actually listened (for play count validation)</li>
+                                    <li><strong>User agent:</strong> Your browser type (for security analysis)</li>
+                                </ul>
+                                This data is used solely for:
+                                <ul>
+                                    <li>Preventing count manipulation and ensuring fair statistics</li>
+                                    <li>Security monitoring and abuse prevention</li>
+                                    <li>Improving the user experience</li>
+                                </ul>
+                                All tracking data is securely stored and not shared with third parties.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq_tracking5">
+                                Can I see my own tracking history?
+                            </button>
+                        </h2>
+                        <div id="faq_tracking5" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Currently, individual tracking history is not exposed in the user interface, but we maintain complete records for security and analytics purposes. 
+                                <br><br>
+                                What you can see:
+                                <ul>
+                                    <li>Public play and download counts for all spaces</li>
+                                    <li>Your personal favorites and downloads in your account</li>
+                                    <li>Overall site statistics and popular content</li>
+                                </ul>
+                                If you have concerns about your tracking data or need to request its deletion, please contact the site administrators.
+                            </div>
+                        </div>
+                    </div>
+                    
                     <!-- Support Questions -->
                     <h5 class="mt-5 mb-3 text-primary">Support & Troubleshooting</h5>
                     

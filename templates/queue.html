@@ -8,9 +8,9 @@
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h4>
-                    <i class="bi bi-hourglass-split"></i> Download Queue
-                    {% if queue_jobs %}
-                    <span class="badge bg-secondary">{{ queue_jobs|length }} active</span>
+                    <i class="bi bi-hourglass-split"></i> Queue Status
+                    {% if queue_jobs or transcript_jobs %}
+                    <span class="badge bg-secondary">{{ (queue_jobs|length) + (transcript_jobs|length) }} active</span>
                     {% endif %}
                 </h4>
                 <div>
@@ -90,11 +90,69 @@
                     </div>
                     {% endfor %}
                 </div>
-                {% else %}
+                {% endif %}
+                
+                {% if transcript_jobs %}
+                <hr class="my-4">
+                <h5 class="mb-3">
+                    <i class="bi bi-mic"></i> Transcription Queue
+                    <span class="badge bg-info">{{ transcript_jobs|length }} active</span>
+                </h5>
+                <div class="list-group" id="transcript-list">
+                    {% for job in transcript_jobs %}
+                    <div class="list-group-item" data-transcript-job-id="{{ job.id }}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">
+                                    {{ job.title }}
+                                </h6>
+                                <div class="mb-2">
+                                    <span class="badge bg-{{ job.status_class }}">
+                                        {{ job.status_label }}
+                                    </span>
+                                    <small class="text-muted ms-2">
+                                        Started: <span class="relative-time" data-datetime="{{ job.created_at }}">{{ job.created_at }}</span>
+                                    </small>
+                                    {% if job.options and job.options.model %}
+                                    <small class="text-muted ms-2">
+                                        Model: {{ job.options.model }}
+                                    </small>
+                                    {% endif %}
+                                </div>
+                                
+                                {% if job.status == 'in_progress' and job.progress_percent %}
+                                <div class="progress mb-2" style="height: 20px;">
+                                    <div class="progress-bar bg-success progress-bar-striped progress-bar-animated" 
+                                         role="progressbar" 
+                                         style="width: {{ job.progress_percent }}%;"
+                                         aria-valuenow="{{ job.progress_percent }}" 
+                                         aria-valuemin="0" 
+                                         aria-valuemax="100">
+                                        {{ job.progress_percent }}%
+                                    </div>
+                                </div>
+                                {% elif job.status == 'pending' %}
+                                <div class="alert alert-warning mb-0 py-1">
+                                    <small><i class="bi bi-clock"></i> Waiting to start transcription...</small>
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="ms-3">
+                                <a href="{{ url_for('space_page', space_id=job.space_id) }}" class="btn btn-outline-primary btn-sm">
+                                    <i class="bi bi-play-circle"></i> View Space
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                
+                {% if not queue_jobs and not transcript_jobs %}
                 <div class="text-center py-5">
                     <i class="bi bi-inbox display-1 text-muted"></i>
-                    <h5 class="mt-3 text-muted">No downloads in queue</h5>
-                    <p class="text-muted">All downloads have been completed or there are no pending downloads.</p>
+                    <h5 class="mt-3 text-muted">No active jobs</h5>
+                    <p class="text-muted">All downloads and transcriptions have been completed.</p>
                     <a href="{{ url_for('index') }}" class="btn btn-primary mt-3">
                         <i class="bi bi-plus-circle"></i> Download a Space
                     </a>

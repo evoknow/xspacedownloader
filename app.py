@@ -15,6 +15,8 @@ from pathlib import Path
 from flask import Flask, request, render_template, redirect, url_for, flash, jsonify, session, send_file, Response
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 # Load environment variables from .env file if it exists
 try:
@@ -85,6 +87,14 @@ CORS(app)
 
 # Secret key for sessions and flashing messages
 app.secret_key = os.environ.get('SECRET_KEY', 'xspacedownloaderdevkey')
+
+# Initialize rate limiter
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
 
 # Default configuration
 app.config.update(
@@ -360,56 +370,77 @@ def all_spaces():
         # Get Space component
         space = get_space_component()
         
-        # Get all completed downloads
-        completed_spaces = space.list_download_jobs(status='completed')
+        # Get all completed spaces directly from spaces table
+        cursor = space.connection.cursor(dictionary=True)
+        query = """
+            SELECT * FROM spaces 
+            WHERE status = 'completed'
+            ORDER BY (COALESCE(playback_cnt, 0) * 1.5 + COALESCE(download_cnt, 0)) DESC, 
+                     downloaded_at DESC
+        """
+        cursor.execute(query)
+        completed_spaces = cursor.fetchall()
+        cursor.close()
+        
+        # Initialize metadata for each space
+        for space_row in completed_spaces:
+            space_row['metadata'] = {}
         
         # Check which files actually exist and add metadata
         download_dir = app.config['DOWNLOAD_DIR']
-        for job in completed_spaces:
+        for space_row in completed_spaces:
             file_exists = False
             for ext in ['mp3', 'm4a', 'wav']:
-                file_path = os.path.join(download_dir, f"{job['space_id']}.{ext}")
+                file_path = os.path.join(download_dir, f"{space_row['space_id']}.{ext}")
                 if os.path.exists(file_path) and os.path.getsize(file_path) > 1024*1024:  # > 1MB
                     file_exists = True
-                    job['file_exists'] = True
-                    job['file_size'] = os.path.getsize(file_path)
-                    job['file_extension'] = ext
+                    space_row['file_exists'] = True
+                    space_row['file_size'] = os.path.getsize(file_path)
+                    space_row['file_extension'] = ext
                     break
             
             if not file_exists:
-                job['file_exists'] = False
+                space_row['file_exists'] = False
             
             # Add transcript/translation/summary metadata
             try:
-                space_details = space.get_space(job['space_id'], include_transcript=True)
+                space_details = space.get_space(space_row['space_id'], include_transcript=True)
                 if space_details:
-                    job['has_transcript'] = bool(space_details.get('transcripts'))
-                    job['transcript_count'] = len(space_details.get('transcripts', []))
+                    space_row['has_transcript'] = bool(space_details.get('transcripts'))
+                    space_row['transcript_count'] = len(space_details.get('transcripts', []))
                     transcripts = space_details.get('transcripts', [])
-                    job['has_translation'] = len(transcripts) > 1 if transcripts else False
-                    job['has_summary'] = any(t.get('summary') for t in transcripts)
-                    job['title'] = space_details.get('title', '')
+                    space_row['has_translation'] = len(transcripts) > 1 if transcripts else False
+                    space_row['has_summary'] = any(t.get('summary') for t in transcripts)
+                    # Don't override title if it already exists
+                    if not space_row.get('title'):
+                        space_row['title'] = space_details.get('title', '')
                     
                     # Get review data
-                    review_result = space.get_reviews(job['space_id'])
+                    review_result = space.get_reviews(space_row['space_id'])
                     if review_result['success']:
-                        job['average_rating'] = review_result['average_rating']
-                        job['total_reviews'] = review_result['total_reviews']
+                        space_row['average_rating'] = review_result['average_rating']
+                        space_row['total_reviews'] = review_result['total_reviews']
                     else:
-                        job['average_rating'] = 0
-                        job['total_reviews'] = 0
+                        space_row['average_rating'] = 0
+                        space_row['total_reviews'] = 0
+                    
+                    # Update metadata if we have more details
+                    if space_details.get('metadata'):
+                        space_row['metadata'].update(space_details['metadata'])
                 else:
-                    job['average_rating'] = 0
-                    job['total_reviews'] = 0
+                    space_row['average_rating'] = 0
+                    space_row['total_reviews'] = 0
             except Exception as e:
-                logger.warning(f"Error getting metadata for space {job.get('space_id')}: {e}")
-                job['has_transcript'] = False
-                job['has_translation'] = False
-                job['has_summary'] = False
-                job['transcript_count'] = 0
-                job['title'] = ''
-                job['average_rating'] = 0
-                job['total_reviews'] = 0
+                logger.warning(f"Error getting metadata for space {space_row.get('space_id')}: {e}")
+                space_row['has_transcript'] = False
+                space_row['has_translation'] = False
+                space_row['has_summary'] = False
+                space_row['transcript_count'] = 0
+                if not space_row.get('title'):
+                    space_row['title'] = ''
+                space_row['average_rating'] = 0
+                space_row['total_reviews'] = 0
+                # Keep existing metadata structure
         
         return render_template('all_spaces.html', spaces=completed_spaces)
         
@@ -459,7 +490,39 @@ def view_queue():
         # Sort by created_at (oldest first, so they appear in queue order)
         queue_jobs.sort(key=lambda x: x.get('created_at', ''))
         
-        return render_template('queue.html', queue_jobs=queue_jobs)
+        # Get transcription jobs
+        transcript_jobs = []
+        transcript_jobs_dir = Path('transcript_jobs')
+        if transcript_jobs_dir.exists():
+            for job_file in transcript_jobs_dir.glob('*.json'):
+                try:
+                    with open(job_file, 'r') as f:
+                        job_data = json.load(f)
+                        # Only include pending or in_progress transcription jobs
+                        if job_data.get('status') in ['pending', 'in_progress']:
+                            # Get space details for title
+                            space_details = space.get_space(job_data.get('space_id'))
+                            if space_details:
+                                job_data['title'] = space_details.get('title', f"Space {job_data.get('space_id')}")
+                            else:
+                                job_data['title'] = f"Space {job_data.get('space_id')}"
+                            
+                            if job_data.get('status') == 'pending':
+                                job_data['status_label'] = 'Pending Transcription'
+                                job_data['status_class'] = 'warning'
+                            else:
+                                job_data['status_label'] = 'Transcribing'
+                                job_data['status_class'] = 'success'
+                                job_data['progress_percent'] = job_data.get('progress', 0)
+                            
+                            transcript_jobs.append(job_data)
+                except Exception as e:
+                    logger.error(f"Error reading transcript job file {job_file}: {e}")
+        
+        # Sort transcript jobs by created_at
+        transcript_jobs.sort(key=lambda x: x.get('created_at', ''))
+        
+        return render_template('queue.html', queue_jobs=queue_jobs, transcript_jobs=transcript_jobs)
         
     except Exception as e:
         logger.error(f"Error viewing queue: {e}", exc_info=True)
@@ -514,14 +577,171 @@ def check_url():
     return jsonify({'valid': valid})
 
 @app.route('/api/track_play/<space_id>', methods=['POST'])
+@limiter.limit("60 per minute")
 def track_play(space_id):
     """API endpoint to track when a space is played."""
     try:
+        from datetime import datetime, timedelta
+        
+        # Get user identification
+        user_id = session.get('user_id', 0)
+        cookie_id = request.cookies.get('xspace_user_id', '')
+        ip_address = request.remote_addr
+        user_agent = request.headers.get('User-Agent', '')
+        
+        # Get play duration if provided
+        data = request.get_json() or {}
+        duration_seconds = data.get('duration', 0)
+        
         space = get_space_component()
-        success = space.increment_play_count(space_id)
-        return jsonify({'success': success})
+        cursor = space.connection.cursor(dictionary=True)
+        
+        # Check if eligible for counting (30 min cooldown)
+        thirty_mins_ago = datetime.now() - timedelta(minutes=30)
+        
+        check_query = """
+            SELECT MAX(played_at) as last_played 
+            FROM space_play_history 
+            WHERE space_id = %s 
+            AND played_at > %s
+            AND (
+                (user_id IS NOT NULL AND user_id = %s) OR
+                (cookie_id IS NOT NULL AND cookie_id != '' AND cookie_id = %s) OR
+                (ip_address = %s)
+            )
+        """
+        cursor.execute(check_query, (space_id, thirty_mins_ago, user_id if user_id > 0 else None, 
+                                   cookie_id if cookie_id else None, ip_address))
+        result = cursor.fetchone()
+        
+        should_count = True
+        reason = None
+        
+        if result and result['last_played']:
+            # User has played this space in the last 30 minutes
+            should_count = False
+            reason = 'cooldown'
+        
+        # Record the play event regardless
+        insert_query = """
+            INSERT INTO space_play_history 
+            (space_id, user_id, cookie_id, ip_address, user_agent, duration_seconds)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """
+        cursor.execute(insert_query, (
+            space_id,
+            user_id if user_id > 0 else None,
+            cookie_id if cookie_id else None,
+            ip_address,
+            user_agent[:500] if user_agent else None,  # Limit user agent length
+            duration_seconds
+        ))
+        
+        # Only increment count if eligible
+        if should_count:
+            update_query = "UPDATE spaces SET playback_cnt = playback_cnt + 1 WHERE space_id = %s"
+            cursor.execute(update_query, (space_id,))
+        
+        space.connection.commit()
+        cursor.close()
+        
+        return jsonify({
+            'success': True, 
+            'counted': should_count,
+            'reason': reason
+        })
+        
     except Exception as e:
         logger.error(f"Error tracking play: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/track_download/<space_id>', methods=['POST'])
+@limiter.limit("60 per minute")
+def track_download(space_id):
+    """API endpoint to track when a space is downloaded."""
+    try:
+        from datetime import datetime, date, timedelta
+        
+        # Get user identification
+        user_id = session.get('user_id', 0)
+        cookie_id = request.cookies.get('xspace_user_id', '')
+        ip_address = request.remote_addr
+        user_agent = request.headers.get('User-Agent', '')
+        
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        # Check if eligible for counting (1 per day per user)
+        today = date.today()
+        
+        check_query = """
+            SELECT COUNT(*) as download_count 
+            FROM space_download_history 
+            WHERE space_id = %s 
+            AND DATE(downloaded_at) = %s
+            AND (
+                (user_id IS NOT NULL AND user_id = %s) OR
+                (cookie_id IS NOT NULL AND cookie_id != '' AND cookie_id = %s) OR
+                (ip_address = %s)
+            )
+        """
+        cursor.execute(check_query, (space_id, today, user_id if user_id > 0 else None, 
+                                   cookie_id if cookie_id else None, ip_address))
+        result = cursor.fetchone()
+        
+        should_count = True
+        reason = None
+        
+        if result and result['download_count'] > 0:
+            # User has already downloaded this space today
+            should_count = False
+            reason = 'daily_limit'
+        
+        # Also check IP rate limit (max 10 downloads per hour across all spaces)
+        if should_count:
+            hour_ago = datetime.now() - timedelta(hours=1)
+            ip_check_query = """
+                SELECT COUNT(*) as hour_downloads
+                FROM space_download_history
+                WHERE ip_address = %s AND downloaded_at > %s
+            """
+            cursor.execute(ip_check_query, (ip_address, hour_ago))
+            ip_result = cursor.fetchone()
+            
+            if ip_result and ip_result['hour_downloads'] >= 10:
+                should_count = False
+                reason = 'rate_limit'
+        
+        # Record the download event regardless
+        insert_query = """
+            INSERT INTO space_download_history 
+            (space_id, user_id, cookie_id, ip_address, user_agent)
+            VALUES (%s, %s, %s, %s, %s)
+        """
+        cursor.execute(insert_query, (
+            space_id,
+            user_id if user_id > 0 else None,
+            cookie_id if cookie_id else None,
+            ip_address,
+            user_agent[:500] if user_agent else None  # Limit user agent length
+        ))
+        
+        # Only increment count if eligible
+        if should_count:
+            update_query = "UPDATE spaces SET download_cnt = download_cnt + 1 WHERE space_id = %s"
+            cursor.execute(update_query, (space_id,))
+        
+        space.connection.commit()
+        cursor.close()
+        
+        return jsonify({
+            'success': True,
+            'counted': should_count,
+            'reason': reason
+        })
+        
+    except Exception as e:
+        logger.error(f"Error tracking download: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/spaces/<space_id>/clips', methods=['GET'])
@@ -1067,6 +1287,24 @@ def space_page(space_id):
         
         # Check if space is favorited
         is_favorite = space.is_favorite(space_id, user_id, cookie_id)
+        
+        # Get tags for this space
+        tags = space.get_space_tags(space_id)
+        
+        # Check for pending transcription job
+        has_pending_transcript_job = False
+        transcript_jobs_dir = Path('./transcript_jobs')
+        if transcript_jobs_dir.exists():
+            for job_file in transcript_jobs_dir.glob('*.json'):
+                try:
+                    with open(job_file, 'r') as f:
+                        job_data = json.load(f)
+                        if (job_data.get('space_id') == space_id and 
+                            job_data.get('status') in ['pending', 'in_progress']):
+                            has_pending_transcript_job = True
+                            break
+                except Exception as e:
+                    logger.error(f"Error reading transcript job file {job_file}: {e}")
             
         return render_template('space.html', 
                                space=space_details, 
@@ -1077,7 +1315,9 @@ def space_page(space_id):
                                job=job,
                                clips=clips,
                                can_edit_space=can_edit_space,
-                               is_favorite=is_favorite)
+                               is_favorite=is_favorite,
+                               tags=tags,
+                               has_pending_transcript_job=has_pending_transcript_job)
         
     except Exception as e:
         logger.error(f"Error displaying space page: {e}", exc_info=True)
@@ -1179,9 +1419,44 @@ def api_queue_status():
         # Sort by created_at (oldest first)
         queue_jobs.sort(key=lambda x: x.get('created_at', ''))
         
+        # Get transcription jobs
+        transcript_jobs = []
+        transcript_jobs_dir = Path('transcript_jobs')
+        if transcript_jobs_dir.exists():
+            for job_file in transcript_jobs_dir.glob('*.json'):
+                try:
+                    with open(job_file, 'r') as f:
+                        job_data = json.load(f)
+                        # Only include pending or in_progress transcription jobs
+                        if job_data.get('status') in ['pending', 'in_progress']:
+                            # Get space details for title
+                            space_details = space.get_space(job_data.get('space_id'))
+                            if space_details:
+                                title = space_details.get('title', f"Space {job_data.get('space_id')}")
+                            else:
+                                title = f"Space {job_data.get('space_id')}"
+                            
+                            transcript_jobs.append({
+                                'id': job_data.get('id'),
+                                'space_id': job_data.get('space_id'),
+                                'title': title,
+                                'status': job_data.get('status'),
+                                'status_label': 'Pending Transcription' if job_data.get('status') == 'pending' else 'Transcribing',
+                                'status_class': 'warning' if job_data.get('status') == 'pending' else 'success',
+                                'created_at': job_data.get('created_at', ''),
+                                'progress_percent': job_data.get('progress', 0),
+                                'type': 'transcription'
+                            })
+                except Exception as e:
+                    logger.error(f"Error reading transcript job file {job_file}: {e}")
+        
+        # Sort transcript jobs by created_at
+        transcript_jobs.sort(key=lambda x: x.get('created_at', ''))
+        
         return jsonify({
             'jobs': queue_jobs,
-            'total': len(queue_jobs)
+            'transcript_jobs': transcript_jobs,
+            'total': len(queue_jobs) + len(transcript_jobs)
         })
         
     except Exception as e:
@@ -1866,6 +2141,70 @@ def favorites():
         logger.error(f"Error loading favorites: {e}", exc_info=True)
         flash('An error occurred while loading favorites', 'error')
         return redirect(url_for('index'))
+
+@app.route('/spaces/tag/<tag_slug>')
+def spaces_by_tag(tag_slug):
+    """Display all spaces with a specific tag."""
+    try:
+        # Get Space component
+        space = get_space_component()
+        
+        # Get tag and spaces
+        result = space.get_spaces_by_tag(tag_slug)
+        
+        if not result['success']:
+            flash(f"Tag not found: {tag_slug}", 'error')
+            return redirect(url_for('all_spaces'))
+        
+        tag = result['tag']
+        spaces = result['spaces']
+        
+        # Check which files exist and add metadata
+        download_dir = app.config['DOWNLOAD_DIR']
+        for space_item in spaces:
+            # Check file existence
+            file_exists = False
+            for ext in ['mp3', 'm4a', 'wav']:
+                file_path = os.path.join(download_dir, f"{space_item['space_id']}.{ext}")
+                if os.path.exists(file_path) and os.path.getsize(file_path) > 1024*1024:  # > 1MB
+                    file_exists = True
+                    space_item['file_exists'] = True
+                    space_item['file_size'] = os.path.getsize(file_path)
+                    space_item['file_extension'] = ext
+                    break
+            
+            if not file_exists:
+                space_item['file_exists'] = False
+            
+            # Get metadata and reviews
+            try:
+                space_details = space.get_space(space_item['space_id'])
+                if space_details:
+                    space_item['metadata'] = space_details.get('metadata', {})
+                    
+                    # Get review data
+                    review_result = space.get_reviews(space_item['space_id'])
+                    if review_result['success']:
+                        space_item['average_rating'] = review_result['average_rating']
+                        space_item['total_reviews'] = review_result['total_reviews']
+                    else:
+                        space_item['average_rating'] = 0
+                        space_item['total_reviews'] = 0
+                else:
+                    space_item['metadata'] = {}
+                    space_item['average_rating'] = 0
+                    space_item['total_reviews'] = 0
+            except:
+                space_item['metadata'] = {}
+                space_item['average_rating'] = 0
+                space_item['total_reviews'] = 0
+        
+        return render_template('tag_spaces.html', tag=tag, spaces=spaces)
+        
+    except Exception as e:
+        logger.error(f"Error loading spaces by tag: {e}", exc_info=True)
+        flash('An error occurred while loading spaces', 'error')
+        return redirect(url_for('all_spaces'))
 
 @app.route('/api/transcript_job/<job_id>', methods=['GET'])
 def api_get_transcript_job(job_id):
@@ -4105,6 +4444,34 @@ def transcribe_space(space_id):
         
         # Create transcript_jobs directory if it doesn't exist
         os.makedirs('./transcript_jobs', exist_ok=True)
+        
+        # Check for existing pending or in-progress jobs for this space
+        transcript_jobs_dir = Path('./transcript_jobs')
+        existing_job = None
+        
+        if transcript_jobs_dir.exists():
+            for job_file in transcript_jobs_dir.glob('*.json'):
+                try:
+                    with open(job_file, 'r') as f:
+                        job_data = json.load(f)
+                        # Check if this job is for the same space and is still pending/in_progress
+                        if (job_data.get('space_id') == space_id and 
+                            job_data.get('status') in ['pending', 'in_progress']):
+                            existing_job = job_data
+                            break
+                except Exception as e:
+                    logger.error(f"Error reading job file {job_file}: {e}")
+        
+        # If there's already a pending/in_progress job, don't create a new one
+        if existing_job:
+            if request.is_json:
+                return jsonify({
+                    'error': 'A transcription job is already in progress for this space',
+                    'existing_job_id': existing_job.get('id'),
+                    'status': existing_job.get('status')
+                }), 409  # Conflict
+            flash('A transcription job is already pending or in progress for this space. Please wait for it to complete.', 'warning')
+            return redirect(url_for('space_page', space_id=space_id))
         
         # Generate a unique job ID
         job_id = str(uuid.uuid4())

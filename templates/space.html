@@ -337,8 +337,8 @@
                     <div class="card">
                         <div class="card-header bg-primary bg-opacity-25">
                             <div class="d-flex justify-content-center justify-content-md-start align-items-center gap-2">
-                                <button id="transcribe-btn" class="btn btn-info btn-sm" {% if space.transcripts %}data-has-transcript="true"{% endif %} data-bs-toggle="tooltip" data-bs-placement="top" title="Generate transcript from audio">
-                                    <i class="bi bi-mic"></i> <span class="d-none d-sm-inline">Transcribe</span>
+                                <button id="transcribe-btn" class="btn btn-info btn-sm" {% if space.transcripts %}data-has-transcript="true"{% endif %} {% if has_pending_transcript_job %}disabled{% endif %} data-bs-toggle="tooltip" data-bs-placement="top" title="{% if has_pending_transcript_job %}Transcription already in progress{% else %}Generate transcript from audio{% endif %}">
+                                    <i class="bi bi-mic"></i> <span class="d-none d-sm-inline">{% if has_pending_transcript_job %}Transcribing...{% else %}Transcribe{% endif %}</span>
                                 </button>
                                 <a href="/download/{{ space.space_id }}?attachment=1" class="btn btn-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Download MP3">
                                     <i class="bi bi-download"></i> <span class="d-none d-sm-inline">Download</span>
@@ -602,27 +602,6 @@
                     </a>
                 </div>
                 {% endif %}
-                
-                {% if job and (job.file_type or (job.start_time and job.end_time)) %}
-                <div class="job-details mt-3">
-                    <h6 class="text-muted mb-2">Job Info</h6>
-                    <div class="d-flex flex-wrap gap-3">
-                        <small class="text-muted">
-                            <i class="bi bi-hash"></i> Job #{{ job.id }}
-                        </small>
-                        {% if job.file_type %}
-                        <small class="text-muted">
-                            <i class="bi bi-file-earmark"></i> {{ job.file_type|upper }}
-                        </small>
-                        {% endif %}
-                        {% if job.start_time and job.end_time %}
-                        <small class="text-muted">
-                            <i class="bi bi-clock"></i> Duration: {{ ((job.end_time|default(job.start_time) - job.start_time).total_seconds() / 60)|round(1) }} min
-                        </small>
-                        {% endif %}
-                    </div>
-                </div>
-                {% endif %}
             </div>
         </div>
     </div>
@@ -729,6 +708,29 @@
         </div>
     </div>
 </div>
+
+<!-- Tags Section -->
+{% if tags %}
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h4>Tags</h4>
+            </div>
+            <div class="card-body">
+                <div class="d-flex flex-wrap gap-2">
+                    {% for tag in tags %}
+                    <a href="{{ url_for('spaces_by_tag', tag_slug=tag.tag_slug) }}" 
+                       class="badge bg-secondary text-decoration-none fs-6 px-3 py-2">
+                        <i class="bi bi-tag"></i> {{ tag.tag_name }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <!-- Trim Modal -->
 <div class="modal fade" id="trimModal" tabindex="-1" aria-labelledby="trimModalLabel" aria-hidden="true">
@@ -892,26 +894,74 @@
         
         // Audio player setup
         if (audioPlayer) {
-            // Track play count
+            // Track play count with duration
+            let playStartTime = null;
+            let totalPlayDuration = 0;
             let hasTrackedPlay = false;
+            
             audioPlayer.addEventListener('play', function() {
-                if (!hasTrackedPlay) {
+                playStartTime = Date.now();
+            });
+            
+            audioPlayer.addEventListener('pause', function() {
+                if (playStartTime) {
+                    totalPlayDuration += (Date.now() - playStartTime) / 1000;
+                    playStartTime = null;
+                    
+                    // Track play if duration is >= 30 seconds and not already tracked
+                    if (totalPlayDuration >= 30 && !hasTrackedPlay) {
+                        hasTrackedPlay = true;
+                        fetch(`/api/track_play/${spaceId}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                duration: Math.round(totalPlayDuration)
+                            })
+                        }).then(response => response.json())
+                        .then(data => {
+                            if (!data.counted) {
+                                console.log('Play not counted:', data.reason);
+                            }
+                        }).catch(error => {
+                            console.error('Error tracking play:', error);
+                        });
+                    }
+                }
+            });
+            
+            // Reset tracking when audio ends
+            audioPlayer.addEventListener('ended', function() {
+                if (playStartTime) {
+                    totalPlayDuration += (Date.now() - playStartTime) / 1000;
+                    playStartTime = null;
+                }
+                
+                // Track play if duration is >= 30 seconds and not already tracked
+                if (totalPlayDuration >= 30 && !hasTrackedPlay) {
                     hasTrackedPlay = true;
-                    // Track the play
                     fetch(`/api/track_play/${spaceId}`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            duration: Math.round(totalPlayDuration)
+                        })
+                    }).then(response => response.json())
+                    .then(data => {
+                        if (!data.counted) {
+                            console.log('Play not counted:', data.reason);
                         }
                     }).catch(error => {
                         console.error('Error tracking play:', error);
                     });
                 }
-            });
-            
-            // Reset tracking flag when audio ends or is paused and rewound
-            audioPlayer.addEventListener('ended', function() {
+                
+                // Reset for next play
                 hasTrackedPlay = false;
+                totalPlayDuration = 0;
             });
             
             // Playback speed control

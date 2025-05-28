@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Spaces tagged with "{{ tag.replace('_', ' ').title() }}" - XSpace Downloader{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">Spaces tagged with "{{ tag.replace('_', ' ').title() }}"</h1>
+    
+    {% if spaces %}
+    <div class="row">
+        {% for space in spaces %}
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <a href="{{ url_for('space', space_id=space.space_id) }}" class="text-decoration-none">
+                            {{ space.title }}
+                        </a>
+                    </h5>
+                    
+                    {% if space.summary %}
+                    <p class="card-text">{{ space.summary[:150] }}{% if space.summary|length > 150 %}...{% endif %}</p>
+                    {% endif %}
+                    
+                    <div class="d-flex align-items-center mt-2">
+                        {% if space.host_profile_image %}
+                        <img src="{{ space.host_profile_image }}" alt="{{ space.host_display_name }}" class="rounded-circle me-2" style="width: 30px; height: 30px;">
+                        {% else %}
+                        <img src="https://unavatar.io/twitter/{{ space.host_display_name }}" alt="{{ space.host_display_name }}" class="rounded-circle me-2" style="width: 30px; height: 30px;" onerror="this.onerror=null; this.src='https://unavatar.io/fallback';">
+                        {% endif %}
+                        <small class="text-muted">@{{ space.host_display_name }}</small>
+                    </div>
+                    
+                    {% if space.started_at %}
+                    <small class="text-muted d-block mt-2">
+                        <i class="bi bi-calendar"></i> {{ space.started_at.strftime('%B %d, %Y') }}
+                    </small>
+                    {% endif %}
+                    
+                    {% if space.rating %}
+                    <div class="mt-2">
+                        {% for i in range(5) %}
+                            {% if i < space.rating %}
+                                <i class="bi bi-star-fill text-warning"></i>
+                            {% else %}
+                                <i class="bi bi-star text-warning"></i>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        No spaces found with the tag "{{ tag.replace('_', ' ').title() }}".
+    </div>
+    {% endif %}
+    
+    <div class="mt-4">
+        <a href="{{ url_for('spaces') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Back to All Spaces
+        </a>
+    </div>
+</div>
+{% endblock %}
