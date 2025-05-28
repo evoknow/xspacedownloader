@@ -1,0 +1,338 @@
+{% extends "base.html" %}
+
+{% block title %}My Favorites - XSpace Downloader{% endblock %}
+
+{% block head %}
+<style>
+    /* Favorite item styling */
+    .favorite-item {
+        transition: all 0.2s ease;
+    }
+    
+    .favorite-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    /* Rating stars styling */
+    .rating-stars {
+        color: #ffc107;
+        font-size: 0.875rem;
+    }
+    
+    .rating-stars small {
+        font-size: 0.75rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-header bg-warning bg-opacity-10">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h3 class="mb-0">
+                        <i class="bi bi-star-fill text-warning"></i> My Favorites
+                    </h3>
+                    <span class="badge bg-secondary">{{ favorites|length }} space{{ 's' if favorites|length != 1 else '' }}</span>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if favorites %}
+                <div class="row g-3">
+                    {% for fav in favorites %}
+                    <div class="col-12 col-md-6 col-lg-4">
+                        <div class="card favorite-item h-100">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h5 class="card-title mb-0">
+                                        <a href="{{ url_for('space_page', space_id=fav.space_id) }}" class="text-decoration-none">
+                                            {{ fav.title if fav.title else "Space " + fav.space_id }}
+                                        </a>
+                                    </h5>
+                                    <div class="d-flex gap-1">
+                                        {% if fav.file_exists %}
+                                        <a href="{{ url_for('space_page', space_id=fav.space_id) }}" 
+                                           class="btn btn-sm btn-outline-success"
+                                           title="Play">
+                                            <i class="bi bi-play-circle"></i>
+                                        </a>
+                                        {% else %}
+                                        <a href="{{ url_for('space_page', space_id=fav.space_id) }}" 
+                                           class="btn btn-sm btn-outline-secondary"
+                                           title="View">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                        {% endif %}
+                                        <button class="btn btn-sm btn-outline-danger remove-favorite" 
+                                                data-space-id="{{ fav.space_id }}"
+                                                title="Remove from favorites">
+                                            <i class="bi bi-x"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <p class="text-muted small mb-2">
+                                    <code>{{ fav.space_id }}</code>
+                                </p>
+                                
+                                {# Host and Speakers #}
+                                {% if fav.metadata %}
+                                <div class="mb-2">
+                                    {% if fav.metadata.host_handle %}
+                                    <div class="mb-1">
+                                        <small class="text-muted">Host:</small>
+                                        <a href="https://x.com/{{ fav.metadata.host_handle[1:] if fav.metadata.host_handle.startswith('@') else fav.metadata.host_handle }}" 
+                                           target="_blank" 
+                                           class="text-decoration-none"
+                                           data-bs-toggle="tooltip" 
+                                           data-bs-placement="top" 
+                                           title="{{ fav.metadata.host_handle }}">
+                                            <img src="https://unavatar.io/twitter/{{ fav.metadata.host_handle[1:] if fav.metadata.host_handle.startswith('@') else fav.metadata.host_handle }}" 
+                                                 alt="{{ fav.metadata.host_handle }}" 
+                                                 class="rounded-circle"
+                                                 style="width: 24px; height: 24px; border: 1px solid #511fb2;"
+                                                 onerror="this.src='https://ui-avatars.com/api/?name={{ fav.metadata.host_handle[1:] if fav.metadata.host_handle.startswith('@') else fav.metadata.host_handle }}&size=24&background=0D8ABC&color=fff'">
+                                        </a>
+                                    </div>
+                                    {% endif %}
+                                    
+                                    {% if fav.metadata.speakers %}
+                                    <div>
+                                        <small class="text-muted">Speakers:</small>
+                                        {% for speaker in fav.metadata.speakers[:5] %}
+                                        <a href="https://x.com/{{ speaker[1:] if speaker.startswith('@') else speaker }}" 
+                                           target="_blank" 
+                                           class="text-decoration-none"
+                                           data-bs-toggle="tooltip" 
+                                           data-bs-placement="top" 
+                                           title="{{ speaker }}">
+                                            <img src="https://unavatar.io/twitter/{{ speaker[1:] if speaker.startswith('@') else speaker }}" 
+                                                 alt="{{ speaker }}" 
+                                                 class="rounded-circle"
+                                                 style="width: 24px; height: 24px; border: 1px solid #511fb2;"
+                                                 onerror="this.src='https://ui-avatars.com/api/?name={{ speaker[1:] if speaker.startswith('@') else speaker }}&size=24&background=0D8ABC&color=fff'">
+                                        </a>
+                                        {% endfor %}
+                                        {% if fav.metadata.speakers|length > 5 %}
+                                        <small class="text-muted">+{{ fav.metadata.speakers|length - 5 }}</small>
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                {% endif %}
+                                
+                                {# Rating #}
+                                {% if fav.total_reviews and fav.total_reviews > 0 %}
+                                <div class="rating-stars mb-2">
+                                    {% for i in range(1, 6) %}
+                                        {% if i <= fav.average_rating|int %}
+                                            <i class="bi bi-star-fill"></i>
+                                        {% elif i - 0.5 <= fav.average_rating %}
+                                            <i class="bi bi-star-half"></i>
+                                        {% else %}
+                                            <i class="bi bi-star"></i>
+                                        {% endif %}
+                                    {% endfor %}
+                                    <small class="text-muted ms-1">({{ fav.total_reviews }})</small>
+                                </div>
+                                {% endif %}
+                                
+                                {# Stats #}
+                                <div class="d-flex gap-3 text-muted small mb-2">
+                                    <span><i class="bi bi-play-circle"></i> {{ fav.playback_cnt|default(0) }}</span>
+                                    <span><i class="bi bi-download"></i> {{ fav.download_cnt|default(0) }}</span>
+                                </div>
+                                
+                                {# Favorited date #}
+                                <div class="text-muted text-end mt-2">
+                                    <small>
+                                        <i class="bi bi-star"></i> 
+                                        <span class="relative-time" data-datetime="{{ fav.fav_date }}">
+                                            {{ fav.fav_date }}
+                                        </span>
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-star display-1 text-muted"></i>
+                    <p class="lead text-muted mt-3">No favorites yet</p>
+                    <p class="text-muted">Click the star icon on any space to add it to your favorites.</p>
+                    <a href="{{ url_for('index') }}" class="btn btn-primary mt-3">
+                        <i class="bi bi-house"></i> Browse Spaces
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 11"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Function to show toast notifications
+    function showToast(message, type = 'info') {
+        const toastHtml = `
+            <div class="toast align-items-center text-white bg-${type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        ${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+        `;
+        
+        const toastContainer = document.querySelector('.toast-container');
+        toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+        
+        const toastElement = toastContainer.lastElementChild;
+        const toast = new bootstrap.Toast(toastElement);
+        toast.show();
+        
+        // Remove after hidden
+        toastElement.addEventListener('hidden.bs.toast', () => {
+            toastElement.remove();
+        });
+    }
+    
+    // Function to get cookie ID
+    function getCookieId() {
+        let cookieId = getCookie('xspace_user_id');
+        if (!cookieId) {
+            cookieId = 'user_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+            setCookie('xspace_user_id', cookieId, 365);
+        }
+        return cookieId;
+    }
+    
+    // Cookie functions
+    function setCookie(name, value, days) {
+        const expires = new Date();
+        expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+        document.cookie = name + '=' + value + ';expires=' + expires.toUTCString() + ';path=/';
+    }
+    
+    function getCookie(name) {
+        const nameEQ = name + "=";
+        const ca = document.cookie.split(';');
+        for(let i = 0; i < ca.length; i++) {
+            let c = ca[i];
+            while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+            if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+        }
+        return null;
+    }
+    
+    // Function to convert datetime to relative time
+    function timeAgo(datetime) {
+        const date = new Date(datetime);
+        const now = new Date();
+        const seconds = Math.floor((now - date) / 1000);
+        
+        if (seconds < 60) return 'just now';
+        
+        const intervals = {
+            year: 31536000,
+            month: 2592000,
+            week: 604800,
+            day: 86400,
+            hour: 3600,
+            minute: 60
+        };
+        
+        for (const [unit, secondsInUnit] of Object.entries(intervals)) {
+            const interval = Math.floor(seconds / secondsInUnit);
+            if (interval >= 1) {
+                return interval + ' ' + unit + (interval === 1 ? '' : 's') + ' ago';
+            }
+        }
+        
+        return 'just now';
+    }
+    
+    // Update relative times
+    function updateRelativeTimes() {
+        document.querySelectorAll('.relative-time').forEach(el => {
+            const datetime = el.getAttribute('data-datetime');
+            if (datetime) {
+                el.textContent = 'Added ' + timeAgo(datetime);
+            }
+        });
+    }
+    
+    // Remove favorite functionality
+    document.querySelectorAll('.remove-favorite').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const spaceId = this.dataset.spaceId;
+            const card = this.closest('.col-12');
+            
+            if (!confirm('Remove this space from favorites?')) {
+                return;
+            }
+            
+            this.disabled = true;
+            
+            fetch(`/api/spaces/${spaceId}/favorite`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ cookie_id: getCookieId() })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Removed from favorites', 'info');
+                    
+                    // Fade out and remove
+                    card.style.transition = 'opacity 0.3s ease';
+                    card.style.opacity = '0';
+                    
+                    setTimeout(() => {
+                        card.remove();
+                        
+                        // Check if no favorites left
+                        const remainingFavs = document.querySelectorAll('.favorite-item').length;
+                        if (remainingFavs === 0) {
+                            location.reload();
+                        } else {
+                            // Update count
+                            const badge = document.querySelector('.badge.bg-secondary');
+                            badge.textContent = remainingFavs + ' space' + (remainingFavs !== 1 ? 's' : '');
+                        }
+                    }, 300);
+                } else {
+                    showToast('Failed to remove from favorites', 'danger');
+                    this.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('Error removing favorite:', error);
+                showToast('Error removing favorite', 'danger');
+                this.disabled = false;
+            });
+        });
+    });
+    
+    // Initialize
+    updateRelativeTimes();
+    setInterval(updateRelativeTimes, 60000);
+    
+    // Initialize Bootstrap tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+</script>
+{% endblock %}

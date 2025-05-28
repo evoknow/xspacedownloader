@@ -2082,3 +2082,208 @@ class Space:
                 "total_reviews": 0,
                 "reviews": []
             }
+    
+    def add_favorite(self, space_id, user_id, cookie_id):
+        """
+        Add a space to user's favorites.
+        
+        Args:
+            space_id (str): The space ID
+            user_id (int): The user ID
+            cookie_id (str): The cookie ID (for anonymous users)
+            
+        Returns:
+            dict: Result with success status
+        """
+        try:
+            # Check if connection is active
+            if not self.connection or not self.connection.is_connected():
+                logger.warning("Database connection lost, reconnecting...")
+                with open("db_config.json", 'r') as f:
+                    config = json.load(f)
+                db_config = config["mysql"].copy()
+                if 'use_ssl' in db_config:
+                    del db_config['use_ssl']
+                self.connection = mysql.connector.connect(**db_config)
+            
+            cursor = self.connection.cursor()
+            
+            # Insert favorite (will fail if duplicate due to unique constraint)
+            insert_query = """
+                INSERT INTO space_favs (space_id, user_id, cookie_id, fav_date)
+                VALUES (%s, %s, %s, NOW())
+            """
+            cursor.execute(insert_query, (
+                space_id,
+                user_id,
+                cookie_id if user_id == 0 else None
+            ))
+            
+            self.connection.commit()
+            cursor.close()
+            
+            logger.info(f"Added favorite: space {space_id} for user {user_id}")
+            return {"success": True}
+            
+        except mysql.connector.IntegrityError:
+            # Already favorited
+            return {"success": False, "error": "Already in favorites"}
+        except Exception as e:
+            logger.error(f"Error adding favorite: {e}")
+            if self.connection and self.connection.is_connected():
+                self.connection.rollback()
+            return {"success": False, "error": str(e)}
+    
+    def remove_favorite(self, space_id, user_id, cookie_id):
+        """
+        Remove a space from user's favorites.
+        
+        Args:
+            space_id (str): The space ID
+            user_id (int): The user ID
+            cookie_id (str): The cookie ID (for anonymous users)
+            
+        Returns:
+            dict: Result with success status
+        """
+        try:
+            # Check if connection is active
+            if not self.connection or not self.connection.is_connected():
+                logger.warning("Database connection lost, reconnecting...")
+                with open("db_config.json", 'r') as f:
+                    config = json.load(f)
+                db_config = config["mysql"].copy()
+                if 'use_ssl' in db_config:
+                    del db_config['use_ssl']
+                self.connection = mysql.connector.connect(**db_config)
+            
+            cursor = self.connection.cursor()
+            
+            # Delete favorite
+            if user_id > 0:
+                delete_query = "DELETE FROM space_favs WHERE space_id = %s AND user_id = %s"
+                cursor.execute(delete_query, (space_id, user_id))
+            else:
+                delete_query = "DELETE FROM space_favs WHERE space_id = %s AND cookie_id = %s AND user_id = 0"
+                cursor.execute(delete_query, (space_id, cookie_id))
+            
+            affected = cursor.rowcount
+            self.connection.commit()
+            cursor.close()
+            
+            if affected > 0:
+                logger.info(f"Removed favorite: space {space_id} for user {user_id}")
+                return {"success": True}
+            else:
+                return {"success": False, "error": "Not in favorites"}
+                
+        except Exception as e:
+            logger.error(f"Error removing favorite: {e}")
+            if self.connection and self.connection.is_connected():
+                self.connection.rollback()
+            return {"success": False, "error": str(e)}
+    
+    def is_favorite(self, space_id, user_id, cookie_id):
+        """
+        Check if a space is in user's favorites.
+        
+        Args:
+            space_id (str): The space ID
+            user_id (int): The user ID
+            cookie_id (str): The cookie ID (for anonymous users)
+            
+        Returns:
+            bool: True if space is favorited
+        """
+        try:
+            # Check if connection is active
+            if not self.connection or not self.connection.is_connected():
+                logger.warning("Database connection lost, reconnecting...")
+                with open("db_config.json", 'r') as f:
+                    config = json.load(f)
+                db_config = config["mysql"].copy()
+                if 'use_ssl' in db_config:
+                    del db_config['use_ssl']
+                self.connection = mysql.connector.connect(**db_config)
+            
+            cursor = self.connection.cursor()
+            
+            # Check if favorite exists
+            if user_id > 0:
+                check_query = "SELECT 1 FROM space_favs WHERE space_id = %s AND user_id = %s"
+                cursor.execute(check_query, (space_id, user_id))
+            else:
+                check_query = "SELECT 1 FROM space_favs WHERE space_id = %s AND cookie_id = %s AND user_id = 0"
+                cursor.execute(check_query, (space_id, cookie_id))
+            
+            result = cursor.fetchone()
+            cursor.close()
+            
+            return result is not None
+            
+        except Exception as e:
+            logger.error(f"Error checking favorite: {e}")
+            return False
+    
+    def get_user_favorites(self, user_id, cookie_id):
+        """
+        Get all favorite spaces for a user.
+        
+        Args:
+            user_id (int): The user ID
+            cookie_id (str): The cookie ID (for anonymous users)
+            
+        Returns:
+            list: List of favorite spaces with details
+        """
+        try:
+            # Check if connection is active
+            if not self.connection or not self.connection.is_connected():
+                logger.warning("Database connection lost, reconnecting...")
+                with open("db_config.json", 'r') as f:
+                    config = json.load(f)
+                db_config = config["mysql"].copy()
+                if 'use_ssl' in db_config:
+                    del db_config['use_ssl']
+                self.connection = mysql.connector.connect(**db_config)
+            
+            cursor = self.connection.cursor(dictionary=True)
+            
+            # Get favorites with space details
+            if user_id > 0:
+                query = """
+                    SELECT f.*, s.title, s.space_url, s.status, s.created_at, 
+                           s.playback_cnt, s.download_cnt, s.filename
+                    FROM space_favs f
+                    JOIN spaces s ON f.space_id = s.space_id
+                    WHERE f.user_id = %s
+                    ORDER BY f.fav_date DESC
+                """
+                cursor.execute(query, (user_id,))
+            else:
+                query = """
+                    SELECT f.*, s.title, s.space_url, s.status, s.created_at,
+                           s.playback_cnt, s.download_cnt, s.filename
+                    FROM space_favs f
+                    JOIN spaces s ON f.space_id = s.space_id
+                    WHERE f.cookie_id = %s AND f.user_id = 0
+                    ORDER BY f.fav_date DESC
+                """
+                cursor.execute(query, (cookie_id,))
+            
+            favorites = cursor.fetchall()
+            
+            # Convert datetime objects to strings
+            for fav in favorites:
+                if fav['fav_date']:
+                    fav['fav_date'] = fav['fav_date'].isoformat()
+                if fav['created_at']:
+                    fav['created_at'] = fav['created_at'].isoformat()
+            
+            cursor.close()
+            
+            return favorites
+            
+        except Exception as e:
+            logger.error(f"Error getting favorites: {e}")
+            return []

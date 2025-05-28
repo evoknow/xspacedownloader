@@ -1064,6 +1064,9 @@ def space_page(space_id):
             else:
                 # Not logged in - must match cookie_id
                 can_edit_space = (space_cookie_id == cookie_id and space_user_id == 0)
+        
+        # Check if space is favorited
+        is_favorite = space.is_favorite(space_id, user_id, cookie_id)
             
         return render_template('space.html', 
                                space=space_details, 
@@ -1073,7 +1076,8 @@ def space_page(space_id):
                                content_type=content_type,
                                job=job,
                                clips=clips,
-                               can_edit_space=can_edit_space)
+                               can_edit_space=can_edit_space,
+                               is_favorite=is_favorite)
         
     except Exception as e:
         logger.error(f"Error displaying space page: {e}", exc_info=True)
@@ -1742,6 +1746,126 @@ def delete_space_review(space_id, review_id):
     except Exception as e:
         logger.error(f"Error deleting review: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/spaces/<space_id>/favorite', methods=['POST'])
+def toggle_favorite(space_id):
+    """Toggle favorite status for a space."""
+    try:
+        # Get Space component
+        space = get_space_component()
+        
+        # Get user info
+        user_id = session.get('user_id', 0)
+        cookie_id = request.json.get('cookie_id', '') if request.is_json else request.args.get('cookie_id', '')
+        
+        # Check if already favorited
+        is_fav = space.is_favorite(space_id, user_id, cookie_id)
+        
+        if is_fav:
+            # Remove from favorites
+            result = space.remove_favorite(space_id, user_id, cookie_id)
+            action = 'removed'
+        else:
+            # Add to favorites
+            result = space.add_favorite(space_id, user_id, cookie_id)
+            action = 'added'
+        
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'action': action,
+                'is_favorite': not is_fav
+            })
+        else:
+            return jsonify(result), 400
+            
+    except Exception as e:
+        logger.error(f"Error toggling favorite: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/spaces/<space_id>/favorite', methods=['GET'])
+def check_favorite(space_id):
+    """Check if a space is favorited."""
+    try:
+        # Get Space component
+        space = get_space_component()
+        
+        # Get user info
+        user_id = session.get('user_id', 0)
+        cookie_id = request.args.get('cookie_id', '')
+        
+        # Check favorite status
+        is_fav = space.is_favorite(space_id, user_id, cookie_id)
+        
+        return jsonify({
+            'success': True,
+            'is_favorite': is_fav
+        })
+        
+    except Exception as e:
+        logger.error(f"Error checking favorite: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/favorites')
+def favorites():
+    """Display user's favorite spaces."""
+    try:
+        # Get Space component
+        space = get_space_component()
+        
+        # Get user info
+        user_id = session.get('user_id', 0)
+        cookie_id = request.cookies.get('xspace_user_id', '')
+        
+        # Get favorites
+        favorites = space.get_user_favorites(user_id, cookie_id)
+        
+        # Check which files exist and add metadata
+        download_dir = app.config['DOWNLOAD_DIR']
+        for fav in favorites:
+            # Check file existence
+            file_exists = False
+            for ext in ['mp3', 'm4a', 'wav']:
+                file_path = os.path.join(download_dir, f"{fav['space_id']}.{ext}")
+                if os.path.exists(file_path) and os.path.getsize(file_path) > 1024*1024:  # > 1MB
+                    file_exists = True
+                    fav['file_exists'] = True
+                    fav['file_size'] = os.path.getsize(file_path)
+                    fav['file_extension'] = ext
+                    break
+            
+            if not file_exists:
+                fav['file_exists'] = False
+            
+            # Get review data
+            try:
+                review_result = space.get_reviews(fav['space_id'])
+                if review_result['success']:
+                    fav['average_rating'] = review_result['average_rating']
+                    fav['total_reviews'] = review_result['total_reviews']
+                else:
+                    fav['average_rating'] = 0
+                    fav['total_reviews'] = 0
+            except:
+                fav['average_rating'] = 0
+                fav['total_reviews'] = 0
+            
+            # Get metadata (host and speakers)
+            try:
+                space_details = space.get_space(fav['space_id'])
+                if space_details and space_details.get('metadata'):
+                    fav['metadata'] = space_details['metadata']
+                else:
+                    fav['metadata'] = None
+            except:
+                fav['metadata'] = None
+        
+        return render_template('favorites.html', favorites=favorites)
+        
+    except Exception as e:
+        logger.error(f"Error loading favorites: {e}", exc_info=True)
+        flash('An error occurred while loading favorites', 'error')
+        return redirect(url_for('index'))
 
 @app.route('/api/transcript_job/<job_id>', methods=['GET'])
 def api_get_transcript_job(job_id):
