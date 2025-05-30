@@ -2,6 +2,22 @@
 
 This guide will help you deploy XSpace Downloader on a production server running Ubuntu/Debian with nginx.
 
+## Quick Deploy
+
+Use the automated deployment script for quick setup:
+
+```bash
+sudo python3 deploy.py --nginx-user=www-data \
+                      --production-dir=/var/www/xspacedownloader \
+                      --nginx-etc-dir=/etc/nginx \
+                      --domain=your-domain.com
+```
+
+For different server configurations:
+- **CentOS/RHEL**: Use `--nginx-user=nginx`
+- **Custom paths**: Adjust `--production-dir` and `--nginx-etc-dir` as needed
+- **Dry run**: Add `--dry-run` to see what would be done
+
 ## Prerequisites
 
 - Ubuntu 20.04+ or Debian 10+ server
