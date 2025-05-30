@@ -122,6 +122,13 @@ echo "Checking and starting transcription worker if needed..."
 chmod +x run_transcribe_worker.sh
 ./run_transcribe_worker.sh
 echo "Transcription worker check complete"
+
+# Start progress watcher if needed
+echo "Checking and starting progress watcher if needed..."
+chmod +x run_progress_watcher.sh
+./run_progress_watcher.sh 2>/dev/null || echo "Progress watcher already running or failed to start"
+echo "Progress watcher check complete"
+
 BG_PID=""
 
 # Start the Flask app

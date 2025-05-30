@@ -1,0 +1,18 @@
+[Unit]
+Description=XSpace Download Progress Watcher
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=YOUR_USERNAME
+Group=YOUR_GROUP
+WorkingDirectory=/path/to/xspacedownload
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+ExecStart=/usr/bin/python3 /path/to/xspacedownload/bg_progress_watcher.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/path/to/xspacedownload/logs/bg_progress_watcher.out
+StandardError=append:/path/to/xspacedownload/logs/bg_progress_watcher.err
+
+[Install]
+WantedBy=multi-user.target

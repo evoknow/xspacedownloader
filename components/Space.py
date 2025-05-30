@@ -16,6 +16,10 @@ from mysql.connector import Error
 import mysql.connector
 import configparser
 from contextlib import closing
+try:
+    from components.DatabaseManager import db_manager
+except ImportError:
+    db_manager = None
 
 # Import SpeechToText component if available
 try:
@@ -62,9 +66,24 @@ class Space:
                 # Remove any unsupported parameters
                 if 'use_ssl' in db_config:
                     del db_config['use_ssl']
+                
+                # Clean up config for mysql.connector
+                clean_config = {
+                    'host': db_config.get('host'),
+                    'port': db_config.get('port', 3306),
+                    'database': db_config.get('database'),
+                    'user': db_config.get('user'),
+                    'password': db_config.get('password'),
+                    'connect_timeout': db_config.get('connect_timeout', 30),
+                    'autocommit': db_config.get('autocommit', False),
+                    'sql_mode': db_config.get('sql_mode', 'TRADITIONAL'),
+                    'charset': db_config.get('charset', 'utf8mb4'),
+                    'use_unicode': db_config.get('use_unicode', True),
+                    'raise_on_warnings': db_config.get('raise_on_warnings', False)
+                }
                     
                 # Connect to the database
-                self.connection = mysql.connector.connect(**db_config)
+                self.connection = mysql.connector.connect(**clean_config)
                 logger.info("Connected to MySQL database")
             else:
                 raise ValueError(f"Unsupported database type: {config['type']}")
@@ -72,6 +91,72 @@ class Space:
         except Exception as e:
             logger.error(f"Error initializing Space component: {e}")
             raise
+    
+    def _ensure_connection(self):
+        """
+        Ensure database connection is active, reconnect if needed.
+        
+        Returns:
+            bool: True if connected, False otherwise
+        """
+        try:
+            logger.info("[DEBUG] _ensure_connection called")
+            
+            # Check if connection exists and is active
+            if self.connection and self.connection.is_connected():
+                logger.info("[DEBUG] Connection exists and is_connected=True")
+                # Test the connection with a simple query
+                cursor = self.connection.cursor()
+                cursor.execute("SELECT 1")
+                result = cursor.fetchone()
+                cursor.close()
+                logger.info(f"[DEBUG] Connection test successful, result: {result}")
+                return True
+        except Exception as e:
+            logger.warning(f"[DEBUG] Database connection test failed: {e}")
+        
+        # Reconnect
+        logger.info("[DEBUG] Attempting to reconnect to database")
+        try:
+            # Close existing connection if any
+            if self.connection:
+                try:
+                    self.connection.close()
+                    logger.info("[DEBUG] Closed existing connection")
+                except Exception as e:
+                    logger.warning(f"[DEBUG] Error closing old connection: {e}")
+            
+            # Reload config and reconnect
+            logger.info("[DEBUG] Loading db_config.json")
+            with open("db_config.json", 'r') as f:
+                config = json.load(f)
+            
+            db_config = config["mysql"].copy()
+            if 'use_ssl' in db_config:
+                del db_config['use_ssl']
+            
+            # Clean up config for mysql.connector
+            clean_config = {
+                'host': db_config.get('host'),
+                'port': db_config.get('port', 3306),
+                'database': db_config.get('database'),
+                'user': db_config.get('user'),
+                'password': db_config.get('password'),
+                'connect_timeout': db_config.get('connect_timeout', 30),
+                'autocommit': db_config.get('autocommit', False),
+                'sql_mode': db_config.get('sql_mode', 'TRADITIONAL'),
+                'charset': db_config.get('charset', 'utf8mb4'),
+                'use_unicode': db_config.get('use_unicode', True),
+                'raise_on_warnings': db_config.get('raise_on_warnings', False)
+            }
+            
+            self.connection = mysql.connector.connect(**clean_config)
+            logger.info("Successfully reconnected to database")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to reconnect to database: {e}")
+            return False
             
     def extract_space_id(self, space_url):
         """
@@ -302,6 +387,72 @@ class Space:
             if cursor:
                 cursor.close()
     
+    def save_transcript_pooled(self, space_id, transcript_text, language="en-US"):
+        """
+        Save a transcript using connection pooling (preferred method).
+        
+        Args:
+            space_id (str): The space ID
+            transcript_text (str): The transcript content
+            language (str): The language code (e.g. en-US)
+            
+        Returns:
+            int: The transcript ID if successful, None otherwise
+        """
+        if not db_manager:
+            logger.error("DatabaseManager not available, falling back to regular save_transcript")
+            return self.save_transcript(space_id, transcript_text, language)
+        
+        try:
+            logger.info(f"[DEBUG] save_transcript_pooled called for space {space_id}, language {language}")
+            logger.info(f"[DEBUG] Transcript length: {len(transcript_text)} chars")
+            
+            # Check if a transcript in this language already exists
+            check_query = """
+            SELECT id FROM space_transcripts 
+            WHERE space_id = %s AND language = %s
+            """
+            
+            existing = db_manager.execute_query(check_query, (space_id, language), fetch_one=True)
+            logger.info(f"[DEBUG] Check query result: {existing}")
+            
+            if existing:
+                # Update existing transcript
+                update_query = """
+                UPDATE space_transcripts 
+                SET transcript = %s, updated_at = NOW()
+                WHERE id = %s
+                """
+                db_manager.execute_query(update_query, (transcript_text, existing['id']))
+                logger.info(f"[DEBUG] Updated existing transcript id: {existing['id']}")
+                return existing['id']
+            else:
+                # Insert new transcript
+                insert_query = """
+                INSERT INTO space_transcripts 
+                (space_id, language, transcript, created_at) 
+                VALUES (%s, %s, %s, NOW())
+                """
+                transcript_id = db_manager.execute_query(insert_query, (space_id, language, transcript_text))
+                logger.info(f"[DEBUG] Inserted new transcript with id: {transcript_id}")
+                
+                # Generate and save tags for all transcripts
+                try:
+                    tags = self.generate_tags_from_transcript(transcript_text)
+                    if tags:
+                        self.add_tags_to_space_pooled(space_id, tags)
+                        logger.info(f"Generated {len(tags)} tags for space {space_id} in language {language}")
+                    else:
+                        logger.warning(f"No tags generated for space {space_id}")
+                except Exception as tag_error:
+                    logger.error(f"Error generating tags: {tag_error}", exc_info=True)
+                
+                return transcript_id
+                
+        except Exception as e:
+            logger.error(f"[DEBUG] Error in save_transcript_pooled: {e}", exc_info=True)
+            return None
+    
     def save_transcript(self, space_id, transcript_text, language="en-US"):
         """
         Save a transcript for a space.
@@ -316,15 +467,34 @@ class Space:
         """
         cursor = None
         try:
+            logger.info(f"[DEBUG] save_transcript called for space {space_id}, language {language}")
+            logger.info(f"[DEBUG] Transcript length: {len(transcript_text)} chars")
+            
+            # Check connection status before ensure
+            if self.connection:
+                logger.info(f"[DEBUG] Connection exists, is_connected: {self.connection.is_connected()}")
+            else:
+                logger.info("[DEBUG] No connection object exists")
+            
+            # Ensure database connection is active
+            if not self._ensure_connection():
+                logger.error("[DEBUG] _ensure_connection returned False")
+                return None
+                
+            logger.info("[DEBUG] Connection ensured successfully")
+            
             cursor = self.connection.cursor()
+            logger.info("[DEBUG] Cursor created successfully")
             
             # Check if a transcript in this language already exists
             check_query = """
             SELECT id FROM space_transcripts 
             WHERE space_id = %s AND language = %s
             """
+            logger.info(f"[DEBUG] Executing check query for space_id={space_id}, language={language}")
             cursor.execute(check_query, (space_id, language))
             existing = cursor.fetchone()
+            logger.info(f"[DEBUG] Check query result: {existing}")
             
             if existing:
                 # Update existing transcript
@@ -343,30 +513,106 @@ class Space:
                 (space_id, language, transcript, created_at) 
                 VALUES (%s, %s, %s, NOW())
                 """
+                logger.info(f"[DEBUG] Executing insert query for new transcript")
                 cursor.execute(insert_query, (space_id, language, transcript_text))
+                logger.info(f"[DEBUG] Insert executed, committing...")
                 self.connection.commit()
                 transcript_id = cursor.lastrowid
+                logger.info(f"[DEBUG] Insert successful, transcript_id: {transcript_id}")
                 
-                # Generate and save tags for original transcript only (not translations)
-                if language.startswith('en'):
-                    try:
-                        tags = self.generate_tags_from_transcript(transcript_text)
-                        if tags:
-                            self.add_tags_to_space(space_id, tags)
-                            logger.info(f"Generated {len(tags)} tags for space {space_id}")
-                    except Exception as tag_error:
-                        logger.error(f"Error generating tags: {tag_error}")
+                # Generate and save tags for all transcripts
+                try:
+                    tags = self.generate_tags_from_transcript(transcript_text)
+                    if tags:
+                        self.add_tags_to_space(space_id, tags)
+                        logger.info(f"Generated {len(tags)} tags for space {space_id} in language {language}")
+                    else:
+                        logger.warning(f"No tags generated for space {space_id}")
+                except Exception as tag_error:
+                    logger.error(f"Error generating tags: {tag_error}", exc_info=True)
                 
                 return transcript_id
                 
         except Exception as e:
-            logger.error(f"Error saving transcript: {e}")
+            logger.error(f"[DEBUG] Error saving transcript: {e}", exc_info=True)
+            logger.error(f"[DEBUG] Error type: {type(e).__name__}")
+            logger.error(f"[DEBUG] Error args: {e.args}")
+            
             if self.connection:
-                self.connection.rollback()
+                try:
+                    logger.info(f"[DEBUG] Attempting rollback, connection status: {self.connection.is_connected()}")
+                    self.connection.rollback()
+                except Exception as rollback_error:
+                    logger.error(f"[DEBUG] Rollback failed: {rollback_error}")
+            
+            # If it's a connection error, try once more
+            if "Lost connection" in str(e) or "Broken pipe" in str(e):
+                logger.info("Retrying save_transcript after connection error...")
+                import time
+                time.sleep(1)  # Brief delay before retry
+                
+                # Ensure connection and retry
+                if self._ensure_connection():
+                    try:
+                        cursor = self.connection.cursor()
+                        
+                        # Check if transcript was partially saved
+                        check_query = """
+                        SELECT id FROM space_transcripts 
+                        WHERE space_id = %s AND language = %s
+                        """
+                        cursor.execute(check_query, (space_id, language))
+                        existing = cursor.fetchone()
+                        
+                        if existing:
+                            # Update existing transcript
+                            update_query = """
+                            UPDATE space_transcripts 
+                            SET transcript = %s, updated_at = NOW()
+                            WHERE id = %s
+                            """
+                            cursor.execute(update_query, (transcript_text, existing[0]))
+                            self.connection.commit()
+                            cursor.close()
+                            logger.info(f"Successfully saved transcript on retry for space {space_id}")
+                            return existing[0]
+                        else:
+                            # Insert new transcript
+                            insert_query = """
+                            INSERT INTO space_transcripts 
+                            (space_id, language, transcript, created_at) 
+                            VALUES (%s, %s, %s, NOW())
+                            """
+                            cursor.execute(insert_query, (space_id, language, transcript_text))
+                            self.connection.commit()
+                            transcript_id = cursor.lastrowid
+                            cursor.close()
+                            
+                            # Generate tags if needed
+                            try:
+                                tags = self.generate_tags_from_transcript(transcript_text)
+                                if tags:
+                                    self.add_tags_to_space(space_id, tags)
+                                    logger.info(f"Generated {len(tags)} tags for space {space_id} in language {language}")
+                                else:
+                                    logger.warning(f"No tags generated for space {space_id}")
+                            except Exception as tag_error:
+                                logger.error(f"Error generating tags on retry: {tag_error}", exc_info=True)
+                            
+                            logger.info(f"Successfully saved transcript on retry for space {space_id}")
+                            return transcript_id
+                    except Exception as retry_error:
+                        logger.error(f"Retry failed: {retry_error}")
+                        if cursor:
+                            cursor.close()
+            
             return None
         finally:
             if cursor:
-                cursor.close()
+                try:
+                    cursor.close()
+                except:
+                    pass
     
     def delete_transcript(self, transcript_id):
         """
@@ -1555,9 +1801,9 @@ class Space:
                     query += " AND status = %s"
                 params.append(status)
                 
-            # Sort by popularity for completed spaces, otherwise by ID
+            # Sort by most recent for completed spaces, otherwise by ID
             if status == 'completed':
-                query += " ORDER BY popularity_score DESC, sds.id DESC LIMIT %s OFFSET %s"
+                query += " ORDER BY sds.end_time DESC, popularity_score DESC LIMIT %s OFFSET %s"
             else:
                 query += " ORDER BY id DESC LIMIT %s OFFSET %s"
             params.extend([limit, offset])
@@ -2322,6 +2568,45 @@ class Space:
         slug = slug.strip('-')
         return slug
     
+    def create_or_get_tag_pooled(self, tag_name):
+        """
+        Create a new tag or get existing one using connection pooling.
+        
+        Args:
+            tag_name (str): The tag name
+            
+        Returns:
+            int: Tag ID, or None on error
+        """
+        if not db_manager:
+            return self.create_or_get_tag(tag_name)
+        
+        try:
+            # Normalize tag name (lowercase)
+            normalized_name = tag_name.lower().strip()
+            
+            # Check if tag exists
+            result = db_manager.execute_query(
+                "SELECT id FROM tags WHERE name = %s", 
+                (normalized_name,), 
+                fetch_one=True
+            )
+            
+            if result:
+                return result['id']
+            
+            # Create new tag
+            tag_id = db_manager.execute_query(
+                "INSERT INTO tags (name) VALUES (%s)",
+                (normalized_name,)
+            )
+            
+            return tag_id
+            
+        except Exception as e:
+            logger.error(f"Error creating/getting tag: {e}")
+            return None
+    
     def create_or_get_tag(self, tag_name):
         """
         Create a new tag or get existing one.
@@ -2333,21 +2618,17 @@ class Space:
             int: Tag ID, or None on error
         """
         try:
-            # Check if connection is active
-            if not self.connection or not self.connection.is_connected():
-                logger.warning("Database connection lost, reconnecting...")
-                with open("db_config.json", 'r') as f:
-                    config = json.load(f)
-                db_config = config["mysql"].copy()
-                if 'use_ssl' in db_config:
-                    del db_config['use_ssl']
-                self.connection = mysql.connector.connect(**db_config)
+            # Ensure database connection is active
+            if not self._ensure_connection():
+                logger.error("Failed to establish database connection")
+                return None
             
             cursor = self.connection.cursor()
-            tag_slug = self.normalize_tag_slug(tag_name)
+            # Normalize tag name (lowercase)
+            normalized_name = tag_name.lower().strip()
             
             # Check if tag exists
-            cursor.execute("SELECT id FROM tags WHERE tag_slug = %s", (tag_slug,))
+            cursor.execute("SELECT id FROM tags WHERE name = %s", (normalized_name,))
             result = cursor.fetchone()
             
             if result:
@@ -2356,14 +2637,14 @@ class Space:
             
             # Create new tag
             cursor.execute(
-                "INSERT INTO tags (tag_slug, tag_name) VALUES (%s, %s)",
-                (tag_slug, tag_name.strip())
+                "INSERT INTO tags (name) VALUES (%s)",
+                (normalized_name,)
             )
             tag_id = cursor.lastrowid
             self.connection.commit()
             cursor.close()
             
-            logger.info(f"Created new tag: {tag_name} (slug: {tag_slug})")
+            logger.info(f"Created new tag: {normalized_name}")
             return tag_id
             
         except Exception as e:
@@ -2371,6 +2652,53 @@ class Space:
             if self.connection and self.connection.is_connected():
                 self.connection.rollback()
             return None
+    
+    def add_tags_to_space_pooled(self, space_id, tag_names):
+        """
+        Add multiple tags to a space using connection pooling.
+        
+        Args:
+            space_id (str): The space ID
+            tag_names (list): List of tag names
+            
+        Returns:
+            dict: Result with success status and added tags
+        """
+        if not db_manager:
+            return self.add_tags_to_space(space_id, tag_names)
+        
+        try:
+            added_tags = []
+            
+            for tag_name in tag_names:
+                if not tag_name or not tag_name.strip():
+                    continue
+                    
+                # Get or create tag
+                tag_id = self.create_or_get_tag_pooled(tag_name)
+                if not tag_id:
+                    continue
+                
+                try:
+                    # Add space-tag relationship
+                    db_manager.execute_query(
+                        "INSERT INTO space_tags (space_id, tag_id) VALUES (%s, %s)",
+                        (space_id, tag_id)
+                    )
+                    added_tags.append({
+                        'id': tag_id,
+                        'name': tag_name.strip(),
+                        'slug': self.normalize_tag_slug(tag_name)
+                    })
+                except mysql.connector.IntegrityError:
+                    # Tag already associated with space
+                    pass
+            
+            return {'success': True, 'tags': added_tags}
+            
+        except Exception as e:
+            logger.error(f"Error adding tags to space: {e}")
+            return {'success': False, 'error': str(e), 'tags': []}
     
     def add_tags_to_space(self, space_id, tag_names):
         """
@@ -2384,15 +2712,10 @@ class Space:
             dict: Result with success status and added tags
         """
         try:
-            # Check if connection is active
-            if not self.connection or not self.connection.is_connected():
-                logger.warning("Database connection lost, reconnecting...")
-                with open("db_config.json", 'r') as f:
-                    config = json.load(f)
-                db_config = config["mysql"].copy()
-                if 'use_ssl' in db_config:
-                    del db_config['use_ssl']
-                self.connection = mysql.connector.connect(**db_config)
+            # Ensure database connection is active
+            if not self._ensure_connection():
+                logger.error("Failed to establish database connection")
+                return {'success': False, 'error': 'Database connection failed', 'tags': []}
             
             added_tags = []
             cursor = self.connection.cursor()
@@ -2464,11 +2787,12 @@ class Space:
             cursor = self.connection.cursor(dictionary=True)
             
             query = """
-                SELECT t.id, t.tag_name, t.tag_slug
+                SELECT t.id, t.name as tag_name, 
+                       LOWER(REPLACE(t.name, ' ', '-')) as tag_slug
                 FROM tags t
                 JOIN space_tags st ON t.id = st.tag_id
                 WHERE st.space_id = %s
-                ORDER BY t.tag_name
+                ORDER BY t.name
             """
             cursor.execute(query, (space_id,))
             tags = cursor.fetchall()
@@ -2503,8 +2827,18 @@ class Space:
             
             cursor = self.connection.cursor(dictionary=True)
             
-            # Get tag info
-            cursor.execute("SELECT * FROM tags WHERE tag_slug = %s", (tag_slug,))
+            # Get tag info - convert slug back to name
+            tag_name = tag_slug.replace('-', ' ')
+            
+            # Try multiple ways to find the tag (exact match, slug match, etc.)
+            cursor.execute("""
+                SELECT id, name, name as tag_name 
+                FROM tags 
+                WHERE LOWER(name) = LOWER(%s) 
+                   OR LOWER(name) = LOWER(%s)
+                   OR LOWER(REPLACE(name, ' ', '-')) = LOWER(%s)
+                   OR LOWER(REPLACE(name, '-', ' ')) = LOWER(%s)
+            """, (tag_name, tag_slug, tag_slug, tag_slug))
             tag = cursor.fetchone()
             
             if not tag:
@@ -2557,7 +2891,7 @@ class Space:
     
     def generate_tags_from_transcript(self, transcript_text, max_tags=5):
         """
-        Generate tags from transcript using AI.
+        Generate tags from transcript using AI or fallback to keyword extraction.
         
         Args:
             transcript_text (str): The transcript text
@@ -2567,38 +2901,98 @@ class Space:
             list: List of generated tag names
         """
         try:
-            # Import AI component
-            from components.AI import AI
             
-            ai = AI()
-            
-            # Prepare prompt for tag generation
-            prompt = f"""Analyze this transcript and generate {max_tags} relevant tags that capture the main topics, themes, and key concepts discussed. 
+            # Try AI-based tag generation first
+            try:
+                from components.AI import AI
+                ai = AI()
+                
+                # Prepare prompt for tag generation
+                prompt = f"""Analyze this transcript and generate {max_tags} relevant tags that capture the main topics, themes, and key concepts discussed. 
 
 Tags should be:
-- Short (1-3 words)
-- Specific and descriptive
-- Relevant to the content
+- Short (1-2 words)
+- Specific and descriptive (NOT generic words like "good", "your", "nice", etc.)
+- Relevant domain-specific terms, proper nouns, or important concepts
 - Useful for categorization and search
+- Examples of good tags: "Machine Learning", "Climate Change", "Bitcoin", "Mental Health", "Space Exploration", "Web3", "Artificial Intelligence", "Cybersecurity", "Marketing Strategy"
+- Examples of bad tags: "good", "your", "nice", "really", "very", "thing", "stuff", "people"
+
+Avoid common everyday words and focus on distinctive topics, technologies, organizations, concepts, or themes that make this content unique.
 
 Return ONLY the tags as a comma-separated list, nothing else.
 
 Transcript:
 {transcript_text[:3000]}...
 """
+                
+                # Generate tags using AI
+                result = ai.generate_text(prompt, max_tokens=100)
+                
+                if result.get('success') and result.get('text'):
+                    # Parse tags from response
+                    tags_text = result['text'].strip()
+                    tags = [tag.strip() for tag in tags_text.split(',') if tag.strip()]
+                    
+                    # Limit to max_tags
+                    return tags[:max_tags]
+                    
+            except Exception as ai_error:
+                logger.warning(f"AI tag generation failed: {ai_error}, falling back to keyword extraction")
             
-            # Generate tags using AI
-            result = ai.generate_text(prompt, max_tokens=100)
+            # Fallback: Simple keyword extraction
+            import re
+            from collections import Counter
             
-            if result.get('success') and result.get('text'):
-                # Parse tags from response
-                tags_text = result['text'].strip()
-                tags = [tag.strip() for tag in tags_text.split(',') if tag.strip()]
-                # Limit to max_tags
-                return tags[:max_tags]
-            else:
-                logger.warning(f"AI tag generation failed: {result.get('error', 'Unknown error')}")
-                return []
+            # Extract words (alphanumeric only)
+            words = re.findall(r'\b[a-zA-Z]+\b', transcript_text.lower())
+            
+            # Filter out short words only
+            meaningful_words = [w for w in words if len(w) > 4]
+            
+            # Count word frequency
+            word_freq = Counter(meaningful_words)
+            
+            # Get most common words as tags
+            common_words = word_freq.most_common(max_tags * 3)  # Get extra to filter
+            
+            # Create tags from most common words, prioritizing longer and more specific words
+            tags = []
+            for word, count in common_words:
+                if count > 2:  # Word appears at least 3 times
+                    # Skip if it's a number
+                    if word.isdigit():
+                        continue
+                        
+                    # Capitalize first letter
+                    tag = word.capitalize()
+                    tags.append(tag)
+                    
+                if len(tags) >= max_tags:
+                    break
+            
+            # If we still don't have enough tags, look for capitalized words (proper nouns)
+            if len(tags) < max_tags:
+                # Find words that appear capitalized in the original text
+                capitalized_words = re.findall(r'\b[A-Z][a-zA-Z]+\b', transcript_text)
+                cap_freq = Counter([w.lower() for w in capitalized_words if len(w) > 4])
+                
+                for word, count in cap_freq.most_common(max_tags - len(tags)):
+                    if count > 1 and word.lower() not in [t.lower() for t in tags]:
+                        tags.append(word.capitalize())
+            
+            # If we don't have enough tags, add some generic ones based on content
+            if len(tags) < 3:
+                if 'business' in transcript_text.lower():
+                    tags.append('Business')
+                if 'technology' in transcript_text.lower() or 'tech' in transcript_text.lower():
+                    tags.append('Technology')
+                if 'ai' in transcript_text.lower() or 'artificial intelligence' in transcript_text.lower():
+                    tags.append('AI')
+                if 'space' in transcript_text.lower() and 'twitter' in transcript_text.lower():
+                    tags.append('Twitter Space')
+                    
+            return tags[:max_tags]
                 
         except Exception as e:
             logger.error(f"Error generating tags from transcript: {e}")

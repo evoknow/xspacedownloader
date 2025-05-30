@@ -330,6 +330,7 @@ class Tag:
         Returns:
             list: List of tag dictionaries
         """
+        cursor = None
         try:
             cursor = self.connection.cursor(dictionary=True)
             

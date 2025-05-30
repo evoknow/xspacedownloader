@@ -2,6 +2,18 @@
 
 {% block title %}Admin Dashboard - XSpace Downloader{% endblock %}
 
+{% block head %}
+<style>
+.spin {
+    animation: spin 1s linear infinite;
+}
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container mt-4">
     <h1 class="mb-4">
@@ -148,7 +160,6 @@
                         <table class="table table-hover">
                             <thead>
                                 <tr>
-                                    <th>Space ID</th>
                                     <th>Title</th>
                                     <th>Host</th>
                                     <th>User</th>
@@ -160,7 +171,7 @@
                             </thead>
                             <tbody id="spacesList">
                                 <tr>
-                                    <td colspan="8" class="text-center">Loading spaces...</td>
+                                    <td colspan="7" class="text-center">Loading spaces...</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -306,6 +317,71 @@
                                     <i class="bi bi-save"></i> Save Rate Limit Settings
                                 </button>
                                 <div class="alert alert-info mt-3" style="display: none;" id="rateLimitMessage"></div>
+                            </form>
+                        </div>
+                    </div>
+                    
+                    <!-- Play/Download Tracking Configuration -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h6 class="mb-0"><i class="bi bi-graph-up"></i> Play & Download Tracking Configuration</h6>
+                        </div>
+                        <div class="card-body">
+                            <form id="trackingConfigForm">
+                                <!-- Play Tracking Settings -->
+                                <h6 class="text-primary mb-3">Play Tracking Settings</h6>
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label for="playCooldownMinutes" class="form-label">Play Cooldown Period (minutes)</label>
+                                        <input type="number" class="form-control" id="playCooldownMinutes" 
+                                               value="30" min="1" max="1440">
+                                        <div class="form-text">Time before a user can increment play count again</div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="playMinDuration" class="form-label">Minimum Play Duration (seconds)</label>
+                                        <input type="number" class="form-control" id="playMinDuration" 
+                                               value="30" min="0" max="3600">
+                                        <div class="form-text">Minimum duration required to count as a play (0 = disabled)</div>
+                                    </div>
+                                </div>
+                                <div class="mb-4">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="playTrackingEnabled" checked>
+                                        <label class="form-check-label" for="playTrackingEnabled">
+                                            Enable Play Tracking
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                <!-- Download Tracking Settings -->
+                                <h6 class="text-primary mb-3">Download Tracking Settings</h6>
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label for="downloadDailyLimit" class="form-label">Daily Download Limit (per user per space)</label>
+                                        <input type="number" class="form-control" id="downloadDailyLimit" 
+                                               value="1" min="1" max="100">
+                                        <div class="form-text">Maximum downloads per user per space per day</div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="downloadHourlyIpLimit" class="form-label">Hourly IP Limit (all spaces)</label>
+                                        <input type="number" class="form-control" id="downloadHourlyIpLimit" 
+                                               value="10" min="1" max="1000">
+                                        <div class="form-text">Maximum downloads per IP per hour across all spaces</div>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="downloadTrackingEnabled" checked>
+                                        <label class="form-check-label" for="downloadTrackingEnabled">
+                                            Enable Download Tracking
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-save"></i> Save Tracking Settings
+                                </button>
+                                <div class="alert alert-info mt-3" style="display: none;" id="trackingConfigMessage"></div>
                             </form>
                         </div>
                     </div>
@@ -461,7 +537,7 @@ function loadSpaces(page = 1) {
         .catch(error => {
             console.error('Error loading spaces:', error);
             document.getElementById('spacesList').innerHTML = 
-                '<tr><td colspan="8" class="text-danger text-center">Error loading spaces</td></tr>';
+                '<tr><td colspan="7" class="text-danger text-center">Error loading spaces</td></tr>';
         });
 }
 
@@ -469,27 +545,49 @@ function displaySpaces(spaces) {
     const tbody = document.getElementById('spacesList');
     
     if (spaces.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center">No spaces found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center">No spaces found</td></tr>';
         return;
     }
     
     tbody.innerHTML = spaces.map(space => `
         <tr>
             <td>
-                <a href="/spaces/${space.space_id}" target="_blank">
-                    ${space.space_id.substring(0, 10)}...
+                <a href="/spaces/${space.space_id}" target="_blank" class="text-decoration-none">
+                    ${space.title || 'Untitled Space'}
                 </a>
+                <br>
+                <small class="text-muted">${space.space_id}</small>
             </td>
-            <td>${space.title || 'Untitled'}</td>
-            <td>${space.host || '-'}</td>
-            <td>${space.user_email || 'Anonymous'}</td>
+            <td>
+                ${space.host_handle ? `
+                    <img src="https://unavatar.io/twitter/${space.host_handle.replace('@', '')}" 
+                         alt="${space.host_handle}" 
+                         class="rounded-circle" 
+                         style="width: 32px; height: 32px;"
+                         onerror="this.style.display='none'">
+                ` : '-'}
+            </td>
+            <td>
+                ${space.user_email ? `
+                    <img src="https://unavatar.io/${space.user_email}" 
+                         alt="${space.user_email}" 
+                         class="rounded-circle" 
+                         style="width: 32px; height: 32px;"
+                         onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(space.user_email.split('@')[0])}&background=random'">
+                ` : 'Anonymous'}
+            </td>
             <td>${space.download_cnt || 0}</td>
             <td>${space.playback_cnt || 0}</td>
             <td>${new Date(space.created_at).toLocaleDateString()}</td>
             <td>
-                <button class="btn btn-danger btn-sm" onclick="deleteSpace('${space.space_id}')">
-                    <i class="bi bi-trash"></i>
-                </button>
+                <div class="btn-group" role="group">
+                    <button class="btn btn-primary btn-sm" onclick="redoTags('${space.space_id}')" title="Regenerate tags from transcript">
+                        Redo <i class="bi bi-tags"></i>
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteSpace('${space.space_id}')" title="Delete space">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
             </td>
         </tr>
     `).join('');
@@ -514,6 +612,41 @@ function deleteSpace(spaceId) {
         .catch(error => {
             console.error('Error:', error);
             alert('Error deleting space');
+        });
+}
+
+function redoTags(spaceId) {
+    if (!confirm('Regenerate tags for this space using its transcript? This will replace all existing tags.')) return;
+    
+    // Show loading state
+    const button = event.target.closest('button');
+    const originalHtml = button.innerHTML;
+    button.innerHTML = '<i class="bi bi-arrow-clockwise spin"></i> Generating...';
+    button.disabled = true;
+    
+    fetch(`/admin/api/spaces/${spaceId}/redo-tags`, {method: 'POST'})
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Show success message with tags
+                const tagsText = data.tags.length > 0 ? 
+                    `\n\nGenerated tags: ${data.tags.join(', ')}` : 
+                    '\n\nNo tags generated.';
+                alert(`${data.message} for "${data.space_title}"${tagsText}`);
+                // Reload the spaces list to show updated data
+                loadSpaces(currentSpacesPage);
+            } else {
+                alert(data.error || 'Error regenerating tags');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error regenerating tags');
+        })
+        .finally(() => {
+            // Restore button state
+            button.innerHTML = originalHtml;
+            button.disabled = false;
         });
 }
 
@@ -723,6 +856,74 @@ document.getElementById('rateLimitForm').addEventListener('submit', async functi
         messageDiv.textContent = 'Error: ' + error.message;
         messageDiv.style.display = 'block';
     }
+});
+
+// Load tracking configuration on page load
+async function loadTrackingConfig() {
+    try {
+        const response = await fetch('/admin/api/tracking_config');
+        const result = await response.json();
+        
+        if (result.success && result.config) {
+            // Set form values
+            document.getElementById('playCooldownMinutes').value = result.config.play_cooldown_minutes || 30;
+            document.getElementById('playMinDuration').value = result.config.play_minimum_duration_seconds || 30;
+            document.getElementById('downloadDailyLimit').value = result.config.download_daily_limit || 1;
+            document.getElementById('downloadHourlyIpLimit').value = result.config.download_hourly_ip_limit || 10;
+            document.getElementById('playTrackingEnabled').checked = result.config.play_tracking_enabled !== 'false';
+            document.getElementById('downloadTrackingEnabled').checked = result.config.download_tracking_enabled !== 'false';
+        }
+    } catch (error) {
+        console.error('Error loading tracking config:', error);
+    }
+}
+
+// Save tracking configuration
+document.getElementById('trackingConfigForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const messageDiv = document.getElementById('trackingConfigMessage');
+    messageDiv.style.display = 'none';
+    
+    const data = {
+        play_cooldown_minutes: document.getElementById('playCooldownMinutes').value,
+        play_minimum_duration_seconds: document.getElementById('playMinDuration').value,
+        download_daily_limit: document.getElementById('downloadDailyLimit').value,
+        download_hourly_ip_limit: document.getElementById('downloadHourlyIpLimit').value,
+        play_tracking_enabled: document.getElementById('playTrackingEnabled').checked ? 'true' : 'false',
+        download_tracking_enabled: document.getElementById('downloadTrackingEnabled').checked ? 'true' : 'false'
+    };
+    
+    try {
+        const response = await fetch('/admin/api/update_tracking_config', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            messageDiv.className = 'alert alert-success mt-3';
+            messageDiv.textContent = result.message || 'Tracking configuration updated successfully';
+            messageDiv.style.display = 'block';
+        } else {
+            messageDiv.className = 'alert alert-danger mt-3';
+            messageDiv.textContent = 'Error: ' + (result.error || 'Failed to update configuration');
+            messageDiv.style.display = 'block';
+        }
+    } catch (error) {
+        messageDiv.className = 'alert alert-danger mt-3';
+        messageDiv.textContent = 'Error: ' + error.message;
+        messageDiv.style.display = 'block';
+    }
+});
+
+// Load tracking config when settings tab is shown
+document.getElementById('settings-tab').addEventListener('shown.bs.tab', function() {
+    loadTrackingConfig();
 });
 </script>
 {% endblock %}

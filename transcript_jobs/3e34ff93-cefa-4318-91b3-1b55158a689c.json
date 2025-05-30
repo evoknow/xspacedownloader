@@ -1,0 +1,28 @@
+{
+    "id": "3e34ff93-cefa-4318-91b3-1b55158a689c",
+    "space_id": "1jMJgBZnakWGL",
+    "file_path": "./downloads/1jMJgBZnakWGL.mp3",
+    "language": "en",
+    "options": {
+        "model": "base",
+        "detect_language": false,
+        "translate_to": null,
+        "overwrite": true
+    },
+    "status": "completed",
+    "progress": 100,
+    "created_at": "2025-05-29T12:48:11.305779",
+    "updated_at": "2025-05-29T12:48:20.560623",
+    "result": {
+        "transcript_id": 69,
+        "space_id": "1jMJgBZnakWGL",
+        "language": "en-EN",
+        "text_sample": "[00:00:30] go. Esther, if you would make me the co-host in case you get disconnected, that would work.\n[00:00:42] There we go. All right. Okay. So welcome to USA Biz Party. Today we have a very exciting,\n[00:00:56] very exciting topic. We're going to actually continue it today and next week. It's a very,\n[00:01:02] very extensive topic and it is based on the books we're actually going to be talking and reviewing\n[00:01:10] some of the book called the AI Edge. And the longer title of that is Sale...",
+        "audio_duration_minutes": 3.5,
+        "audio_duration_seconds": 207.1,
+        "detected_language": {
+            "code": "en",
+            "name": "english"
+        }
+    }
+}

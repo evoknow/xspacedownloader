@@ -1,68 +1,190 @@
 {% extends "base.html" %}
 
-{% block title %}Spaces tagged with "{{ tag.replace('_', ' ').title() }}" - XSpace Downloader{% endblock %}
+{% block title %}Spaces tagged with "{{ tag.name|title }}" - XSpace Downloader{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <h1 class="mb-4">Spaces tagged with "{{ tag.replace('_', ' ').title() }}"</h1>
-    
-    {% if spaces %}
-    <div class="row">
-        {% for space in spaces %}
-        <div class="col-md-6 col-lg-4 mb-4">
-            <div class="card h-100">
-                <div class="card-body">
-                    <h5 class="card-title">
-                        <a href="{{ url_for('space', space_id=space.space_id) }}" class="text-decoration-none">
-                            {{ space.title }}
-                        </a>
-                    </h5>
-                    
-                    {% if space.summary %}
-                    <p class="card-text">{{ space.summary[:150] }}{% if space.summary|length > 150 %}...{% endif %}</p>
-                    {% endif %}
-                    
-                    <div class="d-flex align-items-center mt-2">
-                        {% if space.host_profile_image %}
-                        <img src="{{ space.host_profile_image }}" alt="{{ space.host_display_name }}" class="rounded-circle me-2" style="width: 30px; height: 30px;">
-                        {% else %}
-                        <img src="https://unavatar.io/twitter/{{ space.host_display_name }}" alt="{{ space.host_display_name }}" class="rounded-circle me-2" style="width: 30px; height: 30px;" onerror="this.onerror=null; this.src='https://unavatar.io/fallback';">
-                        {% endif %}
-                        <small class="text-muted">@{{ space.host_display_name }}</small>
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-0"><i class="bi bi-tag"></i> Spaces tagged with "{{ tag.name|title }}"</h4>
+            </div>
+            <div class="card-body">
+                {% if spaces %}
+                <div class="row">
+                    {% for space in spaces %}
+                    <div class="col-lg-6 mb-4">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                {# Title and Actions #}
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h5 class="card-title mb-0">
+                                        <a href="{{ url_for('space_page', space_id=space.space_id) }}" class="text-decoration-none">
+                                            {{ space.title if space.title else "Space " + space.space_id }}
+                                        </a>
+                                    </h5>
+                                    <div class="d-flex gap-1">
+                                        {% if space.file_exists %}
+                                        <a href="{{ url_for('space_page', space_id=space.space_id) }}" 
+                                           class="btn btn-sm btn-outline-success"
+                                           title="Play">
+                                            <i class="bi bi-play-circle"></i>
+                                        </a>
+                                        {% else %}
+                                        <a href="{{ url_for('space_page', space_id=space.space_id) }}" 
+                                           class="btn btn-sm btn-outline-secondary"
+                                           title="View">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                
+                                <p class="text-muted small mb-2">
+                                    <code>{{ space.space_id }}</code>
+                                </p>
+                                
+                                {# Host and Speakers #}
+                                {% if space.metadata %}
+                                <div class="mb-2">
+                                    {% if space.metadata.host_handle %}
+                                    <div class="mb-1">
+                                        <small class="text-muted">Host:</small>
+                                        <a href="https://x.com/{{ space.metadata.host_handle[1:] if space.metadata.host_handle.startswith('@') else space.metadata.host_handle }}" 
+                                           target="_blank" 
+                                           class="text-decoration-none"
+                                           data-bs-toggle="tooltip" 
+                                           data-bs-placement="top" 
+                                           title="{{ space.metadata.host_handle }}">
+                                            <img src="https://unavatar.io/twitter/{{ space.metadata.host_handle[1:] if space.metadata.host_handle.startswith('@') else space.metadata.host_handle }}" 
+                                                 alt="{{ space.metadata.host_handle }}" 
+                                                 class="rounded-circle"
+                                                 style="width: 24px; height: 24px; border: 1px solid #511fb2;"
+                                                 onerror="this.src='https://ui-avatars.com/api/?name={{ space.metadata.host_handle[1:] if space.metadata.host_handle.startswith('@') else space.metadata.host_handle }}&size=24&background=0D8ABC&color=fff'">
+                                        </a>
+                                    </div>
+                                    {% endif %}
+                                    
+                                    {% if space.metadata.speakers %}
+                                    <div>
+                                        <small class="text-muted">Speakers:</small>
+                                        {% for speaker in space.metadata.speakers[:5] %}
+                                        <a href="https://x.com/{{ speaker[1:] if speaker.startswith('@') else speaker }}" 
+                                           target="_blank" 
+                                           class="text-decoration-none"
+                                           data-bs-toggle="tooltip" 
+                                           data-bs-placement="top" 
+                                           title="{{ speaker }}">
+                                            <img src="https://unavatar.io/twitter/{{ speaker[1:] if speaker.startswith('@') else speaker }}" 
+                                                 alt="{{ speaker }}" 
+                                                 class="rounded-circle"
+                                                 style="width: 24px; height: 24px; border: 1px solid #511fb2;"
+                                                 onerror="this.src='https://ui-avatars.com/api/?name={{ speaker[1:] if speaker.startswith('@') else speaker }}&size=24&background=0D8ABC&color=fff'">
+                                        </a>
+                                        {% endfor %}
+                                        {% if space.metadata.speakers|length > 5 %}
+                                        <small class="text-muted">+{{ space.metadata.speakers|length - 5 }}</small>
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                {% endif %}
+                                
+                                {# Rating #}
+                                {% if space.total_reviews and space.total_reviews > 0 %}
+                                <div class="rating-stars mb-2">
+                                    {% for i in range(1, 6) %}
+                                        {% if i <= space.average_rating|int %}
+                                            <i class="bi bi-star-fill"></i>
+                                        {% elif i - 0.5 <= space.average_rating %}
+                                            <i class="bi bi-star-half"></i>
+                                        {% else %}
+                                            <i class="bi bi-star"></i>
+                                        {% endif %}
+                                    {% endfor %}
+                                    <small class="text-muted ms-1">({{ space.total_reviews }})</small>
+                                </div>
+                                {% endif %}
+                                
+                                {# Stats #}
+                                <div class="d-flex gap-3 text-muted small mb-2">
+                                    <span><i class="bi bi-play-circle"></i> {{ space.playback_cnt|default(0) }}</span>
+                                    <span><i class="bi bi-download"></i> {{ space.download_cnt|default(0) }}</span>
+                                </div>
+                                
+                                {# Created date #}
+                                <div class="text-muted text-end mt-2">
+                                    <small>
+                                        <i class="bi bi-calendar"></i> 
+                                        <span class="relative-time" data-datetime="{{ space.created_at }}">{{ space.created_at }}</span>
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    
-                    {% if space.started_at %}
-                    <small class="text-muted d-block mt-2">
-                        <i class="bi bi-calendar"></i> {{ space.started_at.strftime('%B %d, %Y') }}
-                    </small>
-                    {% endif %}
-                    
-                    {% if space.rating %}
-                    <div class="mt-2">
-                        {% for i in range(5) %}
-                            {% if i < space.rating %}
-                                <i class="bi bi-star-fill text-warning"></i>
-                            {% else %}
-                                <i class="bi bi-star text-warning"></i>
-                            {% endif %}
-                        {% endfor %}
-                    </div>
-                    {% endif %}
+                    {% endfor %}
                 </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-inbox display-1 text-muted"></i>
+                    <h5 class="mt-3 text-muted">No spaces found</h5>
+                    <p class="text-muted">No spaces have been tagged with "{{ tag.name|title }}" yet.</p>
+                    <a href="{{ url_for('all_spaces') }}" class="btn btn-primary mt-3">
+                        <i class="bi bi-arrow-left"></i> Back to All Spaces
+                    </a>
+                </div>
+                {% endif %}
             </div>
         </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <div class="alert alert-info">
-        No spaces found with the tag "{{ tag.replace('_', ' ').title() }}".
-    </div>
-    {% endif %}
-    
-    <div class="mt-4">
-        <a href="{{ url_for('spaces') }}" class="btn btn-secondary">
-            <i class="bi bi-arrow-left"></i> Back to All Spaces
-        </a>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Function to convert datetime to relative time
+    function timeAgo(datetime) {
+        const date = new Date(datetime);
+        const now = new Date();
+        const seconds = Math.floor((now - date) / 1000);
+        
+        const intervals = {
+            year: 31536000,
+            month: 2592000,
+            week: 604800,
+            day: 86400,
+            hour: 3600,
+            minute: 60
+        };
+        
+        if (seconds < 60) {
+            return 'just now';
+        }
+        
+        for (const [unit, secondsInUnit] of Object.entries(intervals)) {
+            const interval = Math.floor(seconds / secondsInUnit);
+            if (interval >= 1) {
+                return interval === 1 ? `1 ${unit} ago` : `${interval} ${unit}s ago`;
+            }
+        }
+        
+        return datetime; // fallback to original
+    }
+    
+    // Update relative times on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        // Update all relative times
+        document.querySelectorAll('.relative-time').forEach(el => {
+            const datetime = el.getAttribute('data-datetime');
+            if (datetime) {
+                el.textContent = timeAgo(datetime);
+                el.title = datetime; // Show full date on hover
+            }
+        });
+        
+        // Initialize Bootstrap tooltips
+        const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+        const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+    });
+</script>
 {% endblock %}

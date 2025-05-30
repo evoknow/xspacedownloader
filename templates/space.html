@@ -222,6 +222,39 @@
         color: #ffc107;
         font-size: 14px;
     }
+    
+    /* Timecode styling */
+    .timecode-link {
+        font-family: 'Courier New', monospace;
+        font-weight: bold;
+        text-decoration: none !important;
+        padding: 2px 4px;
+        border-radius: 3px;
+        transition: all 0.2s ease;
+        display: inline-block;
+    }
+    
+    .timecode-link:hover {
+        background-color: #e3f2fd;
+        color: #1976d2 !important;
+        cursor: pointer;
+        transform: scale(1.05);
+    }
+    
+    .transcript-segment {
+        border-left: 3px solid transparent;
+        padding-left: 8px;
+        transition: border-color 0.2s ease;
+    }
+    
+    .transcript-segment:hover {
+        border-left-color: #2196f3;
+    }
+    
+    .timecode-link.active-timecode {
+        background-color: #4caf50 !important;
+        color: white !important;
+    }
 </style>
 {% endblock %}
 
@@ -232,6 +265,20 @@
             <div class="card-header">
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div class="d-flex gap-2 order-1 order-md-3">
+                        <button id="transcribe-btn" class="btn btn-info btn-sm" {% if space.transcripts %}data-has-transcript="true"{% endif %} {% if has_pending_transcript_job %}disabled{% endif %} data-bs-toggle="tooltip" data-bs-placement="top" title="{% if has_pending_transcript_job %}Transcription already in progress{% else %}Generate transcript from audio{% endif %}">
+                            <i class="bi bi-mic"></i> <span class="d-none d-sm-inline">{% if has_pending_transcript_job %}Transcribing...{% else %}Transcribe{% endif %}</span>
+                        </button>
+                        <a href="/download/{{ space.space_id }}?attachment=1" class="btn btn-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Download MP3">
+                            <i class="bi bi-download"></i> <span class="d-none d-sm-inline">Download</span>
+                        </a>
+                        {% if can_edit_space %}
+                        <button id="trim-btn" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#trimModal" data-bs-toggle="tooltip" data-bs-placement="top" title="Trim audio file">
+                            <i class="bi bi-scissors"></i> <span class="d-none d-sm-inline">Trim</span>
+                        </button>
+                        {% endif %}
+                        <button id="share-btn" class="btn btn-success btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Share this space">
+                            <i class="bi bi-share"></i> <span class="d-none d-sm-inline">Share</span>
+                        </button>
                         <button id="favorite-btn" class="btn btn-sm {% if is_favorite %}btn-warning{% else %}btn-outline-warning{% endif %}" title="{% if is_favorite %}Remove from favorites{% else %}Add to favorites{% endif %}">
                             <i class="bi {% if is_favorite %}bi-star-fill{% else %}bi-star{% endif %}"></i>
                             <span class="d-none d-md-inline">Favorite</span>
@@ -241,8 +288,8 @@
                             <span class="d-none d-md-inline">Back to Home</span>
                         </a>
                     </div>
-                    <div class="d-flex align-items-center justify-content-center flex-grow-1 order-2 order-md-1">
-                        <h4 id="space-title" class="mb-0 me-2 text-center">{{ space.title if space.title else "Space " + space.space_id }}</h4>
+                    <div class="d-flex align-items-center justify-content-start flex-grow-1 order-2 order-md-1">
+                        <h4 id="space-title" class="mb-0 me-2">{{ space.title if space.title else "Space " + space.space_id }}</h4>
                         {% if can_edit_space %}
                         <button id="edit-title-btn" class="btn btn-link btn-sm p-0" title="Edit title">
                             <i class="bi bi-pencil"></i>
@@ -253,26 +300,43 @@
             </div>
             <div class="card-body">
                 <div class="space-details mb-3">
-                    <div class="d-flex align-items-center gap-3 flex-wrap">
-                        <a href="{{ space.space_url }}" target="_blank" rel="noopener" class="text-decoration-none">
-                            <code>{{ space.space_id }}</code> <i class="bi bi-box-arrow-up-right small"></i>
-                        </a>
-                        {% if space.status %}
-                        <span class="badge 
-                            {% if space.status == 'completed' %}bg-success
-                            {% elif space.status == 'downloading' %}bg-info
-                            {% elif space.status == 'pending' %}bg-warning
-                            {% elif space.status == 'failed' %}bg-danger
-                            {% else %}bg-secondary{% endif %}">
-                            {{ space.status|title }}
-                        </span>
-                        {% endif %}
-                        {% if file_path and file_size %}
-                        <span class="text-muted">{{ (file_size / 1048576)|round(1) }} MB</span>
-                        {% endif %}
-                        {% if space.created_at %}
-                        <span class="text-muted">{{ space.created_at|relative_time }}</span>
-                        {% endif %}
+                    <div class="d-flex align-items-center justify-content-between flex-wrap">
+                        <div class="d-flex align-items-center gap-3">
+                            <a href="{{ space.space_url }}" target="_blank" rel="noopener" class="text-decoration-none">
+                                <code>{{ space.space_id }}</code> <i class="bi bi-box-arrow-up-right small"></i>
+                            </a>
+                            {% if space.status and space.status != 'completed' %}
+                            <span class="badge 
+                                {% if space.status == 'downloading' %}bg-info
+                                {% elif space.status == 'pending' %}bg-warning
+                                {% elif space.status == 'failed' %}bg-danger
+                                {% else %}bg-secondary{% endif %}">
+                                {{ space.status|title }}
+                            </span>
+                            {% endif %}
+                            {% if file_path and file_size %}
+                            <span class="text-muted">{{ (file_size / 1048576)|round(1) }} MB</span>
+                            {% endif %}
+                            {% if space.created_at %}
+                            <span class="text-muted">{{ space.created_at|relative_time }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            {% if reviews and reviews.total_reviews > 0 %}
+                            <div class="rating-stars text-warning">
+                                {% for i in range(1, 6) %}
+                                    {% if i <= reviews.average_rating|int %}
+                                        <i class="bi bi-star-fill"></i>
+                                    {% elif i - 0.5 <= reviews.average_rating %}
+                                        <i class="bi bi-star-half"></i>
+                                    {% else %}
+                                        <i class="bi bi-star"></i>
+                                    {% endif %}
+                                {% endfor %}
+                                <span class="text-muted ms-1">({{ reviews.total_reviews }})</span>
+                            </div>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
                 
@@ -337,24 +401,7 @@
                 {# Check if file exists, regardless of status #}
                 {% if file_path is defined and file_path %}
                 <div class="audio-player mb-4">
-                    <h5>Audio Player</h5>
                     <div class="card">
-                        <div class="card-header bg-primary bg-opacity-25">
-                            <div class="d-flex justify-content-center justify-content-md-start align-items-center gap-2">
-                                <button id="transcribe-btn" class="btn btn-info btn-sm" {% if space.transcripts %}data-has-transcript="true"{% endif %} {% if has_pending_transcript_job %}disabled{% endif %} data-bs-toggle="tooltip" data-bs-placement="top" title="{% if has_pending_transcript_job %}Transcription already in progress{% else %}Generate transcript from audio{% endif %}">
-                                    <i class="bi bi-mic"></i> <span class="d-none d-sm-inline">{% if has_pending_transcript_job %}Transcribing...{% else %}Transcribe{% endif %}</span>
-                                </button>
-                                <a href="/download/{{ space.space_id }}?attachment=1" class="btn btn-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Download MP3">
-                                    <i class="bi bi-download"></i> <span class="d-none d-sm-inline">Download</span>
-                                </a>
-                                <button id="trim-btn" class="btn btn-warning btn-sm" {% if not can_edit_space %}disabled{% endif %} data-bs-toggle="modal" data-bs-target="#trimModal" data-bs-toggle="tooltip" data-bs-placement="top" title="{% if can_edit_space %}Trim audio file{% else %}Only the space owner can trim this audio{% endif %}">
-                                    <i class="bi bi-scissors"></i> <span class="d-none d-sm-inline">Trim</span>
-                                </button>
-                                <button id="share-btn" class="btn btn-success btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Share this space">
-                                    <i class="bi bi-share"></i> <span class="d-none d-sm-inline">Share</span>
-                                </button>
-                            </div>
-                        </div>
                         <div class="card-body">
                             <audio id="audio-player" controls class="w-100">
                                 <source src="/download/{{ space.space_id }}" type="{{ content_type|default('audio/mpeg') }}">
@@ -654,56 +701,67 @@
 <div class="row mt-4">
     <div class="col-md-12">
         <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h4>Reviews</h4>
-                <button id="add-review-btn" class="btn btn-primary btn-sm">
-                    <i class="bi bi-star"></i> Add Review
-                </button>
+            <div class="card-header d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#reviewsContent" aria-expanded="false" aria-controls="reviewsContent">
+                <div class="d-flex align-items-center gap-2">
+                    <h4 class="mb-0">Reviews</h4>
+                    <i class="bi bi-chevron-down" id="reviews-toggle-icon"></i>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                    <div class="d-flex align-items-center gap-2" id="header-review-summary">
+                        <div class="text-warning" id="header-average-stars"></div>
+                        <span class="text-muted" id="header-review-count"></span>
+                    </div>
+                    <button id="add-review-btn" class="btn btn-primary btn-sm" onclick="event.stopPropagation();">
+                        <i class="bi bi-star"></i> Add Review
+                    </button>
+                </div>
             </div>
-            <div class="card-body">
-                {# Review summary #}
-                <div id="review-summary" class="mb-4">
-                    <div class="d-flex align-items-center gap-3">
-                        <div class="text-center">
-                            <h2 class="mb-0" id="average-rating">0.0</h2>
-                            <div id="average-stars" class="text-warning"></div>
-                            <small class="text-muted"><span id="total-reviews">0</span> reviews</small>
+            <div class="collapse" id="reviewsContent">
+                <div class="card-body">
+                    {# Review summary #}
+                    <div id="review-summary" class="mb-4">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="text-center">
+                                <h2 class="mb-0" id="average-rating">0.0</h2>
+                                <div id="average-stars" class="text-warning"></div>
+                                <small class="text-muted"><span id="total-reviews">0</span> reviews</small>
+                            </div>
                         </div>
                     </div>
-                </div>
+                    
+                    {# Reviews container #}
+                    <div id="reviews-container">
+                        <!-- Reviews will be loaded here -->
+                    </div>
                 
-                {# Reviews container #}
-                <div id="reviews-container">
-                    <!-- Reviews will be loaded here -->
-                </div>
-                
-                {# Review editor (hidden by default) #}
-                <div id="review-editor-container" style="display: none;">
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <h5 id="review-editor-title">Write a Review</h5>
-                            <div class="mb-3">
-                                <label class="form-label">Rating</label>
-                                <div id="star-rating" class="star-rating">
-                                    <i class="bi bi-star" data-rating="1"></i>
-                                    <i class="bi bi-star" data-rating="2"></i>
-                                    <i class="bi bi-star" data-rating="3"></i>
-                                    <i class="bi bi-star" data-rating="4"></i>
-                                    <i class="bi bi-star" data-rating="5"></i>
+                    {# Review editor (hidden by default) #}
+                    <div id="review-editor-container" style="display: none;">
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <h5 id="review-editor-title">Write a Review</h5>
+                                <div class="mb-3">
+                                    <label class="form-label">Rating</label>
+                                    <div id="star-rating" class="star-rating">
+                                        <i class="bi bi-star" data-rating="1"></i>
+                                        <i class="bi bi-star" data-rating="2"></i>
+                                        <i class="bi bi-star" data-rating="3"></i>
+                                        <i class="bi bi-star" data-rating="4"></i>
+                                        <i class="bi bi-star" data-rating="5"></i>
+                                    </div>
+                                    <input type="hidden" id="review-rating" value="0">
                                 </div>
-                                <input type="hidden" id="review-rating" value="0">
-                            </div>
-                            <div class="mb-3">
-                                <label for="review-text" class="form-label">Review (optional)</label>
-                                <textarea id="review-text" class="form-control" rows="3" placeholder="Share your thoughts about this space..."></textarea>
-                            </div>
-                            <div class="d-flex gap-2">
-                                <button id="save-review-btn" class="btn btn-success">
-                                    <i class="bi bi-check-circle"></i> Save Review
-                                </button>
-                                <button id="cancel-review-btn" class="btn btn-secondary">
-                                    <i class="bi bi-x-circle"></i> Cancel
-                                </button>
+                                <div class="mb-3">
+                                    <label for="review-text" class="form-label">Review (optional)</label>
+                                    <textarea id="review-text" class="form-control" rows="3" placeholder="Share your thoughts about this space..."></textarea>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button id="save-review-btn" class="btn btn-success">
+                                        <i class="bi bi-check-circle"></i> Save Review
+                                    </button>
+                                    <button id="cancel-review-btn" class="btn btn-secondary">
+                                        <i class="bi bi-x-circle"></i> Cancel
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -736,6 +794,7 @@
 </div>
 {% endif %}
 
+{% if can_edit_space %}
 <!-- Trim Modal -->
 <div class="modal fade" id="trimModal" tabindex="-1" aria-labelledby="trimModalLabel" aria-hidden="true">
     <div class="modal-dialog">
@@ -796,6 +855,7 @@
         </div>
     </div>
 </div>
+{% endif %}
 
 <!-- Share Modal -->
 <div class="modal fade" id="shareModal" tabindex="-1" aria-labelledby="shareModalLabel" aria-hidden="true">
@@ -887,10 +947,108 @@
         return languageNames[langCode] || code;
     }
     
+    // Cookie functions
+    function setCookie(name, value, days) {
+        const expires = new Date();
+        expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+        document.cookie = name + '=' + value + ';expires=' + expires.toUTCString() + ';path=/';
+    }
+    
+    function getCookie(name) {
+        const nameEQ = name + "=";
+        const ca = document.cookie.split(';');
+        for(let i = 0; i < ca.length; i++) {
+            let c = ca[i];
+            while (c.charAt(0) == ' ') c = c.substring(1, c.length);
+            if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length, c.length);
+        }
+        return null;
+    }
+    
+    // Function to get or create cookie ID
+    function getCookieId() {
+        let cookieId = getCookie('xspace_user_id');
+        if (!cookieId) {
+            cookieId = 'user_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+            setCookie('xspace_user_id', cookieId, 365);
+        }
+        return cookieId;
+    }
+    
+    // Global function to seek audio player to specific time
+    function seekToTime(seconds) {
+        const audioPlayer = document.getElementById('audio-player');
+        if (audioPlayer) {
+            try {
+                // Remove previous highlights
+                document.querySelectorAll('.timecode-link').forEach(link => {
+                    link.style.backgroundColor = '';
+                    link.classList.remove('active-timecode');
+                });
+                
+                // Highlight the clicked timecode
+                if (event && event.target) {
+                    event.target.style.backgroundColor = '#4caf50';
+                    event.target.style.color = 'white';
+                    event.target.classList.add('active-timecode');
+                }
+                
+                // Seek to the time
+                audioPlayer.currentTime = seconds;
+                
+                // Auto-play if paused
+                if (audioPlayer.paused) {
+                    audioPlayer.play().catch(e => {
+                        console.log('Auto-play prevented by browser:', e);
+                        // Just seek without playing if auto-play is blocked
+                    });
+                }
+                
+                // Scroll the audio player into view if not visible
+                audioPlayer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
+            } catch (error) {
+                console.error('Error seeking to time:', error);
+            }
+        } else {
+            console.error('Audio player not found');
+        }
+    }
+    
+    // Global function to update current playing position highlight
+    function updateCurrentSegmentHighlight() {
+        const audioPlayer = document.getElementById('audio-player');
+        if (!audioPlayer) return;
+        
+        const currentTime = audioPlayer.currentTime;
+        const timecodeLinks = document.querySelectorAll('.timecode-link');
+        let activeLink = null;
+        
+        // Find the current segment
+        timecodeLinks.forEach(link => {
+            const linkTime = parseFloat(link.getAttribute('data-time'));
+            if (linkTime <= currentTime) {
+                activeLink = link;
+            }
+        });
+        
+        // Update highlighting
+        timecodeLinks.forEach(link => {
+            if (link === activeLink && !link.classList.contains('active-timecode')) {
+                link.style.backgroundColor = '#2196f3';
+                link.style.color = 'white';
+            } else if (link !== activeLink && !link.classList.contains('active-timecode')) {
+                link.style.backgroundColor = '';
+                link.style.color = '';
+            }
+        });
+    }
+    
     document.addEventListener('DOMContentLoaded', function() {
         const audioPlayer = document.getElementById('audio-player');
         const spaceId = '{{ space.space_id }}';
         const spaceStatus = '{{ space.status }}';
+        const minPlayDuration = {{ tracking_config.min_play_duration|default(30) }};
         
         // Initialize Bootstrap tooltips
         const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
@@ -903,18 +1061,19 @@
             let totalPlayDuration = 0;
             let hasTrackedPlay = false;
             
-            audioPlayer.addEventListener('play', function() {
-                playStartTime = Date.now();
-            });
-            
-            audioPlayer.addEventListener('pause', function() {
+            // Function to update play duration and check if we should track
+            function updatePlayDuration() {
                 if (playStartTime) {
-                    totalPlayDuration += (Date.now() - playStartTime) / 1000;
-                    playStartTime = null;
+                    const sessionDuration = (Date.now() - playStartTime) / 1000;
+                    totalPlayDuration += sessionDuration;
+                    playStartTime = Date.now(); // Reset for continuous tracking
                     
-                    // Track play if duration is >= 30 seconds and not already tracked
-                    if (totalPlayDuration >= 30 && !hasTrackedPlay) {
+                    console.log(`Play duration updated. Session: ${sessionDuration}s, Total: ${totalPlayDuration}s, Min required: ${minPlayDuration}s, Already tracked: ${hasTrackedPlay}`);
+                    
+                    // Track play if duration is >= configured minimum and not already tracked
+                    if (totalPlayDuration >= minPlayDuration && !hasTrackedPlay) {
                         hasTrackedPlay = true;
+                        console.log('Triggering play tracking...');
                         fetch(`/api/track_play/${spaceId}`, {
                             method: 'POST',
                             headers: {
@@ -925,26 +1084,65 @@
                             })
                         }).then(response => response.json())
                         .then(data => {
+                            console.log('Play tracking response:', data);
                             if (!data.counted) {
                                 console.log('Play not counted:', data.reason);
+                            } else {
+                                console.log('Play successfully tracked');
                             }
                         }).catch(error => {
                             console.error('Error tracking play:', error);
                         });
                     }
                 }
+            }
+            
+            audioPlayer.addEventListener('play', function() {
+                playStartTime = Date.now();
+                console.log('Audio started playing at:', new Date(playStartTime));
+            });
+            
+            audioPlayer.addEventListener('pause', function() {
+                if (playStartTime) {
+                    const sessionDuration = (Date.now() - playStartTime) / 1000;
+                    totalPlayDuration += sessionDuration;
+                    playStartTime = null;
+                    
+                    console.log(`Audio paused. Session duration: ${sessionDuration}s, Total duration: ${totalPlayDuration}s`);
+                    updatePlayDuration();
+                }
+            });
+            
+            // Check play duration periodically while playing
+            let playCheckInterval;
+            audioPlayer.addEventListener('play', function() {
+                playCheckInterval = setInterval(updatePlayDuration, 5000); // Check every 5 seconds
+            });
+            
+            audioPlayer.addEventListener('pause', function() {
+                if (playCheckInterval) {
+                    clearInterval(playCheckInterval);
+                }
             });
             
             // Reset tracking when audio ends
             audioPlayer.addEventListener('ended', function() {
+                if (playCheckInterval) {
+                    clearInterval(playCheckInterval);
+                }
+                
                 if (playStartTime) {
-                    totalPlayDuration += (Date.now() - playStartTime) / 1000;
+                    const sessionDuration = (Date.now() - playStartTime) / 1000;
+                    totalPlayDuration += sessionDuration;
                     playStartTime = null;
                 }
                 
-                // Track play if duration is >= 30 seconds and not already tracked
-                if (totalPlayDuration >= 30 && !hasTrackedPlay) {
+                console.log(`Audio ended. Total duration: ${totalPlayDuration}s, Min required: ${minPlayDuration}s, Already tracked: ${hasTrackedPlay}`);
+                
+                // Track play if duration is >= configured minimum and not already tracked
+                if (totalPlayDuration >= minPlayDuration && !hasTrackedPlay) {
                     hasTrackedPlay = true;
+                    console.log('Triggering play tracking on ended...');
                     fetch(`/api/track_play/${spaceId}`, {
                         method: 'POST',
                         headers: {
@@ -955,8 +1153,11 @@
                         })
                     }).then(response => response.json())
                     .then(data => {
+                        console.log('Play tracking response (ended):', data);
                         if (!data.counted) {
                             console.log('Play not counted:', data.reason);
+                        } else {
+                            console.log('Play successfully tracked on ended');
                         }
                     }).catch(error => {
                         console.error('Error tracking play:', error);
@@ -978,6 +1179,11 @@
             const volume = document.getElementById('volume');
             volume.addEventListener('input', function() {
                 audioPlayer.volume = this.value;
+            });
+            
+            // Add event listener for current time updates to highlight transcript segments
+            audioPlayer.addEventListener('timeupdate', function() {
+                updateCurrentSegmentHighlight();
             });
             
             // Remember playback position
@@ -1447,6 +1653,43 @@
             });
         }
         
+        // Function to format transcript with clickable timecodes
+        function formatTranscriptWithTimecodes(text) {
+            // Check if transcript has timecodes in format [HH:MM:SS]
+            const timecodeRegex = /\[(\d{2}):(\d{2}):(\d{2})\]\s*(.*?)(?=\[|$)/gs;
+            const hasTimecodes = timecodeRegex.test(text);
+            
+            if (!hasTimecodes) {
+                // No timecodes found, format as paragraphs
+                return text.split('\n').filter(p => p.trim()).map(p => `<p>${p}</p>`).join('');
+            }
+            
+            // Reset regex after test
+            timecodeRegex.lastIndex = 0;
+            
+            // Format with clickable timecodes
+            let formattedHtml = '';
+            let match;
+            
+            while ((match = timecodeRegex.exec(text)) !== null) {
+                const [fullMatch, hours, minutes, seconds, content] = match;
+                const totalSeconds = parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseInt(seconds);
+                
+                formattedHtml += `
+                    <div class="transcript-segment mb-2">
+                        <a href="#" class="timecode-link text-primary" data-time="${totalSeconds}" 
+                           onclick="seekToTime(${totalSeconds}); return false;">
+                            [${hours}:${minutes}:${seconds}]
+                        </a>
+                        <span class="transcript-text ms-2">${content.trim()}</span>
+                    </div>
+                `;
+            }
+            
+            return formattedHtml || '<p>' + text + '</p>';
+        }
+        
+        
         // Function to load transcript content
         function loadTranscript(transcriptId) {
             fetch(`/api/transcript/${transcriptId}`)
@@ -1462,12 +1705,12 @@
                         // Store the full transcript text in JavaScript variable (safer than HTML attributes)
                         fullTranscriptText = data.transcript;
                         
-                        // Format text for display
-                        const formattedText = data.transcript.replace(/\n/g, '</p><p>');
+                        // Format text for display with timecode support
+                        const formattedText = formatTranscriptWithTimecodes(data.transcript);
                         
                         transcriptContent.innerHTML = `
                             <div class="transcript-text">
-                                <p>${formattedText}</p>
+                                ${formattedText}
                             </div>
                         `;
                         
@@ -1520,10 +1763,10 @@
         // Function to reset transcript view to original content
         function resetTranscriptView() {
             const originalText = fullTranscriptText || transcriptContent.getAttribute('data-original-text') || '';
-            const formattedOriginalText = originalText.replace(/\n/g, '</p><p>');
+            const formattedOriginalText = formatTranscriptWithTimecodes(originalText);
             transcriptContent.innerHTML = `
                 <div class="transcript-text">
-                    <p>${formattedOriginalText}</p>
+                    ${formattedOriginalText}
                 </div>
             `;
             // Reset the translation dropdown when showing original
@@ -1541,6 +1784,39 @@
                     <p class="mt-2">Translating to ${getLanguageName(targetLang)}...</p>
                 </div>
             `;
+            
+            // Extract timecodes and text separately to preserve timecodes during translation
+            const timecodeRegex = /\[(\d{2}):(\d{2}):(\d{2})\]\s*(.*?)(?=\[|$)/gs;
+            const segments = [];
+            let textToTranslate = '';
+            let match;
+            
+            // Check if source text has timecodes
+            const hasTimecodes = timecodeRegex.test(sourceText);
+            timecodeRegex.lastIndex = 0; // Reset regex
+            
+            if (hasTimecodes) {
+                // Extract segments with timecodes
+                while ((match = timecodeRegex.exec(sourceText)) !== null) {
+                    const [fullMatch, hours, minutes, seconds, content] = match;
+                    const timecode = `[${hours}:${minutes}:${seconds}]`;
+                    const text = content.trim();
+                    
+                    segments.push({
+                        timecode: timecode,
+                        text: text,
+                        fullTimecode: `${timecode} `
+                    });
+                    
+                    // Add text to translation batch with segment markers
+                    if (text) {
+                        textToTranslate += `###SEGMENT_${segments.length - 1}### ${text}\n`;
+                    }
+                }
+            } else {
+                // No timecodes, translate as-is
+                textToTranslate = sourceText;
+            }
             
             // First check if translation service is available
             checkTranslationService()
@@ -1567,7 +1843,7 @@
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
-                            text: sourceText,
+                            text: textToTranslate,
                             source_lang: sourceLang,
                             target_lang: targetLang,
                             space_id: spaceId
@@ -1652,8 +1928,35 @@
                             </div>
                         `;
                     } else {
-                        // Format and display the translated text
-                        const formattedText = data.translated_text.replace(/\n/g, '</p><p>');
+                        // Reassemble translated text with preserved timecodes
+                        let finalTranslatedText = data.translated_text;
+                        
+                        if (hasTimecodes && segments.length > 0) {
+                            // Parse the translated segments
+                            const translatedLines = data.translated_text.split('\n');
+                            let reassembledText = '';
+                            
+                            translatedLines.forEach(line => {
+                                const segmentMatch = line.match(/###SEGMENT_(\d+)###\s*(.*)/);
+                                if (segmentMatch) {
+                                    const segmentIndex = parseInt(segmentMatch[1]);
+                                    const translatedText = segmentMatch[2].trim();
+                                    
+                                    if (segments[segmentIndex]) {
+                                        reassembledText += `${segments[segmentIndex].timecode} ${translatedText}\n`;
+                                    }
+                                } else if (line.trim()) {
+                                    // If segment marker is lost, just add the line
+                                    reassembledText += line.trim() + '\n';
+                                }
+                            });
+                            
+                            finalTranslatedText = reassembledText.trim();
+                        }
+                        
+                        // Format and display the translated text with timecode support
+                        const formattedText = formatTranscriptWithTimecodes(finalTranslatedText);
+                        
                         transcriptContent.innerHTML = `
                             <div class="transcript-text translated" data-target-lang="${data.target_lang}">
                                 <div class="alert alert-info mb-3">
@@ -1663,7 +1966,7 @@
                                         <a href="#" id="show-original">Show original</a>
                                     </small>
                                 </div>
-                                <p>${formattedText}</p>
+                                ${formattedText}
                             </div>
                         `;
                     
@@ -3246,32 +3549,6 @@
         let currentNoteId = null;
         
         // Function to get or create cookie ID
-        function getCookieId() {
-            let cookieId = getCookie('xspace_user_id');
-            if (!cookieId) {
-                cookieId = 'user_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
-                setCookie('xspace_user_id', cookieId, 365);
-            }
-            return cookieId;
-        }
-        
-        // Cookie functions
-        function setCookie(name, value, days) {
-            const expires = new Date();
-            expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
-            document.cookie = name + '=' + value + ';expires=' + expires.toUTCString() + ';path=/';
-        }
-        
-        function getCookie(name) {
-            const nameEQ = name + "=";
-            const ca = document.cookie.split(';');
-            for(let i = 0; i < ca.length; i++) {
-                let c = ca[i];
-                while (c.charAt(0) == ' ') c = c.substring(1, c.length);
-                if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length, c.length);
-            }
-            return null;
-        }
         
         // Initialize SummerNote
         $('#note-editor').summernote({

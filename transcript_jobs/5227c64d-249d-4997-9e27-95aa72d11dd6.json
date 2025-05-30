@@ -1,0 +1,28 @@
+{
+    "id": "5227c64d-249d-4997-9e27-95aa72d11dd6",
+    "space_id": "1eaJbWLAOBrxX",
+    "file_path": "./downloads/1eaJbWLAOBrxX.mp3",
+    "language": "en",
+    "options": {
+        "model": "base",
+        "detect_language": false,
+        "translate_to": null,
+        "overwrite": true
+    },
+    "status": "completed",
+    "progress": 100,
+    "created_at": "2025-05-29T20:58:55.510762",
+    "updated_at": "2025-05-29T20:59:48.623954",
+    "result": {
+        "transcript_id": 75,
+        "space_id": "1eaJbWLAOBrxX",
+        "language": "en-EN",
+        "text_sample": "[00:00:00] Welcome to ActiveFullSpace. It is Friday April 28th. My fellow Dishy friends are busy in a different space talking about politics.\n[00:00:24] And I am going to share with you.\n[00:00:30] three programs that we have identified as our 2025-2026 active full programs that we are going to\n[00:00:38] launch. This is just a brief description or brief overview of these three programs. The first thing\n[00:00:48] active full is a social enterprise and it has been formed in US as a cap profit fo...",
+        "audio_duration_minutes": 21.1,
+        "audio_duration_seconds": 1264.9,
+        "detected_language": {
+            "code": "en",
+            "name": "english"
+        }
+    }
+}

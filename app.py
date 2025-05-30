@@ -12,7 +12,7 @@ import secrets
 import string
 import requests
 from pathlib import Path
-from flask import Flask, request, render_template, redirect, url_for, flash, jsonify, session, send_file, Response
+from flask import Flask, request, render_template, redirect, url_for, flash, jsonify, session, send_file, Response, send_from_directory
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 from flask_limiter import Limiter
@@ -81,8 +81,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger('webapp')
 
+# Application version
+__version__ = "1.1.1"
+
 # Create Flask application
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', static_url_path='/static')
 CORS(app)
 
 # Secret key for sessions and flashing messages
@@ -398,8 +401,8 @@ def all_spaces():
         query = """
             SELECT * FROM spaces 
             WHERE status = 'completed'
-            ORDER BY (COALESCE(playback_cnt, 0) * 1.5 + COALESCE(download_cnt, 0)) DESC, 
-                     downloaded_at DESC
+            ORDER BY downloaded_at DESC, 
+                     (COALESCE(playback_cnt, 0) * 1.5 + COALESCE(download_cnt, 0)) DESC
         """
         cursor.execute(query)
         completed_spaces = cursor.fetchall()
@@ -628,6 +631,11 @@ def view_queue():
         flash(f'An error occurred: {str(e)}', 'error')
         return redirect(url_for('index'))
 
+@app.route('/favicon.ico')
+def favicon():
+    """Serve favicon to avoid 404 errors."""
+    return send_from_directory('static', 'favicon.svg', mimetype='image/svg+xml')
+
 @app.route('/', methods=['GET'])
 def index():
     """Home page with form to submit a space URL."""
@@ -695,8 +703,27 @@ def track_play(space_id):
         space = get_space_component()
         cursor = space.connection.cursor(dictionary=True)
         
-        # Check if eligible for counting (30 min cooldown)
-        thirty_mins_ago = datetime.now() - timedelta(minutes=30)
+        # Get tracking configuration
+        config_query = "SELECT config_key, config_value FROM system_config WHERE config_key IN (%s, %s, %s)"
+        cursor.execute(config_query, ('play_tracking_enabled', 'play_cooldown_minutes', 'play_minimum_duration_seconds'))
+        config = {row['config_key']: row['config_value'] for row in cursor.fetchall()}
+        
+        # Check if tracking is enabled
+        if config.get('play_tracking_enabled', 'true') == 'false':
+            cursor.close()
+            return jsonify({'success': True, 'counted': False, 'reason': 'tracking_disabled'})
+        
+        # Get cooldown period from config
+        cooldown_minutes = int(config.get('play_cooldown_minutes', '30'))
+        min_duration = int(config.get('play_minimum_duration_seconds', '30'))
+        
+        # Check minimum duration if configured
+        if min_duration > 0 and duration_seconds < min_duration:
+            cursor.close()
+            return jsonify({'success': True, 'counted': False, 'reason': 'min_duration_not_met'})
+        
+        # Check if eligible for counting (configurable cooldown)
+        cooldown_time = datetime.now() - timedelta(minutes=cooldown_minutes)
         
         check_query = """
             SELECT MAX(played_at) as last_played 
@@ -709,7 +736,7 @@ def track_play(space_id):
                 (ip_address = %s)
             )
         """
-        cursor.execute(check_query, (space_id, thirty_mins_ago, user_id if user_id > 0 else None, 
+        cursor.execute(check_query, (space_id, cooldown_time, user_id if user_id > 0 else None, 
                                    cookie_id if cookie_id else None, ip_address))
         result = cursor.fetchone()
         
@@ -717,7 +744,7 @@ def track_play(space_id):
         reason = None
         
         if result and result['last_played']:
-            # User has played this space in the last 30 minutes
+            # User has played this space within the cooldown period
             should_count = False
             reason = 'cooldown'
         
@@ -770,7 +797,21 @@ def track_download(space_id):
         space = get_space_component()
         cursor = space.connection.cursor(dictionary=True)
         
-        # Check if eligible for counting (1 per day per user)
+        # Get tracking configuration
+        config_query = "SELECT config_key, config_value FROM system_config WHERE config_key IN (%s, %s, %s)"
+        cursor.execute(config_query, ('download_tracking_enabled', 'download_daily_limit', 'download_hourly_ip_limit'))
+        config = {row['config_key']: row['config_value'] for row in cursor.fetchall()}
+        
+        # Check if tracking is enabled
+        if config.get('download_tracking_enabled', 'true') == 'false':
+            cursor.close()
+            return jsonify({'success': True, 'counted': False, 'reason': 'tracking_disabled'})
+        
+        # Get limits from config
+        daily_limit = int(config.get('download_daily_limit', '1'))
+        hourly_ip_limit = int(config.get('download_hourly_ip_limit', '10'))
+        
+        # Check if eligible for counting (configurable daily limit per user)
         today = date.today()
         
         check_query = """
@@ -791,12 +832,12 @@ def track_download(space_id):
         should_count = True
         reason = None
         
-        if result and result['download_count'] > 0:
-            # User has already downloaded this space today
+        if result and result['download_count'] >= daily_limit:
+            # User has reached the daily download limit for this space
             should_count = False
             reason = 'daily_limit'
         
-        # Also check IP rate limit (max 10 downloads per hour across all spaces)
+        # Also check IP rate limit (configurable downloads per hour across all spaces)
         if should_count:
             hour_ago = datetime.now() - timedelta(hours=1)
             ip_check_query = """
@@ -807,7 +848,7 @@ def track_download(space_id):
             cursor.execute(ip_check_query, (ip_address, hour_ago))
             ip_result = cursor.fetchone()
             
-            if ip_result and ip_result['hour_downloads'] >= 10:
+            if ip_result and ip_result['hour_downloads'] >= hourly_ip_limit:
                 should_count = False
                 reason = 'rate_limit'
         
@@ -1390,6 +1431,12 @@ def space_page(space_id):
         # Get tags for this space
         tags = space.get_space_tags(space_id)
         
+        # Add tag_slug for template compatibility (tags table only has 'name')
+        for tag in tags:
+            if 'name' in tag and 'tag_slug' not in tag:
+                # Create slug from name
+                tag['tag_slug'] = tag['name'].lower().replace(' ', '-').replace('_', '-')
+        
         # Check for pending transcription job
         has_pending_transcript_job = False
         transcript_jobs_dir = Path('./transcript_jobs')
@@ -1404,6 +1451,34 @@ def space_page(space_id):
                             break
                 except Exception as e:
                     logger.error(f"Error reading transcript job file {job_file}: {e}")
+        
+        # Get reviews for this space
+        reviews = None
+        try:
+            review_result = space.get_reviews(space_id)
+            if review_result['success']:
+                reviews = {
+                    'average_rating': review_result['average_rating'],
+                    'total_reviews': review_result['total_reviews']
+                }
+        except Exception as e:
+            logger.error(f"Error getting reviews for space {space_id}: {e}")
+        
+        # Get tracking configuration for frontend
+        tracking_config = {}
+        try:
+            cursor = space.connection.cursor(dictionary=True)
+            config_query = "SELECT config_key, config_value FROM system_config WHERE config_key = %s"
+            cursor.execute(config_query, ('play_minimum_duration_seconds',))
+            config_row = cursor.fetchone()
+            if config_row:
+                tracking_config['min_play_duration'] = int(config_row['config_value'])
+            else:
+                tracking_config['min_play_duration'] = 30  # Default fallback
+            cursor.close()
+        except Exception as e:
+            logger.error(f"Error getting tracking config: {e}")
+            tracking_config['min_play_duration'] = 30  # Default fallback
             
         return render_template('space.html', 
                                space=space_details, 
@@ -1416,6 +1491,8 @@ def space_page(space_id):
                                can_edit_space=can_edit_space,
                                is_favorite=is_favorite,
                                tags=tags,
+                               reviews=reviews,
+                               tracking_config=tracking_config,
                                has_pending_transcript_job=has_pending_transcript_job)
         
     except Exception as e:
@@ -1488,19 +1565,22 @@ def api_queue_status():
                 'status_class': 'info',
                 'created_at': str(job.get('created_at', '')),
                 'space_url': job.get('space_url', ''),
-                'progress_percent': 0,
-                'progress_in_size': 0
+                'progress_percent': job.get('progress_in_percent', 0),
+                'progress_in_size': job.get('progress_in_size', 0)
             })
             
         # Process downloading jobs
         for job in downloading_jobs:
-            progress = 0
-            if hasattr(job, 'progress'):
-                progress = job.progress
-            elif hasattr(job, 'download_cnt'):
-                progress = job.download_cnt
-            elif isinstance(job, dict):
-                progress = job.get('progress', job.get('download_cnt', 0))
+            # Get progress from the correct field
+            progress = job.get('progress_in_percent', 0)
+            if progress == 0:
+                # Fallback to other progress fields
+                if hasattr(job, 'progress'):
+                    progress = job.progress
+                elif hasattr(job, 'download_cnt'):
+                    progress = job.download_cnt
+                elif isinstance(job, dict):
+                    progress = job.get('progress', job.get('download_cnt', 0))
                 
             job_data = {
                 'id': job.get('id'),
@@ -2248,15 +2328,26 @@ def favorites():
                 fav['average_rating'] = 0
                 fav['total_reviews'] = 0
             
-            # Get metadata (host and speakers)
+            # Get metadata (host and speakers) and summary
             try:
                 space_details = space.get_space(fav['space_id'])
-                if space_details and space_details.get('metadata'):
-                    fav['metadata'] = space_details['metadata']
+                if space_details:
+                    if space_details.get('metadata'):
+                        fav['metadata'] = space_details['metadata']
+                    else:
+                        fav['metadata'] = None
+                    
+                    # Get summary from transcript if available
+                    if space_details.get('transcript') and space_details['transcript'].get('summary'):
+                        fav['summary'] = space_details['transcript']['summary']
+                    else:
+                        fav['summary'] = None
                 else:
                     fav['metadata'] = None
+                    fav['summary'] = None
             except:
                 fav['metadata'] = None
+                fav['summary'] = None
         
         return render_template('favorites.html', favorites=favorites)
         
@@ -3318,6 +3409,30 @@ def api_top_stats(stat_type):
                     # Don't send actual email to frontend for privacy
                     result.pop('email', None)
             
+        elif stat_type == 'reviews':
+            # Get top 10 spaces by average rating with minimum review count
+            query = """
+                SELECT 
+                    s.space_id,
+                    COALESCE(s.title, s.space_id) as title,
+                    COALESCE(sm.host_handle, sm.host, 'Unknown') as host_name,
+                    NULL as host_pic,
+                    ROUND(AVG(r.rating), 1) as average_rating,
+                    COUNT(r.id) as review_count,
+                    s.playback_cnt as play_count,
+                    s.download_cnt as download_count,
+                    s.created_at
+                FROM spaces s
+                LEFT JOIN space_metadata sm ON s.space_id = sm.space_id
+                INNER JOIN space_reviews r ON s.space_id = r.space_id
+                GROUP BY s.space_id, s.title, sm.host_handle, sm.host, s.playback_cnt, s.download_cnt, s.created_at
+                HAVING COUNT(r.id) >= 2
+                ORDER BY average_rating DESC, review_count DESC
+                LIMIT 10
+            """
+            cursor.execute(query)
+            results = cursor.fetchall()
+            
         else:
             return jsonify({'error': 'Invalid stat type'}), 400
         
@@ -4352,7 +4467,7 @@ def admin_get_spaces():
         
         # Build query
         query = """
-            SELECT s.*, s.title, sm.host,
+            SELECT s.*, s.title, sm.host_handle, sm.host,
                    u.email as user_email
             FROM spaces s
             LEFT JOIN space_metadata sm ON s.space_id = sm.space_id
@@ -4360,14 +4475,14 @@ def admin_get_spaces():
         """
         
         if search:
-            query += " WHERE s.space_id LIKE %s OR s.title LIKE %s OR sm.host LIKE %s"
+            query += " WHERE s.space_id LIKE %s OR s.title LIKE %s OR sm.host_handle LIKE %s"
             search_param = f"%{search}%"
         
         # Get total count
-        count_query = "SELECT COUNT(*) as total FROM spaces s"
+        count_query = "SELECT COUNT(*) as total FROM spaces s LEFT JOIN space_metadata sm ON s.space_id = sm.space_id"
         if search:
-            count_query += " LEFT JOIN space_metadata sm ON s.space_id = sm.space_id WHERE s.space_id LIKE %s OR s.title LIKE %s OR sm.host LIKE %s"
-            cursor.execute(count_query, (search_param, search_param, search_param) if search else ())
+            count_query += " WHERE s.space_id LIKE %s OR s.title LIKE %s OR sm.host_handle LIKE %s"
+            cursor.execute(count_query, (search_param, search_param, search_param))
         else:
             cursor.execute(count_query)
         
@@ -4424,6 +4539,64 @@ def admin_delete_space(space_id):
         logger.error(f"Error deleting space: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
+@app.route('/admin/api/spaces/<space_id>/redo-tags', methods=['POST'])
+def admin_redo_tags(space_id):
+    """Regenerate tags for a space using its transcript."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        # Check if space exists and has a transcript
+        cursor.execute("""
+            SELECT st.transcript, st.language, s.space_id, s.title
+            FROM spaces s
+            LEFT JOIN space_transcripts st ON CONVERT(s.space_id USING utf8mb4) COLLATE utf8mb4_unicode_ci = st.space_id
+            WHERE s.space_id = %s
+        """, (space_id,))
+        
+        space_data = cursor.fetchone()
+        cursor.close()
+        
+        if not space_data:
+            return jsonify({'error': 'Space not found'}), 404
+        
+        if not space_data['transcript']:
+            return jsonify({'error': 'No transcript available for this space'}), 400
+        
+        # Import the tag generation function
+        from background_transcribe import generate_and_save_tags_with_ai
+        from components.Tag import Tag
+        
+        # Remove existing tags for this space
+        cursor = space.connection.cursor()
+        cursor.execute("DELETE FROM space_tags WHERE space_id = %s", (space_id,))
+        space.connection.commit()
+        cursor.close()
+        
+        logger.info(f"Admin {session.get('user_id')} requested tag regeneration for space {space_id}")
+        
+        # Generate new tags using AI or keyword extraction
+        generate_and_save_tags_with_ai(space_id, space_data['transcript'])
+        
+        # Get the newly generated tags to return to admin
+        tag_component = Tag()
+        new_tags = tag_component.get_space_tags(space_id)
+        tag_names = [tag.get('name', tag.get('tag_name', 'Unknown')) for tag in new_tags]
+        
+        return jsonify({
+            'success': True,
+            'message': f'Successfully regenerated {len(new_tags)} tags',
+            'tags': tag_names,
+            'space_title': space_data['title'] or f'Space {space_id}'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error regenerating tags for space {space_id}: {e}", exc_info=True)
+        return jsonify({'error': f'Error regenerating tags: {str(e)}'}), 500
+
 @app.route('/admin/api/update_rate_limits', methods=['POST'])
 def admin_update_rate_limits():
     """Update rate limit configuration."""
@@ -4470,6 +4643,83 @@ def admin_update_rate_limits():
         
     except Exception as e:
         logger.error(f"Error updating rate limits: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/admin/api/tracking_config')
+def admin_get_tracking_config():
+    """Get tracking configuration settings."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        # Get all tracking config values
+        query = "SELECT config_key, config_value FROM system_config WHERE config_key IN (%s, %s, %s, %s, %s, %s)"
+        cursor.execute(query, (
+            'play_cooldown_minutes',
+            'play_minimum_duration_seconds',
+            'download_daily_limit',
+            'download_hourly_ip_limit',
+            'play_tracking_enabled',
+            'download_tracking_enabled'
+        ))
+        
+        config = {}
+        for row in cursor.fetchall():
+            config[row['config_key']] = row['config_value']
+        
+        cursor.close()
+        
+        return jsonify({
+            'success': True,
+            'config': config
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting tracking config: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/admin/api/update_tracking_config', methods=['POST'])
+def admin_update_tracking_config():
+    """Update tracking configuration settings."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        data = request.json
+        space = get_space_component()
+        cursor = space.connection.cursor()
+        
+        # Update each config value
+        config_updates = [
+            ('play_cooldown_minutes', data.get('play_cooldown_minutes', '30')),
+            ('play_minimum_duration_seconds', data.get('play_minimum_duration_seconds', '30')),
+            ('download_daily_limit', data.get('download_daily_limit', '1')),
+            ('download_hourly_ip_limit', data.get('download_hourly_ip_limit', '10')),
+            ('play_tracking_enabled', data.get('play_tracking_enabled', 'true')),
+            ('download_tracking_enabled', data.get('download_tracking_enabled', 'true'))
+        ]
+        
+        for key, value in config_updates:
+            query = """
+            UPDATE system_config 
+            SET config_value = %s, updated_at = NOW() 
+            WHERE config_key = %s
+            """
+            cursor.execute(query, (str(value), key))
+        
+        space.connection.commit()
+        cursor.close()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Tracking configuration updated successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error updating tracking config: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/admin/api/stats/<stat_type>')

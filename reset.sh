@@ -5,7 +5,7 @@ DB="xspacedownloader"
 LOGIN="--login-path=xspaceuser"
 
 # Tables to truncate
-TABLES=("spaces" "space_download_scheduler" "space_transcripts" "space_metadata" "space_tags" "space_transcripts")
+TABLES=("spaces" "space_download_scheduler" "space_transcripts" "space_metadata" "space_tags" "space_transcripts tags")
 
 echo "Cleaning MySQL tables..."
 for TABLE in "${TABLES[@]}"; do

@@ -23,6 +23,17 @@
     .rating-stars small {
         font-size: 0.75rem;
     }
+    
+    /* Summary text styling */
+    .card-text.summary {
+        line-height: 1.4;
+        max-height: 5.6em; /* ~4 lines */
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 4;
+        -webkit-box-orient: vertical;
+    }
 </style>
 {% endblock %}
 
@@ -120,6 +131,15 @@
                                         {% endif %}
                                     </div>
                                     {% endif %}
+                                </div>
+                                {% endif %}
+                                
+                                {# Summary #}
+                                {% if fav.summary %}
+                                <div class="mb-2">
+                                    <p class="card-text summary text-muted small mb-0">
+                                        {{ fav.summary.split()[:100]|join(' ') }}{% if fav.summary.split()|length > 100 %}...{% endif %}
+                                    </p>
                                 </div>
                                 {% endif %}
                                 

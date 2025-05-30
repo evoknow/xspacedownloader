@@ -3,10 +3,12 @@
 
 echo "=== XSpace Downloader - Complete Restart ==="
 
-# Find and kill all Flask app and background downloader processes
+# Find and kill all Flask app, background downloader, and progress watcher processes
 echo "Stopping any existing processes..."
 pkill -f "python app.py" || true
 pkill -f "python bg_downloader.py" || true
+pkill -f "python bg_progress_watcher.py" || true
+./stop_progress_watcher.sh 2>/dev/null || true
 
 # Also check for any process using port 5000 and 5001
 PORT_PROCESS_5000=$(lsof -i :5000 -t 2>/dev/null)
@@ -26,7 +28,7 @@ echo "Waiting for processes to terminate..."
 sleep 2
 
 # Verify processes are stopped
-if pgrep -f "python app.py" > /dev/null || pgrep -f "python bg_downloader.py" > /dev/null; then
+if pgrep -f "python app.py" > /dev/null || pgrep -f "python bg_downloader.py" > /dev/null || pgrep -f "python bg_progress_watcher.py" > /dev/null; then
     echo "Warning: Some processes could not be terminated."
     echo "Please manually kill them before continuing."
     echo "You can use: killall python"

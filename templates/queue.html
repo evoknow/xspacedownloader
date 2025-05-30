@@ -60,7 +60,7 @@
                                     {% endif %}
                                 </div>
                                 
-                                {% if job.status_label == 'Downloading' %}
+                                {% if job.status_label == 'Downloading' or (job.status_label == 'In Progress' and job.progress_percent and job.progress_percent > 0) %}
                                 <div class="progress mb-2" style="height: 25px;">
                                     <div class="progress-bar progress-bar-striped progress-bar-animated" 
                                          role="progressbar" 
@@ -332,85 +332,114 @@
             
             // Check if we need to reload the page (if jobs have been added/removed)
             const currentJobCount = document.querySelectorAll('[data-job-id]').length;
-            if (data.jobs.length !== currentJobCount) {
+            const currentTranscriptCount = document.querySelectorAll('[data-transcript-job-id]').length;
+            const totalJobs = (data.jobs ? data.jobs.length : 0) + (data.transcript_jobs ? data.transcript_jobs.length : 0);
+            const currentTotal = currentJobCount + currentTranscriptCount;
+            
+            if (totalJobs !== currentTotal) {
                 location.reload();
                 return;
             }
             
             // Update each job's status
-            data.jobs.forEach(job => {
-                const jobElement = document.querySelector(`[data-job-id="${job.id}"]`);
-                if (!jobElement) return;
-                
-                // Update status badge
-                const statusBadge = jobElement.querySelector('.badge');
-                if (statusBadge) {
-                    statusBadge.className = `badge bg-${job.status_class}`;
-                    statusBadge.textContent = job.status_label;
-                }
-                
-                // Update progress bar if downloading
-                if (job.status_label === 'Downloading') {
-                    let progressContainer = jobElement.querySelector('.progress');
-                    if (!progressContainer) {
-                        // Create progress bar if it doesn't exist
-                        const alertDiv = jobElement.querySelector('.alert');
-                        if (alertDiv) {
-                            alertDiv.remove();
-                        }
-                        
-                        const progressHtml = `
-                            <div class="progress mb-2" style="height: 25px;">
-                                <div class="progress-bar progress-bar-striped progress-bar-animated" 
-                                     role="progressbar" 
-                                     style="width: ${job.progress_percent || 0}%;"
-                                     aria-valuenow="${job.progress_percent || 0}" 
-                                     aria-valuemin="0" 
-                                     aria-valuemax="100">
-                                    ${job.progress_percent || 0}%
-                                </div>
-                            </div>
-                            ${job.progress_in_size ? `<small class="text-muted">Downloaded: ${(job.progress_in_size / 1048576).toFixed(2)} MB</small>` : ''}
-                        `;
-                        
-                        const flexGrowDiv = jobElement.querySelector('.flex-grow-1');
-                        const tempDiv = document.createElement('div');
-                        tempDiv.innerHTML = progressHtml;
-                        flexGrowDiv.appendChild(tempDiv.firstElementChild);
-                        if (tempDiv.firstElementChild) {
-                            flexGrowDiv.appendChild(tempDiv.firstElementChild);
-                        }
-                    } else {
-                        // Update existing progress bar
-                        const progressBar = progressContainer.querySelector('.progress-bar');
-                        if (progressBar) {
-                            const percent = job.progress_percent || 0;
-                            progressBar.style.width = `${percent}%`;
-                            progressBar.setAttribute('aria-valuenow', percent);
-                            progressBar.textContent = `${percent}%`;
-                        }
-                        
-                        // Update download size and ETA
-                        let infoContainer = jobElement.querySelector('.d-flex.justify-content-between');
-                        if (!infoContainer) {
-                            // Create info container if it doesn't exist
-                            infoContainer = document.createElement('div');
-                            infoContainer.className = 'd-flex justify-content-between';
-                            progressContainer.parentNode.insertBefore(infoContainer, progressContainer.nextSibling);
-                        }
-                        
-                        // Update info container content
-                        let infoHtml = '';
-                        if (job.progress_in_size) {
-                            infoHtml += `<small class="text-muted">Downloaded: ${(job.progress_in_size / 1048576).toFixed(2)} MB</small>`;
-                        }
-                        if (job.eta) {
-                            infoHtml += `<small class="text-muted"><i class="bi bi-clock"></i> ETA: ${job.eta}</small>`;
-                        }
-                        infoContainer.innerHTML = infoHtml;
+            if (data.jobs) {
+                data.jobs.forEach(job => {
+                    const jobElement = document.querySelector(`[data-job-id="${job.id}"]`);
+                    if (!jobElement) return;
+                    
+                    // Update status badge
+                    const statusBadge = jobElement.querySelector('.badge');
+                    if (statusBadge) {
+                        statusBadge.className = `badge bg-${job.status_class}`;
+                        statusBadge.textContent = job.status_label;
                     }
-                }
-            });
+                    
+                    // Update progress bar if downloading or in progress with progress
+                    if (job.status_label === 'Downloading' || job.status === 'downloading' || 
+                        (job.status_label === 'In Progress' && job.progress_percent && job.progress_percent > 0)) {
+                        let progressContainer = jobElement.querySelector('.progress');
+                        if (!progressContainer) {
+                            // Create progress bar if it doesn't exist
+                            const alertDiv = jobElement.querySelector('.alert');
+                            if (alertDiv) {
+                                alertDiv.remove();
+                            }
+                            
+                            const progressHtml = `
+                                <div class="progress mb-2" style="height: 25px;">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                         role="progressbar" 
+                                         style="width: ${job.progress_percent || 0}%;"
+                                         aria-valuenow="${job.progress_percent || 0}" 
+                                         aria-valuemin="0" 
+                                         aria-valuemax="100">
+                                        ${job.progress_percent || 0}%
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    ${job.progress_in_size ? `<small class="text-muted">Downloaded: ${(job.progress_in_size / 1048576).toFixed(2)} MB</small>` : ''}
+                                    ${job.eta ? `<small class="text-muted"><i class="bi bi-clock"></i> ETA: ${job.eta}</small>` : ''}
+                                </div>
+                            `;
+                            
+                            const flexGrowDiv = jobElement.querySelector('.flex-grow-1');
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = progressHtml;
+                            while (tempDiv.firstChild) {
+                                flexGrowDiv.appendChild(tempDiv.firstChild);
+                            }
+                        } else {
+                            // Update existing progress bar
+                            const progressBar = progressContainer.querySelector('.progress-bar');
+                            if (progressBar) {
+                                const percent = job.progress_percent || 0;
+                                progressBar.style.width = `${percent}%`;
+                                progressBar.setAttribute('aria-valuenow', percent);
+                                progressBar.textContent = `${percent}%`;
+                            }
+                            
+                            // Update download size and ETA
+                            let infoContainer = progressContainer.nextElementSibling;
+                            if (infoContainer && infoContainer.classList.contains('d-flex')) {
+                                // Update info container content
+                                let infoHtml = '';
+                                if (job.progress_in_size) {
+                                    infoHtml += `<small class="text-muted">Downloaded: ${(job.progress_in_size / 1048576).toFixed(2)} MB</small>`;
+                                }
+                                if (job.eta) {
+                                    infoHtml += `<small class="text-muted"><i class="bi bi-clock"></i> ETA: ${job.eta}</small>`;
+                                }
+                                infoContainer.innerHTML = infoHtml;
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Update transcript jobs
+            if (data.transcript_jobs) {
+                data.transcript_jobs.forEach(job => {
+                    const jobElement = document.querySelector(`[data-transcript-job-id="${job.id}"]`);
+                    if (!jobElement) return;
+                    
+                    // Update status badge
+                    const statusBadge = jobElement.querySelector('.badge');
+                    if (statusBadge) {
+                        statusBadge.className = `badge bg-${job.status_class}`;
+                        statusBadge.textContent = job.status_label;
+                    }
+                    
+                    // Update progress if transcribing
+                    if (job.status === 'in_progress' && job.progress_percent) {
+                        const progressBar = jobElement.querySelector('.progress-bar');
+                        if (progressBar) {
+                            progressBar.style.width = `${job.progress_percent}%`;
+                            progressBar.setAttribute('aria-valuenow', job.progress_percent);
+                            progressBar.textContent = `${job.progress_percent}%`;
+                        }
+                    }
+                });
+            }
             
         } catch (error) {
             console.error('Error updating queue status:', error);
