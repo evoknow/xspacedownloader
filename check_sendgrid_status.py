@@ -4,9 +4,13 @@ Script to check SendGrid account status
 """
 import requests
 import json
+import os
 
-# SendGrid API key from the database record
-API_KEY = "YOUR_SENDGRID_API_KEY"
+# SendGrid API key from environment variable
+API_KEY = os.environ.get('SENDGRID_API_KEY')
+if not API_KEY:
+    print("Error: SENDGRID_API_KEY environment variable not set")
+    exit(1)
 
 # Set up headers for API requests
 headers = {

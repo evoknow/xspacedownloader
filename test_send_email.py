@@ -5,9 +5,13 @@ Test script to send an email directly using SendGrid API
 import requests
 import json
 import sys
+import os
 
-# SendGrid API key from the database record
-API_KEY = "YOUR_SENDGRID_API_KEY"
+# SendGrid API key from environment variable
+API_KEY = os.environ.get('SENDGRID_API_KEY')
+if not API_KEY:
+    print("Error: SENDGRID_API_KEY environment variable not set")
+    exit(1)
 
 # Email details
 FROM_EMAIL = "noreply@xspacedownload.com"
