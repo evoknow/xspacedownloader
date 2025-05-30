@@ -197,6 +197,31 @@ class AI:
     def get_provider_name(self) -> str:
         """Get the name of the current provider."""
         return self.provider.provider_name if self.provider else "None"
+    
+    def generate_text(self, prompt: str, max_tokens: int = 150) -> Dict:
+        """
+        Generate text based on a prompt using the configured AI provider.
+        
+        Args:
+            prompt (str): The prompt to generate text from
+            max_tokens (int, optional): Maximum tokens to generate
+            
+        Returns:
+            Dict: Dictionary with 'success' and 'text' or 'error' keys
+        """
+        if not self.provider:
+            return {"success": False, "error": "No AI provider initialized"}
+        
+        # Use the provider's generate method if available, otherwise use summary as workaround
+        if hasattr(self.provider, 'generate_text'):
+            return self.provider.generate_text(prompt, max_tokens)
+        else:
+            # Use summary as a workaround for text generation
+            success, result = self.provider.summary(prompt, max_tokens)
+            if success:
+                return {"success": True, "text": result}
+            else:
+                return {"success": False, "error": result}
 
 # Example usage
 if __name__ == "__main__":

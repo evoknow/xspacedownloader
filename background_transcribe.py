@@ -112,6 +112,25 @@ def generate_and_save_tags_with_ai(space_id, transcript_text):
         transcript_text (str): The transcript text
     """
     try:
+        # Use the Space component's generate_tags_from_transcript method
+        # which has proper logging to tag.log
+        logger.info(f"Generating tags for space {space_id} using Space component")
+        
+        from components.Space import Space
+        space = Space()
+        
+        # Generate tags using the Space component method (which includes logging to tag.log)
+        tags = space.generate_tags_from_transcript(transcript_text, max_tags=8)
+        
+        if tags:
+            logger.info(f"Successfully generated {len(tags)} tags for space {space_id}: {tags}")
+            save_tags_to_database(space_id, tags)
+        else:
+            logger.warning(f"No tags generated for space {space_id}")
+            
+        return  # Exit early since we're using the Space component
+        
+        # Keep the old code below as backup (but it won't be reached)
         # Try to use AI for tag generation
         ai_config_exists = False
         

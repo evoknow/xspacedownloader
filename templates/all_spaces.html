@@ -65,7 +65,7 @@
                     <div class="d-flex align-items-center gap-2 gap-md-3">
                         <div class="input-group" style="max-width: 300px;">
                             <span class="input-group-text d-none d-sm-flex"><i class="bi bi-search"></i></span>
-                            <input type="text" class="form-control search" placeholder="Search spaces...">
+                            <input type="text" class="form-control search" placeholder="Search title, host, or tags...">
                         </div>
                         <span class="badge bg-secondary d-none d-sm-inline">{{ spaces|length }} total</span>
                     </div>
@@ -108,6 +108,20 @@
                                         {% if space.title %}
                                         <br><small class="text-muted space-id">{{ space.space_id }}</small>
                                         {% endif %}
+                                        {% if space.tags %}
+                                        <br>
+                                        <small class="space-tags-string" style="display: none;">{{ space.tags_string }}</small>
+                                        <div class="mt-1">
+                                            {% for tag in space.tags[:3] %}
+                                            <a href="{{ url_for('spaces_by_tag', tag_slug=tag.name) }}" class="badge bg-secondary text-decoration-none me-1">
+                                                {{ tag.name }}
+                                            </a>
+                                            {% endfor %}
+                                            {% if space.tags|length > 3 %}
+                                            <span class="badge bg-light text-dark">+{{ space.tags|length - 3 }}</span>
+                                            {% endif %}
+                                        </div>
+                                        {% endif %}
                                     </div>
                                 </td>
                                 <td class="d-none d-md-table-cell">
@@ -124,6 +138,7 @@
                                              style="width: 32px; height: 32px; border: 2px solid #511fb2;"
                                              onerror="this.src='https://ui-avatars.com/api/?name={{ space.metadata.host_handle[1:] if space.metadata.host_handle.startswith('@') else space.metadata.host_handle }}&size=32&background=0D8ABC&color=fff'">
                                     </a>
+                                    <span class="space-host-handle" style="display: none;">{{ space.metadata.host_handle }}</span>
                                     {% else %}
                                     <span class="text-muted">—</span>
                                     {% endif %}
@@ -221,6 +236,26 @@
                 {% endif %}
             </div>
         </div>
+        
+        {% if popular_tags %}
+        <!-- Popular Tags Section -->
+        <div class="card mt-4 shadow-sm">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="bi bi-tags-fill"></i> Popular Tags</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex flex-wrap gap-2">
+                    {% for tag in popular_tags %}
+                    <a href="{{ url_for('spaces_by_tag', tag_slug=tag.name) }}" 
+                       class="btn btn-sm btn-outline-secondary text-decoration-none">
+                        {{ tag.name }} 
+                        <span class="badge bg-secondary ms-1">{{ tag.usage_count }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}
@@ -307,6 +342,8 @@
                 'space-date', 
                 'space-plays', 
                 'space-downloads',
+                'space-tags-string',
+                'space-host-handle',
                 { name: 'space-rating', attr: 'data-rating' }
             ],
             page: 20,

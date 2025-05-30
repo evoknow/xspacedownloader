@@ -468,7 +468,20 @@ def all_spaces():
                 space_row['total_reviews'] = 0
                 # Keep existing metadata structure
         
-        return render_template('all_spaces.html', spaces=completed_spaces)
+        # Get tags for each space
+        from components.Tag import Tag
+        tag_component = Tag(space.connection)
+        
+        for space_row in completed_spaces:
+            tags = tag_component.get_space_tags(space_row['space_id'])
+            space_row['tags'] = tags
+            # Create a comma-separated string for searching
+            space_row['tags_string'] = ', '.join([tag.get('name', '') for tag in tags])
+        
+        # Get popular tags (top 20)
+        popular_tags = tag_component.get_popular_tags(limit=20)
+        
+        return render_template('all_spaces.html', spaces=completed_spaces, popular_tags=popular_tags)
         
     except Exception as e:
         logger.error(f"Error listing all spaces: {e}", exc_info=True)

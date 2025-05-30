@@ -2900,6 +2900,18 @@ class Space:
         Returns:
             list: List of generated tag names
         """
+        # Set up logging for tag generation
+        tag_logger = logging.getLogger('tag_generation')
+        tag_logger.setLevel(logging.DEBUG)
+        
+        # Create file handler for tag.log if it doesn't exist
+        if not any(isinstance(h, logging.FileHandler) and h.baseFilename.endswith('tag.log') for h in tag_logger.handlers):
+            tag_handler = logging.FileHandler('tag.log')
+            tag_handler.setLevel(logging.DEBUG)
+            tag_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+            tag_handler.setFormatter(tag_formatter)
+            tag_logger.addHandler(tag_handler)
+        
         try:
             
             # Try AI-based tag generation first
@@ -2926,21 +2938,50 @@ Transcript:
 {transcript_text[:3000]}...
 """
                 
+                # Log the prompt being sent
+                tag_logger.info("="*80)
+                tag_logger.info("AI TAG GENERATION REQUEST")
+                tag_logger.info("="*80)
+                tag_logger.info(f"Max tags requested: {max_tags}")
+                tag_logger.info(f"Transcript length: {len(transcript_text)} characters")
+                tag_logger.info(f"AI Provider: {ai.get_provider_name()}")
+                tag_logger.info("-"*80)
+                tag_logger.info("PROMPT SENT TO AI:")
+                tag_logger.info("-"*80)
+                tag_logger.info(prompt)
+                tag_logger.info("-"*80)
+                
                 # Generate tags using AI
                 result = ai.generate_text(prompt, max_tokens=100)
                 
+                tag_logger.info("AI RESPONSE:")
+                tag_logger.info("-"*80)
+                tag_logger.info(f"Success: {result.get('success', False)}")
+                if result.get('success'):
+                    tag_logger.info(f"Response: {result.get('text', '')}")
+                else:
+                    tag_logger.error(f"AI Error: {result.get('error', 'Unknown error')}")
+                tag_logger.info("-"*80)
+                
                 if result.get('success') and result.get('text'):
                     # Parse tags from response
-                    tags_text = result['text'].strip()
+                    tags_text = result.get('text', '').strip()
                     tags = [tag.strip() for tag in tags_text.split(',') if tag.strip()]
                     
                     # Limit to max_tags
-                    return tags[:max_tags]
+                    final_tags = tags[:max_tags]
+                    tag_logger.info(f"FINAL TAGS GENERATED: {final_tags}")
+                    tag_logger.info("="*80 + "\n")
+                    return final_tags
                     
             except Exception as ai_error:
+                tag_logger.error(f"AI tag generation failed: {ai_error}")
                 logger.warning(f"AI tag generation failed: {ai_error}, falling back to keyword extraction")
             
             # Fallback: Simple keyword extraction
+            tag_logger.info("FALLING BACK TO KEYWORD EXTRACTION")
+            tag_logger.info("-"*80)
+            
             import re
             from collections import Counter
             
@@ -2955,6 +2996,8 @@ Transcript:
             
             # Get most common words as tags
             common_words = word_freq.most_common(max_tags * 3)  # Get extra to filter
+            
+            tag_logger.info(f"Top {max_tags * 3} common words (>4 chars): {common_words[:10]}")
             
             # Create tags from most common words, prioritizing longer and more specific words
             tags = []
@@ -2971,11 +3014,15 @@ Transcript:
                 if len(tags) >= max_tags:
                     break
             
+            tag_logger.info(f"Tags from common words: {tags}")
+            
             # If we still don't have enough tags, look for capitalized words (proper nouns)
             if len(tags) < max_tags:
                 # Find words that appear capitalized in the original text
                 capitalized_words = re.findall(r'\b[A-Z][a-zA-Z]+\b', transcript_text)
                 cap_freq = Counter([w.lower() for w in capitalized_words if len(w) > 4])
+                
+                tag_logger.info(f"Capitalized words found: {list(cap_freq.most_common(10))}")
                 
                 for word, count in cap_freq.most_common(max_tags - len(tags)):
                     if count > 1 and word.lower() not in [t.lower() for t in tags]:
@@ -2983,6 +3030,7 @@ Transcript:
             
             # If we don't have enough tags, add some generic ones based on content
             if len(tags) < 3:
+                tag_logger.info("Adding generic tags based on content keywords")
                 if 'business' in transcript_text.lower():
                     tags.append('Business')
                 if 'technology' in transcript_text.lower() or 'tech' in transcript_text.lower():
@@ -2991,8 +3039,12 @@ Transcript:
                     tags.append('AI')
                 if 'space' in transcript_text.lower() and 'twitter' in transcript_text.lower():
                     tags.append('Twitter Space')
-                    
-            return tags[:max_tags]
+            
+            final_fallback_tags = tags[:max_tags]
+            tag_logger.info(f"FINAL FALLBACK TAGS: {final_fallback_tags}")
+            tag_logger.info("="*80 + "\n")
+            
+            return final_fallback_tags
                 
         except Exception as e:
             logger.error(f"Error generating tags from transcript: {e}")
