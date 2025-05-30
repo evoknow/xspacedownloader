@@ -1,0 +1,30 @@
+[Unit]
+Description=XSpace Downloader Web Application
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/xspacedownloader
+Environment="PATH=/var/www/xspacedownloader/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONPATH=/var/www/xspacedownloader"
+Environment="PORT=8080"
+ExecStart=/var/www/xspacedownloader/venv/bin/python /var/www/xspacedownloader/app.py
+Restart=always
+RestartSec=10
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/xspacedownloader/downloads /var/www/xspacedownloader/logs /var/www/xspacedownloader/transcript_jobs
+
+# Logging
+StandardOutput=append:/var/www/xspacedownloader/logs/app.log
+StandardError=append:/var/www/xspacedownloader/logs/app-error.log
+
+[Install]
+WantedBy=multi-user.target

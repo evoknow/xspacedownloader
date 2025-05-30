@@ -1,0 +1,29 @@
+[Unit]
+Description=XSpace Downloader Background Transcriber
+After=network.target mysql.service xspacedownloader.service
+Wants=mysql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/xspacedownloader
+Environment="PATH=/var/www/xspacedownloader/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONPATH=/var/www/xspacedownloader"
+ExecStart=/var/www/xspacedownloader/venv/bin/python /var/www/xspacedownloader/background_transcribe.py
+Restart=always
+RestartSec=30
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/xspacedownloader/downloads /var/www/xspacedownloader/logs /var/www/xspacedownloader/transcript_jobs
+
+# Logging
+StandardOutput=append:/var/www/xspacedownloader/logs/transcribe.log
+StandardError=append:/var/www/xspacedownloader/logs/transcribe-error.log
+
+[Install]
+WantedBy=multi-user.target

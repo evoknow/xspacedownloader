@@ -20,3 +20,8 @@ anthropic>=0.3.0
 Pillow>=10.0.0
 # Rate limiting
 Flask-Limiter>=3.5.0
+
+# Production deployment (optional)
+# gunicorn>=20.1.0  # WSGI server for production
+# supervisor>=4.2.0  # Process management (alternative to systemd)
+# redis>=4.0.0  # For caching and session management
