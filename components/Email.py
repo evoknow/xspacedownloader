@@ -48,6 +48,16 @@ import json
 import smtplib
 import socket
 import mysql.connector
+import os
+import sys
+
+# Try to load .env file if it exists
+try:
+    from load_env import load_env
+    load_env('.env')
+except ImportError:
+    # load_env is optional
+    pass
 
 # Try to import requests, but continue if not available
 try:
@@ -187,9 +197,15 @@ class Email:
         if not self.email_config or self.email_config['provider'] != 'sendgrid':
             return False
         
-        api_key = self.email_config.get('api_key')
+        # First check for environment variable
+        api_key = os.environ.get('SENDGRID_API_KEY')
+        
+        # If not in environment, fall back to database config
         if not api_key:
-            print("SendGrid API key not found in configuration.")
+            api_key = self.email_config.get('api_key')
+        
+        if not api_key:
+            print("SendGrid API key not found in environment variable SENDGRID_API_KEY or database configuration.")
             return False
         
         headers = {
