@@ -19,8 +19,8 @@ max_requests = 1000
 max_requests_jitter = 100
 
 # Logging
-accesslog = "/var/www/xspacedownloader/logs/gunicorn-access.log"
-errorlog = "/var/www/xspacedownloader/logs/gunicorn-error.log"
+accesslog = "/var/www/production/xspacedowoad.com/website/htdocs/logs/gunicorn-access.log"
+errorlog = "/var/www/production/xspacedowoad.com/website/htdocs/logs/gunicorn-error.log"
 loglevel = "info"
 access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)s'
 
@@ -29,9 +29,9 @@ proc_name = 'xspacedownloader'
 
 # Server mechanics
 daemon = False
-pidfile = "/var/www/xspacedownloader/gunicorn.pid"
-user = "www-data"
-group = "www-data"
+pidfile = "/var/www/production/xspacedowoad.com/website/htdocs/gunicorn.pid"
+user = "nginx"
+group = "nginx"
 tmp_upload_dir = None
 
 # SSL (if not using nginx for SSL termination)
@@ -40,7 +40,7 @@ tmp_upload_dir = None
 
 # Environment variables
 raw_env = [
-    "PYTHONPATH=/var/www/xspacedownloader",
+    "PYTHONPATH=/var/www/production/xspacedowoad.com/website/htdocs",
 ]
 
 # Preload application for better memory usage
