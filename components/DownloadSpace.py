@@ -48,14 +48,19 @@ from pathlib import Path
 from datetime import datetime
 from mysql.connector import Error
 
-# Configure logging
-LOG_FILE = "download_space.log"
-logging.basicConfig(
-    filename=LOG_FILE,
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger('DownloadSpace')
+# Configure logging using centralized logger
+try:
+    from components.Logger import get_logger
+    logger = get_logger('download_space')
+except ImportError:
+    # Fallback to basic logging if Logger component not available
+    LOG_FILE = "download_space.log"
+    logging.basicConfig(
+        filename=LOG_FILE,
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger('DownloadSpace')
 
 # Import Space component for space_id extraction and database operations
 try:

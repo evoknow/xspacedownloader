@@ -50,8 +50,6 @@ import socket
 import mysql.connector
 import os
 import sys
-import logging
-from pathlib import Path
 
 # Try to load .env file if it exists
 try:
@@ -60,6 +58,15 @@ try:
 except ImportError:
     # load_env is optional
     pass
+
+# Import centralized logger
+try:
+    from components.Logger import get_logger
+except ImportError:
+    # Fallback to basic logging if Logger component not available
+    import logging
+    def get_logger(name):
+        return logging.getLogger(name)
 
 # Try to import requests, but continue if not available
 try:
@@ -87,7 +94,7 @@ class Email:
         self.connection = db_connection
         
         # Setup logging
-        self._setup_logging()
+        self.logger = get_logger('email')
         if not self.connection:
             try:
                 with open('db_config.json', 'r') as config_file:
@@ -114,35 +121,6 @@ class Email:
         """Close the database connection when the object is destroyed."""
         if hasattr(self, 'connection') and self.connection and self.connection.is_connected():
             self.connection.close()
-    
-    def _setup_logging(self):
-        """Setup logging for the Email component."""
-        # Create logs directory if it doesn't exist
-        logs_dir = Path('logs')
-        logs_dir.mkdir(exist_ok=True)
-        
-        # Create logger
-        self.logger = logging.getLogger('email_component')
-        self.logger.setLevel(logging.INFO)
-        
-        # Remove existing handlers to avoid duplicates
-        for handler in self.logger.handlers[:]:
-            self.logger.removeHandler(handler)
-        
-        # Create file handler
-        log_file = logs_dir / 'email.log'
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setLevel(logging.INFO)
-        
-        # Create formatter
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        file_handler.setFormatter(formatter)
-        
-        # Add handler to logger
-        self.logger.addHandler(file_handler)
     
     def _load_email_config(self):
         """

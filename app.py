@@ -73,13 +73,18 @@ except ImportError:
     logger = logging.getLogger('webapp')
     logger.warning("Translate component not available - translation features will be limited")
 
-# Configure logging
-logging.basicConfig(
-    filename='webapp.log',
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger('webapp')
+# Configure logging using centralized logger
+try:
+    from components.Logger import setup_app_logging
+    logger = setup_app_logging('app')
+except ImportError:
+    # Fallback to basic logging if Logger component not available
+    logging.basicConfig(
+        filename='webapp.log',
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger('webapp')
 
 # Application version
 __version__ = "1.1.1"

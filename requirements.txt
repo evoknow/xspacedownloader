@@ -16,6 +16,7 @@ sendgrid>=6.9.7
 # AI providers
 openai>=0.27.0
 anthropic>=0.3.0
+openai-whisper>=20231117
 # Image generation
 Pillow>=10.0.0
 # Rate limiting

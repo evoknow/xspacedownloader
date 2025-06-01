@@ -31,16 +31,21 @@ except ImportError:
 # Constants for testing
 TEST_SPACE_URL = "https://x.com/i/spaces/1YpKkgVgMQAKj"
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('space_component.log'),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
+# Set up logging using centralized logger
+try:
+    from components.Logger import get_logger
+    logger = get_logger('space')
+except ImportError:
+    # Fallback to basic logging if Logger component not available
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler('space_component.log'),
+            logging.StreamHandler()
+        ]
+    )
+    logger = logging.getLogger(__name__)
 
 class Space:
     """Class for managing space data and operations."""
