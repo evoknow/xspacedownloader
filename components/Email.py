@@ -335,16 +335,16 @@ class Email:
             payload["attachments"] = payload_attachments
         
         try:
-            print("\n=== SENDGRID EMAIL DEBUGGING ===")
-            print(f"API Key (first 5 chars): {api_key[:5]}...")
-            print(f"From Email: {from_email}")
-            print(f"From Name: {from_name}")
-            print(f"To: {[recipient['email'] for recipient in personalization['to']]}")
-            print(f"Subject: {subject}")
-            print(f"Content type: {content_type}")
-            print(f"Request URL: https://api.sendgrid.com/v3/mail/send")
-            print(f"Headers: {headers}")
-            print(f"Payload: {json.dumps(payload, indent=2)}")
+            self.logger.info("=== SENDGRID EMAIL DEBUGGING ===")
+            self.logger.info(f"API Key (first 5 chars): {api_key[:5]}...")
+            self.logger.info(f"From Email: {from_email}")
+            self.logger.info(f"From Name: {from_name}")
+            self.logger.info(f"To: {[recipient['email'] for recipient in personalization['to']]}")
+            self.logger.info(f"Subject: {subject}")
+            self.logger.info(f"Content type: {content_type}")
+            self.logger.info(f"Request URL: https://api.sendgrid.com/v3/mail/send")
+            self.logger.info(f"Headers: {headers}")
+            self.logger.info(f"Payload: {json.dumps(payload, indent=2)}")
             
             response = requests.post(
                 "https://api.sendgrid.com/v3/mail/send",
@@ -352,26 +352,26 @@ class Email:
                 json=payload
             )
             
-            print(f"\nSendGrid API response status: {response.status_code}")
-            print(f"SendGrid API response headers: {dict(response.headers)}")
+            self.logger.info(f"SendGrid API response status: {response.status_code}")
+            self.logger.info(f"SendGrid API response headers: {dict(response.headers)}")
             
             if response.status_code == 202:
-                print(f"Email sent successfully via SendGrid (202 Accepted)")
-                print("IMPORTANT: If emails are not being received, check the following:")
-                print("1. Is the SendGrid account in sandbox mode? (emails won't be delivered)")
-                print("2. Has the sender domain been verified in SendGrid?")
-                print("3. Is the API key restricted to only certain operations?")
-                print("4. Are there sending restrictions or limits on the account?")
-                print("5. Check recipient's spam folder")
+                self.logger.info("Email sent successfully via SendGrid (202 Accepted)")
+                self.logger.info("IMPORTANT: If emails are not being received, check the following:")
+                self.logger.info("1. Is the SendGrid account in sandbox mode? (emails won't be delivered)")
+                self.logger.info("2. Has the sender domain been verified in SendGrid?")
+                self.logger.info("3. Is the API key restricted to only certain operations?")
+                self.logger.info("4. Are there sending restrictions or limits on the account?")
+                self.logger.info("5. Check recipient's spam folder")
                 return True
             else:
-                print(f"SendGrid API error: {response.status_code} - {response.text}")
+                self.logger.error(f"SendGrid API error: {response.status_code} - {response.text}")
                 return False
                 
         except Exception as e:
-            print(f"Error sending email via SendGrid: {e}")
+            self.logger.error(f"Error sending email via SendGrid: {e}")
             import traceback
-            traceback.print_exc()
+            self.logger.error(traceback.format_exc())
             return False
     
     def _send_via_mailgun(self, to_list, from_addr, subject, body, attachments=None, content_type='text/html'):
