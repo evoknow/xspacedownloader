@@ -50,6 +50,8 @@ import socket
 import mysql.connector
 import os
 import sys
+import logging
+from pathlib import Path
 
 # Try to load .env file if it exists
 try:
@@ -83,6 +85,9 @@ class Email:
     def __init__(self, db_connection=None):
         """Initialize the Email component with a database connection."""
         self.connection = db_connection
+        
+        # Setup logging
+        self._setup_logging()
         if not self.connection:
             try:
                 with open('db_config.json', 'r') as config_file:
@@ -103,11 +108,41 @@ class Email:
         
         # Load active email provider configuration
         self.email_config = self._load_email_config()
+        self.logger.info("Email component initialized")
     
     def __del__(self):
         """Close the database connection when the object is destroyed."""
         if hasattr(self, 'connection') and self.connection and self.connection.is_connected():
             self.connection.close()
+    
+    def _setup_logging(self):
+        """Setup logging for the Email component."""
+        # Create logs directory if it doesn't exist
+        logs_dir = Path('logs')
+        logs_dir.mkdir(exist_ok=True)
+        
+        # Create logger
+        self.logger = logging.getLogger('email_component')
+        self.logger.setLevel(logging.INFO)
+        
+        # Remove existing handlers to avoid duplicates
+        for handler in self.logger.handlers[:]:
+            self.logger.removeHandler(handler)
+        
+        # Create file handler
+        log_file = logs_dir / 'email.log'
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(logging.INFO)
+        
+        # Create formatter
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        file_handler.setFormatter(formatter)
+        
+        # Add handler to logger
+        self.logger.addHandler(file_handler)
     
     def _load_email_config(self):
         """
@@ -125,12 +160,15 @@ class Email:
             config = cursor.fetchone()
             
             if not config:
+                self.logger.error("No active email provider found in database")
                 print("No active email provider found.")
                 return None
             
+            self.logger.info(f"Loaded email provider: {config.get('provider')} with from_email: {config.get('from_email')}")
             return config
             
         except Error as e:
+            self.logger.error(f"Error loading email configuration: {e}")
             print(f"Error loading email configuration: {e}")
             return None
         finally:
@@ -190,23 +228,32 @@ class Email:
         Returns:
             bool: True if successful, False otherwise
         """
+        self.logger.info("Attempting to send via SendGrid")
+        
         if not REQUESTS_AVAILABLE:
+            self.logger.error("SendGrid provider requires the requests module which is not available")
             print("SendGrid provider requires the requests module which is not available.")
             return False
             
         if not self.email_config or self.email_config['provider'] != 'sendgrid':
+            self.logger.error("Email config not found or provider is not SendGrid")
             return False
         
         # First check for environment variable
         api_key = os.environ.get('SENDGRID_API_KEY')
+        self.logger.info(f"Environment SENDGRID_API_KEY found: {'Yes' if api_key else 'No'}")
         
         # If not in environment, fall back to database config
         if not api_key:
             api_key = self.email_config.get('api_key')
+            self.logger.info(f"Database api_key found: {'Yes' if api_key else 'No'}")
         
         if not api_key:
+            self.logger.error("SendGrid API key not found in environment variable SENDGRID_API_KEY or database configuration")
             print("SendGrid API key not found in environment variable SENDGRID_API_KEY or database configuration.")
             return False
+        
+        self.logger.info(f"Using SendGrid API key starting with: {api_key[:10]}...")
         
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -543,7 +590,10 @@ class Email:
         Returns:
             bool: True if successful, False otherwise
         """
+        self.logger.info(f"Email send attempt - To: {to}, Subject: {subject}")
+        
         if not self.email_config:
+            self.logger.error("No active email provider configuration found")
             print("No active email provider configuration found.")
             return False
         
@@ -553,6 +603,7 @@ class Email:
         if to is None:
             # Use testers from configuration
             to_list = self._get_testers()
+            self.logger.info("Using testers from configuration as recipients")
         elif isinstance(to, list):
             to_list = to
         else:
@@ -560,19 +611,30 @@ class Email:
         
         # If still no recipients, fail
         if not to_list:
+            self.logger.error("No recipients specified and no enabled testers found")
             print("No recipients specified and no enabled testers found.")
             return False
         
+        self.logger.info(f"Sending email to {len(to_list)} recipients: {[str(r) for r in to_list]}")
+        
         # Use the appropriate sending method based on the provider
         provider = self.email_config.get('provider', '').lower()
+        self.logger.info(f"Using email provider: {provider}")
         
         if provider == 'sendgrid':
-            return self._send_via_sendgrid(to_list, from_addr, subject, body, attachments, content_type)
+            result = self._send_via_sendgrid(to_list, from_addr, subject, body, attachments, content_type)
+            self.logger.info(f"SendGrid send result: {result}")
+            return result
         elif provider == 'mailgun':
-            return self._send_via_mailgun(to_list, from_addr, subject, body, attachments, content_type)
+            result = self._send_via_mailgun(to_list, from_addr, subject, body, attachments, content_type)
+            self.logger.info(f"Mailgun send result: {result}")
+            return result
         elif provider == 'default-smtp':
-            return self._send_via_smtp(to_list, from_addr, subject, body, attachments, content_type)
+            result = self._send_via_smtp(to_list, from_addr, subject, body, attachments, content_type)
+            self.logger.info(f"SMTP send result: {result}")
+            return result
         else:
+            self.logger.error(f"Unsupported email provider: {provider}")
             print(f"Unsupported email provider: {provider}")
             return False
     
