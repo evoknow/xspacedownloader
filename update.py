@@ -11,14 +11,16 @@ Usage:
 
 Options:
     --dry-run          Show what would be done without making changes
-    --restart-services Restart services after update (default: false)
+    --restart-services Restart services after update (default: true)
+    --no-restart-services Skip restarting services after update
     --backup          Create backup before update (default: false)
     --force           Force update even if working directory is not clean
 
 Examples:
     ./update.py                    # Basic update
     ./update.py --dry-run          # Preview changes
-    ./update.py --restart-services # Update and restart services
+    ./update.py # Update and restart services (default)
+    ./update.py --no-restart-services # Update without restarting services
     ./update.py --backup           # Create backup before update
 """
 
@@ -34,7 +36,8 @@ from datetime import datetime
 class UpdateManager:
     def __init__(self, args):
         self.dry_run = args.dry_run
-        self.restart_services_enabled = args.restart_services
+        # Restart services by default unless explicitly disabled
+        self.restart_services_enabled = not args.no_restart_services
         self.backup_enabled = args.backup
         self.force = args.force
         
@@ -230,7 +233,7 @@ class UpdateManager:
     
     def restart_services(self):
         """Restart application services."""
-        if not self.restart_services:
+        if not self.restart_services_enabled:
             return
             
         print("\n=== Restarting services ===")
@@ -299,9 +302,9 @@ def main():
 Examples:
   sudo ./update.py                    # Basic update
   sudo ./update.py --dry-run          # Preview changes
-  sudo ./update.py --restart-services # Update and restart services
+  sudo ./update.py                     # Update and restart services (default)
+  sudo ./update.py --no-restart-services # Update without restarting services
   sudo ./update.py --backup           # Create backup before update
-  sudo ./update.py --backup --restart-services  # Full update with backup
         """
     )
     
@@ -309,9 +312,13 @@ Examples:
                         action='store_true',
                         help='Show what would be done without making changes')
     
+    parser.add_argument('--no-restart-services',
+                        action='store_true',
+                        help='Skip restarting services after update')
+    
     parser.add_argument('--restart-services',
                         action='store_true',
-                        help='Restart services after update')
+                        help='Restart services after update (default: true)')
     
     parser.add_argument('--backup',
                         action='store_true', 
