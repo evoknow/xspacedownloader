@@ -819,8 +819,11 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                 
                 # Check if yt-dlp is installed, preferring venv version
                 # First try to find yt-dlp in the same directory as the Python executable
+                print(f"[DEBUG] Python executable: {sys.executable}")
                 python_dir = os.path.dirname(sys.executable)
                 venv_yt_dlp = os.path.join(python_dir, "yt-dlp")
+                print(f"[DEBUG] Looking for venv yt-dlp at: {venv_yt_dlp}")
+                print(f"[DEBUG] Venv yt-dlp exists: {os.path.exists(venv_yt_dlp)}")
                 
                 if os.path.exists(venv_yt_dlp):
                     yt_dlp_path = venv_yt_dlp
@@ -837,6 +840,18 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                         raise Exception("yt-dlp not found and could not be installed")
                 else:
                     print(f"Found yt-dlp at: {yt_dlp_path}")
+                
+                # Debug: Check yt-dlp version being used
+                try:
+                    version_result = subprocess.run([yt_dlp_path, '--version'], 
+                                                  capture_output=True, text=True, timeout=10)
+                    if version_result.returncode == 0:
+                        yt_dlp_version = version_result.stdout.strip()
+                        print(f"[DEBUG] Using yt-dlp version: {yt_dlp_version}")
+                    else:
+                        print(f"[DEBUG] Failed to get yt-dlp version: {version_result.stderr}")
+                except Exception as e:
+                    print(f"[DEBUG] Error checking yt-dlp version: {e}")
                 
                 # Create a temporary filename for download
                 temp_output = str(output_file) + ".part"
