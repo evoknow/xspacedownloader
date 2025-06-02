@@ -41,7 +41,7 @@ except ImportError:
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler('space_component.log'),
+            logging.FileHandler('logs/space_component.log'),
             logging.StreamHandler()
         ]
     )
