@@ -239,8 +239,7 @@ class UpdateManager:
         print("\n=== Restarting services ===")
         
         services = [
-            'xspacedownloader-gunicorn',
-            'xspacedownloader-transcribe'
+            'xspacedownloader-gunicorn'
         ]
         
         for service in services:
@@ -254,12 +253,13 @@ class UpdateManager:
             else:
                 print(f"✗ {service} failed to start")
         
-        # Handle bg_downloader manually
-        print("\n=== Restarting background downloader (manual) ===")
+        # Handle background processes manually
+        print("\n=== Restarting background processes (manual) ===")
         
-        # Kill existing bg_downloader processes
-        print("Stopping existing bg_downloader processes...")
+        # Kill existing background processes
+        print("Stopping existing background processes...")
         self.run_command(['pkill', '-f', 'bg_downloader.py'], check=False)
+        self.run_command(['pkill', '-f', 'background_transcribe.py'], check=False)
         
         # Wait a moment for processes to stop
         import time
@@ -291,6 +291,33 @@ class UpdateManager:
                 print(f"✓ bg_downloader is running (PID: {result.stdout.strip()})")
             else:
                 print("✗ bg_downloader failed to start")
+        
+        # Start background_transcribe manually
+        print("Starting background_transcribe...")
+        transcribe_cmd = [
+            'sudo', '-u', self.nginx_user, 'nohup',
+            f'{self.production_dir}/venv/bin/python',
+            f'{self.production_dir}/background_transcribe.py'
+        ]
+        
+        if self.dry_run:
+            print(f"[DRY RUN] Would execute: {' '.join(transcribe_cmd)} > /dev/null 2>&1 &")
+        else:
+            # Use subprocess to start in background
+            subprocess.Popen(
+                transcribe_cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                cwd=self.production_dir
+            )
+            
+            # Check if it started
+            time.sleep(3)
+            result = self.run_command(['pgrep', '-f', 'background_transcribe.py'], check=False)
+            if result and result.stdout.strip():
+                print(f"✓ background_transcribe is running (PID: {result.stdout.strip()})")
+            else:
+                print("✗ background_transcribe failed to start")
     
     def update(self):
         """Run the complete update process."""

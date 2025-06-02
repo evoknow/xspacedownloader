@@ -256,43 +256,20 @@ WantedBy=multi-user.target
 # sudo -u {self.nginx_user} nohup {self.production_dir}/venv/bin/python {self.production_dir}/bg_downloader.py > /dev/null 2>&1 &
 """
 
-        # Transcriber service
-        transcribe_service = f"""[Unit]
-Description=XSpace Downloader Background Transcriber
-After=network.target mysql.service xspacedownloader.service
-Wants=mysql.service
-
-[Service]
-Type=simple
-User={self.nginx_user}
-Group={self.nginx_user}
-WorkingDirectory={self.production_dir}
-Environment="PATH={self.production_dir}/venv/bin:/usr/local/bin:/usr/bin:/bin"
-Environment="PYTHONPATH={self.production_dir}"
-ExecStart={self.production_dir}/venv/bin/python {self.production_dir}/background_transcribe.py
-Restart=always
-RestartSec=30
-
-# Security settings
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths={self.production_dir}/downloads {self.production_dir}/logs {self.production_dir}/transcript_jobs {self.production_dir}
-
-# Logging
-StandardOutput=append:{self.production_dir}/logs/transcribe.log
-StandardError=append:{self.production_dir}/logs/transcribe-error.log
-
-[Install]
-WantedBy=multi-user.target
+        # Transcriber service - DISABLED (run manually instead)
+        # The background_transcribe has issues with systemd, run manually with:
+        # sudo -u {self.nginx_user} nohup {self.production_dir}/venv/bin/python {self.production_dir}/background_transcribe.py > /dev/null 2>&1 &
+        transcribe_service = f"""# Background transcriber service - DISABLED
+# Due to issues with systemd execution, run manually instead:
+# cd {self.production_dir}
+# sudo -u {self.nginx_user} nohup {self.production_dir}/venv/bin/python {self.production_dir}/background_transcribe.py > /dev/null 2>&1 &
 """
         
         services = {
             "xspacedownloader.service": app_service,
             "xspacedownloader-gunicorn.service": gunicorn_service,
             # "xspacedownloader-bg.service": bg_service,  # DISABLED - run manually
-            "xspacedownloader-transcribe.service": transcribe_service
+            # "xspacedownloader-transcribe.service": transcribe_service  # DISABLED - run manually
         }
         
         systemd_path = Path(self.systemd_dir)
@@ -519,13 +496,14 @@ SENDGRID_API_KEY=
         print("\n7. Enable and start services:")
         print("   sudo systemctl daemon-reload")
         print("   sudo systemctl enable xspacedownloader-gunicorn")
-        print("   sudo systemctl enable xspacedownloader-transcribe")
         print("   sudo systemctl start xspacedownloader-gunicorn")
-        print("   sudo systemctl start xspacedownloader-transcribe")
-        print("\n7b. Start background downloader manually:")
+        print("\n7b. Start background processes manually:")
         print(f"   cd {self.production_dir}")
+        print(f"   # Start background downloader:")
         print(f"   sudo -u {self.nginx_user} nohup {self.production_dir}/venv/bin/python {self.production_dir}/bg_downloader.py > /dev/null 2>&1 &")
-        print("   # Check if running: ps auxww | grep bg_downloader")
+        print(f"   # Start background transcriber:")
+        print(f"   sudo -u {self.nginx_user} nohup {self.production_dir}/venv/bin/python {self.production_dir}/background_transcribe.py > /dev/null 2>&1 &")
+        print("   # Check if running: ps auxww | grep 'bg_downloader\\|background_transcribe'")
         print("\n8. Setup SSL certificate:")
         print("   sudo certbot --nginx -d {} -d www.{}".format(self.domain, self.domain))
         print("\n9. Use update.py script for future deployments:")
