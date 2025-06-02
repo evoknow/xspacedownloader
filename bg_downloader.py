@@ -79,7 +79,7 @@ def load_config() -> Dict[str, Any]:
         logger.warning("mainconfig.json not found, using default configuration")
         return {
             "max_concurrent_downloads": 5,
-            "scan_interval": 60,  # seconds
+            "scan_interval": 5,  # seconds
             "download_dir": "./downloads",
             "log_dir": "./logs"
         }
@@ -87,7 +87,7 @@ def load_config() -> Dict[str, Any]:
         logger.error("Error parsing mainconfig.json, using default configuration")
         return {
             "max_concurrent_downloads": 5,
-            "scan_interval": 60,  # seconds
+            "scan_interval": 5,  # seconds
             "download_dir": "./downloads",
             "log_dir": "./logs"
         }
@@ -2195,7 +2195,7 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                         print(f"Error updating spaces table: {spaces_err}")
                     
                     print(f"Download completed for space {space_id}")
-                    sys.exit(0)  # Exit successfully
+                    return  # Return from child process
                 else:
                     print(f"yt-dlp failed with return code {process_returncode}")
                     
@@ -2237,7 +2237,7 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                         status='failed',
                         error_message=error_message
                     )
-                    sys.exit(1)  # Exit with error
+                    return  # Return from child process
                 
             except Exception as e:
                 print(f"Error in download process for space {space_id}: {e}")
@@ -2274,7 +2274,7 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                 except Exception as update_error:
                     print(f"Failed to update job status: {update_error}")
                     
-                sys.exit(1)  # Exit with error
+                return  # Return from child process
         else:
             # This is the parent process
             # Return the child process ID
