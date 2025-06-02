@@ -579,7 +579,7 @@ class TranscriptionWorker:
         logger.info(f"Received signal {signum}. Shutting down gracefully...")
         self.running = False
     
-    def load_speech_to_text(self, model_name='base'):
+    def load_speech_to_text(self, model_name='tiny'):
         """
         Load the SpeechToText component with the specified model.
         
@@ -809,7 +809,7 @@ class TranscriptionWorker:
             
             # Load the right model
             # Handle both direct 'model' field and nested in 'options'
-            model = job_data.get('model') or job_data.get('options', {}).get('model', 'base')
+            model = job_data.get('model') or job_data.get('options', {}).get('model', 'tiny')
             logger.info(f"[DEBUG] Model to load: {model}")
             
             if not self.load_speech_to_text(model_name=model):

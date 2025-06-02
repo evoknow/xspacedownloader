@@ -20,7 +20,7 @@ class SpeechToText:
     Class for converting speech audio files to text using OpenAI's Whisper model.
     """
     
-    def __init__(self, model_name='base', device=None, chunk_length_ms=30000):
+    def __init__(self, model_name='tiny', device=None, chunk_length_ms=30000):
         """
         Initialize the SpeechToText component.
         

@@ -584,6 +584,9 @@ function displaySpaces(spaces) {
                     <button class="btn btn-primary btn-sm" onclick="redoTags('${space.space_id}')" title="Regenerate tags from transcript">
                         Redo <i class="bi bi-tags"></i>
                     </button>
+                    <button class="btn btn-warning btn-sm" onclick="reTranscribe('${space.space_id}')" title="Re-transcribe with base model">
+                        <i class="bi bi-mic"></i> Base
+                    </button>
                     <button class="btn btn-danger btn-sm" onclick="deleteSpace('${space.space_id}')" title="Delete space">
                         <i class="bi bi-trash"></i>
                     </button>
@@ -642,6 +645,44 @@ function redoTags(spaceId) {
         .catch(error => {
             console.error('Error:', error);
             alert('Error regenerating tags');
+        })
+        .finally(() => {
+            // Restore button state
+            button.innerHTML = originalHtml;
+            button.disabled = false;
+        });
+}
+
+function reTranscribe(spaceId) {
+    if (!confirm('Re-transcribe this space with the base model? This will overwrite the existing transcript.')) return;
+    
+    // Show loading state
+    const button = event.target.closest('button');
+    const originalHtml = button.innerHTML;
+    button.innerHTML = '<i class="bi bi-arrow-clockwise spin"></i> Transcribing...';
+    button.disabled = true;
+    
+    fetch(`/admin/api/spaces/${spaceId}/re-transcribe`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            model: 'base',
+            overwrite: true
+        })
+    })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(`${data.message} for space ${spaceId}`);
+            } else {
+                alert(data.error || 'Error starting re-transcription');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error starting re-transcription');
         })
         .finally(() => {
             // Restore button state

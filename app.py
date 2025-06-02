@@ -4615,6 +4615,81 @@ def admin_redo_tags(space_id):
         logger.error(f"Error regenerating tags for space {space_id}: {e}", exc_info=True)
         return jsonify({'error': f'Error regenerating tags: {str(e)}'}), 500
 
+@app.route('/admin/api/spaces/<space_id>/re-transcribe', methods=['POST'])
+def admin_re_transcribe(space_id):
+    """Re-transcribe a space with specified model."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        data = request.get_json() or {}
+        model = data.get('model', 'base')
+        overwrite = data.get('overwrite', True)
+        
+        # Validate model
+        valid_models = ['tiny', 'base', 'small', 'medium', 'large']
+        if model not in valid_models:
+            return jsonify({'error': f'Invalid model. Must be one of: {", ".join(valid_models)}'}), 400
+        
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        # Check if space exists and has audio file
+        cursor.execute("""
+            SELECT space_id, title, audio_file_path
+            FROM spaces 
+            WHERE space_id = %s
+        """, (space_id,))
+        
+        space_data = cursor.fetchone()
+        cursor.close()
+        
+        if not space_data:
+            return jsonify({'error': 'Space not found'}), 404
+        
+        if not space_data['audio_file_path']:
+            return jsonify({'error': 'No audio file available for this space'}), 400
+        
+        # Check if audio file exists
+        import os
+        audio_path = os.path.join('downloads', space_data['audio_file_path'])
+        if not os.path.exists(audio_path):
+            return jsonify({'error': 'Audio file not found on disk'}), 400
+        
+        # Create transcription job
+        import uuid
+        import json
+        from datetime import datetime
+        
+        job_id = str(uuid.uuid4())
+        job_data = {
+            'job_id': job_id,
+            'space_id': space_id,
+            'audio_file': audio_path,
+            'language': 'en',
+            'model': model,
+            'overwrite': overwrite,
+            'created_at': datetime.now().isoformat(),
+            'status': 'pending',
+            'admin_requested': True
+        }
+        
+        # Save job file
+        os.makedirs('transcript_jobs', exist_ok=True)
+        job_file = f'transcript_jobs/{job_id}.json'
+        with open(job_file, 'w') as f:
+            json.dump(job_data, f, indent=2)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Re-transcription job queued with {model} model',
+            'job_id': job_id
+        })
+        
+    except Exception as e:
+        logger.error(f"Error creating re-transcription job for space {space_id}: {e}", exc_info=True)
+        return jsonify({'error': f'Error creating transcription job: {str(e)}'}), 500
+
 @app.route('/admin/api/update_rate_limits', methods=['POST'])
 def admin_update_rate_limits():
     """Update rate limit configuration."""
@@ -4894,14 +4969,14 @@ def transcribe_space(space_id):
         if request.is_json:
             # API request with JSON body
             language = request.json.get('language', 'en')
-            model = request.json.get('model', 'base')
+            model = request.json.get('model', 'tiny')
             detect_language = request.json.get('detect_language', False)
             translate_to = request.json.get('translate_to')
             overwrite = request.json.get('overwrite', True)
         else:
             # Form submission
             language = request.form.get('language', 'en')
-            model = request.form.get('model', 'base')
+            model = request.form.get('model', 'tiny')
             detect_language = request.form.get('detect_language', 'false') == 'true'
             translate_to = request.form.get('translate_to')
             overwrite = request.form.get('overwrite', 'true') == 'true'
