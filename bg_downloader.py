@@ -17,19 +17,20 @@ from typing import Dict, List, Optional, Any
 import mysql.connector
 from mysql.connector import Error
 
-# Ensure we're using the virtual environment
-VENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'venv')
-VENV_ACTIVATE = os.path.join(VENV_PATH, 'bin', 'activate')
-
-# If this script is not run with the virtual environment Python,
-# try to re-execute it with the virtual environment Python
-if not hasattr(sys, 'real_prefix') and not sys.prefix == VENV_PATH:
+# Check if we're already running in a virtual environment
+# If the script is executed with venv Python (as systemd does), skip venv detection
+if hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix):
+    # Already in venv, continue
+    pass
+else:
+    # Try to find and use virtual environment
+    VENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'venv')
     if os.path.exists(os.path.join(VENV_PATH, 'bin', 'python')):
         venv_python = os.path.join(VENV_PATH, 'bin', 'python')
         os.execl(venv_python, venv_python, *sys.argv)
     else:
         print(f"Warning: Virtual environment not found at {VENV_PATH}")
-        print("Trying to continue with system Python...")
+        print("Continuing with current Python...")
 
 # Import components
 try:
