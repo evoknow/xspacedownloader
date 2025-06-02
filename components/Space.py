@@ -2911,7 +2911,7 @@ class Space:
         
         # Create file handler for tag.log if it doesn't exist
         if not any(isinstance(h, logging.FileHandler) and h.baseFilename.endswith('tag.log') for h in tag_logger.handlers):
-            tag_handler = logging.FileHandler('tag.log')
+            tag_handler = logging.FileHandler('logs/tag.log')
             tag_handler.setLevel(logging.DEBUG)
             tag_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
             tag_handler.setFormatter(tag_formatter)
