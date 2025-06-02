@@ -4636,7 +4636,7 @@ def admin_re_transcribe(space_id):
         
         # Check if space exists and has audio file
         cursor.execute("""
-            SELECT space_id, title, audio_file_path
+            SELECT space_id, filename, format, status
             FROM spaces 
             WHERE space_id = %s
         """, (space_id,))
@@ -4647,12 +4647,15 @@ def admin_re_transcribe(space_id):
         if not space_data:
             return jsonify({'error': 'Space not found'}), 404
         
-        if not space_data['audio_file_path']:
+        if not space_data['filename']:
             return jsonify({'error': 'No audio file available for this space'}), 400
+        
+        if space_data['status'] != 'completed':
+            return jsonify({'error': f'Space download not completed (status: {space_data["status"]})'}), 400
         
         # Check if audio file exists
         import os
-        audio_path = os.path.join('downloads', space_data['audio_file_path'])
+        audio_path = os.path.join('downloads', space_data['filename'])
         if not os.path.exists(audio_path):
             return jsonify({'error': 'Audio file not found on disk'}), 400
         
