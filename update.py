@@ -34,7 +34,7 @@ from datetime import datetime
 class UpdateManager:
     def __init__(self, args):
         self.dry_run = args.dry_run
-        self.restart_services = args.restart_services
+        self.restart_services_enabled = args.restart_services
         self.backup_enabled = args.backup
         self.force = args.force
         
@@ -257,7 +257,7 @@ class UpdateManager:
         print("XSpace Downloader Update Script")
         print("==============================")
         print(f"Dry Run: {self.dry_run}")
-        print(f"Restart Services: {self.restart_services}")
+        print(f"Restart Services: {self.restart_services_enabled}")
         print(f"Create Backup: {self.backup_enabled}")
         
         if not self.dry_run:
@@ -280,10 +280,11 @@ class UpdateManager:
         self.sync_code()
         
         # Restart services if requested
-        self.restart_services()
+        if self.restart_services_enabled:
+            self.restart_services()
         
         print("\n=== Update completed successfully! ===")
-        if not self.restart_services:
+        if not self.restart_services_enabled:
             print("\nRemember to restart services if needed:")
             print("  sudo systemctl restart xspacedownloader-gunicorn")
             print("  sudo systemctl restart xspacedownloader-bg")
