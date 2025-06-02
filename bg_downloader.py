@@ -817,8 +817,15 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                 print(f"[DEBUG DOWNLOAD] Part file will be: {output_file}.part")
                 print(f"[DEBUG DOWNLOAD] Space URL: {space_url}")
                 
-                # Check if yt-dlp is installed
-                yt_dlp_path = shutil.which('yt-dlp')
+                # Check if yt-dlp is installed, preferring venv version
+                # First try to find yt-dlp in the same directory as the Python executable
+                python_dir = os.path.dirname(sys.executable)
+                venv_yt_dlp = os.path.join(python_dir, "yt-dlp")
+                
+                if os.path.exists(venv_yt_dlp):
+                    yt_dlp_path = venv_yt_dlp
+                else:
+                    yt_dlp_path = shutil.which('yt-dlp')
                 if not yt_dlp_path:
                     print("yt-dlp not found in PATH. Attempting to install...")
                     subprocess.call([sys.executable, "-m", "pip", "install", "yt-dlp"])

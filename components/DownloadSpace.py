@@ -80,15 +80,21 @@ class DownloadSpace:
     DEFAULT_DOWNLOAD_DIR = "downloads"
     SUPPORTED_FORMATS = ["mp3", "wav", "m4a", "ogg", "flac"]
     
-    # Get path to yt-dlp in virtual environment if available
-    if hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix):
+    # Get path to yt-dlp in virtual environment
+    # First try to find yt-dlp in the same directory as the Python executable
+    python_dir = os.path.dirname(sys.executable)
+    venv_yt_dlp = os.path.join(python_dir, "yt-dlp")
+    
+    if os.path.exists(venv_yt_dlp):
+        YT_DLP_BINARY = venv_yt_dlp
+    elif hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix):
         # We're in a virtual environment
         if sys.platform == 'win32':
             YT_DLP_BINARY = os.path.join(sys.prefix, "Scripts", "yt-dlp.exe")
         else:
             YT_DLP_BINARY = os.path.join(sys.prefix, "bin", "yt-dlp")
     else:
-        # Try to use yt-dlp from PATH
+        # Fall back to PATH
         YT_DLP_BINARY = "yt-dlp"
     
     def __init__(self, db_connection=None, download_dir=None):
