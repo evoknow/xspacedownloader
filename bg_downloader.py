@@ -607,6 +607,12 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                             INSERT INTO spaces
                             (space_id, space_url, filename, status, download_cnt, format, created_at, updated_at, downloaded_at)
                             VALUES (%s, %s, %s, 'completed', 0, %s, NOW(), NOW(), NOW())
+                            ON DUPLICATE KEY UPDATE
+                            status = 'completed',
+                            filename = VALUES(filename),
+                            format = VALUES(format),
+                            updated_at = NOW(),
+                            downloaded_at = NOW()
                             """
                             space_url = f"https://x.com/i/spaces/{space_id}"
                             filename = f"{space_id}.{file_type}"
@@ -728,6 +734,10 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                                     INSERT INTO spaces 
                                     (space_id, space_url, filename, status, download_cnt, created_at, updated_at)
                                     VALUES (%s, %s, %s, 'pending', 0, NOW(), NOW())
+                                    ON DUPLICATE KEY UPDATE
+                                    status = VALUES(status),
+                                    filename = VALUES(filename),
+                                    updated_at = NOW()
                                     """
                                     filename = f"{space_id}.{file_type}"
                                     cursor.execute(insert_query, (space_id, space_url, filename))
@@ -2182,6 +2192,12 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                                     INSERT INTO spaces 
                                     (space_id, space_url, filename, status, download_cnt, format, created_at, updated_at, downloaded_at)
                                     VALUES (%s, %s, %s, 'completed', 0, %s, NOW(), NOW(), NOW())
+                                    ON DUPLICATE KEY UPDATE
+                                    status = 'completed',
+                                    filename = VALUES(filename),
+                                    format = VALUES(format),
+                                    updated_at = NOW(),
+                                    downloaded_at = NOW()
                                     """
                                     # Use space details URL if available or construct one
                                     space_url = space_details.get('space_url') if space_details else f"https://x.com/i/spaces/{space_id}"

@@ -401,13 +401,19 @@ def all_spaces():
         # Get Space component
         space = get_space_component()
         
-        # Get all completed spaces directly from spaces table
+        # Get all completed spaces directly from spaces table - only latest entry per space_id
         cursor = space.connection.cursor(dictionary=True)
         query = """
-            SELECT * FROM spaces 
-            WHERE status = 'completed'
-            ORDER BY downloaded_at DESC, 
-                     (COALESCE(playback_cnt, 0) * 1.5 + COALESCE(download_cnt, 0)) DESC
+            SELECT s.* FROM spaces s
+            INNER JOIN (
+                SELECT space_id, MAX(id) as max_id 
+                FROM spaces 
+                WHERE status = 'completed'
+                GROUP BY space_id
+            ) latest ON s.id = latest.max_id
+            WHERE s.status = 'completed'
+            ORDER BY s.downloaded_at DESC, 
+                     (COALESCE(s.playback_cnt, 0) * 1.5 + COALESCE(s.download_cnt, 0)) DESC
         """
         cursor.execute(query)
         completed_spaces = cursor.fetchall()
@@ -4483,11 +4489,16 @@ def admin_get_spaces():
         space = get_space_component()
         cursor = space.connection.cursor(dictionary=True)
         
-        # Build query
+        # Build query - get only the latest entry per space_id to avoid duplicates
         query = """
             SELECT s.*, s.title, sm.host_handle, sm.host,
                    u.email as user_email
             FROM spaces s
+            INNER JOIN (
+                SELECT space_id, MAX(id) as max_id 
+                FROM spaces 
+                GROUP BY space_id
+            ) latest ON s.id = latest.max_id
             LEFT JOIN space_metadata sm ON s.space_id = sm.space_id
             LEFT JOIN users u ON s.user_id = u.id
         """
