@@ -240,7 +240,6 @@ class UpdateManager:
         
         services = [
             'xspacedownloader-gunicorn',
-            'xspacedownloader-bg', 
             'xspacedownloader-transcribe'
         ]
         
@@ -254,6 +253,44 @@ class UpdateManager:
                 print(f"✓ {service} is running")
             else:
                 print(f"✗ {service} failed to start")
+        
+        # Handle bg_downloader manually
+        print("\n=== Restarting background downloader (manual) ===")
+        
+        # Kill existing bg_downloader processes
+        print("Stopping existing bg_downloader processes...")
+        self.run_command(['pkill', '-f', 'bg_downloader.py'], check=False)
+        
+        # Wait a moment for processes to stop
+        import time
+        time.sleep(2)
+        
+        # Start bg_downloader manually
+        print("Starting bg_downloader...")
+        bg_cmd = [
+            'sudo', '-u', self.nginx_user, 'nohup',
+            f'{self.production_dir}/venv/bin/python',
+            f'{self.production_dir}/bg_downloader.py'
+        ]
+        
+        if self.dry_run:
+            print(f"[DRY RUN] Would execute: {' '.join(bg_cmd)} > /dev/null 2>&1 &")
+        else:
+            # Use subprocess to start in background
+            subprocess.Popen(
+                bg_cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                cwd=self.production_dir
+            )
+            
+            # Check if it started
+            time.sleep(3)
+            result = self.run_command(['pgrep', '-f', 'bg_downloader.py'], check=False)
+            if result and result.stdout.strip():
+                print(f"✓ bg_downloader is running (PID: {result.stdout.strip()})")
+            else:
+                print("✗ bg_downloader failed to start")
     
     def update(self):
         """Run the complete update process."""

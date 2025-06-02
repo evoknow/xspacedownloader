@@ -247,36 +247,13 @@ ReadWritePaths={self.production_dir}/downloads {self.production_dir}/logs {self.
 WantedBy=multi-user.target
 """
 
-        # Background downloader service
-        bg_service = f"""[Unit]
-Description=XSpace Downloader Background Downloader
-After=network.target mysql.service xspacedownloader.service
-Wants=mysql.service
-
-[Service]
-Type=simple
-User={self.nginx_user}
-Group={self.nginx_user}
-WorkingDirectory={self.production_dir}
-Environment="PATH={self.production_dir}/venv/bin:/usr/local/bin:/usr/bin:/bin"
-Environment="PYTHONPATH={self.production_dir}"
-ExecStart={self.production_dir}/venv/bin/python {self.production_dir}/bg_downloader.py
-Restart=always
-RestartSec=30
-
-# Security settings
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths={self.production_dir}/downloads {self.production_dir}/logs
-
-# Logging
-StandardOutput=append:{self.production_dir}/logs/bg-downloader.log
-StandardError=append:{self.production_dir}/logs/bg-downloader-error.log
-
-[Install]
-WantedBy=multi-user.target
+        # Background downloader - DISABLED (run manually instead)
+        # The bg_downloader has issues with systemd, run manually with:
+        # sudo -u {self.nginx_user} nohup {self.production_dir}/venv/bin/python {self.production_dir}/bg_downloader.py > /dev/null 2>&1 &
+        bg_service = f"""# Background downloader service - DISABLED
+# Due to issues with systemd execution, run manually instead:
+# cd {self.production_dir}
+# sudo -u {self.nginx_user} nohup {self.production_dir}/venv/bin/python {self.production_dir}/bg_downloader.py > /dev/null 2>&1 &
 """
 
         # Transcriber service
@@ -314,7 +291,7 @@ WantedBy=multi-user.target
         services = {
             "xspacedownloader.service": app_service,
             "xspacedownloader-gunicorn.service": gunicorn_service,
-            "xspacedownloader-bg.service": bg_service,
+            # "xspacedownloader-bg.service": bg_service,  # DISABLED - run manually
             "xspacedownloader-transcribe.service": transcribe_service
         }
         
@@ -542,11 +519,13 @@ SENDGRID_API_KEY=
         print("\n7. Enable and start services:")
         print("   sudo systemctl daemon-reload")
         print("   sudo systemctl enable xspacedownloader-gunicorn")
-        print("   sudo systemctl enable xspacedownloader-bg")
         print("   sudo systemctl enable xspacedownloader-transcribe")
         print("   sudo systemctl start xspacedownloader-gunicorn")
-        print("   sudo systemctl start xspacedownloader-bg")
         print("   sudo systemctl start xspacedownloader-transcribe")
+        print("\n7b. Start background downloader manually:")
+        print(f"   cd {self.production_dir}")
+        print(f"   sudo -u {self.nginx_user} nohup {self.production_dir}/venv/bin/python {self.production_dir}/bg_downloader.py > /dev/null 2>&1 &")
+        print("   # Check if running: ps auxww | grep bg_downloader")
         print("\n8. Setup SSL certificate:")
         print("   sudo certbot --nginx -d {} -d www.{}".format(self.domain, self.domain))
         print("\n9. Use update.py script for future deployments:")
