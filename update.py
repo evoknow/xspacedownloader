@@ -35,7 +35,7 @@ class UpdateManager:
     def __init__(self, args):
         self.dry_run = args.dry_run
         self.restart_services = args.restart_services
-        self.create_backup = args.backup
+        self.backup_enabled = args.backup
         self.force = args.force
         
         # Get current directory (should be the git repo)
@@ -258,7 +258,7 @@ class UpdateManager:
         print("==============================")
         print(f"Dry Run: {self.dry_run}")
         print(f"Restart Services: {self.restart_services}")
-        print(f"Create Backup: {self.create_backup}")
+        print(f"Create Backup: {self.backup_enabled}")
         
         if not self.dry_run:
             # Check if running as root
@@ -270,7 +270,8 @@ class UpdateManager:
         self.check_git_status()
         
         # Create backup if requested
-        self.create_backup()
+        if self.backup_enabled:
+            self.create_backup()
         
         # Pull latest code
         self.pull_latest_code()
