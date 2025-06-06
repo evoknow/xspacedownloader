@@ -255,6 +255,54 @@
         background-color: #4caf50 !important;
         color: white !important;
     }
+    
+    /* Tag management styling */
+    .tag-item {
+        position: relative;
+        display: inline-block;
+    }
+    
+    .tag-delete-btn {
+        z-index: 10;
+        transition: opacity 0.2s ease;
+        line-height: 1;
+        padding: 2px !important;
+        min-width: unset;
+    }
+    
+    .tag-delete-btn:hover {
+        background-color: #dc3545 !important;
+        border-color: #dc3545 !important;
+    }
+    
+    .tag-link {
+        transition: padding-right 0.2s ease;
+    }
+    
+    .tag-item:hover .tag-link {
+        padding-right: 1.5rem !important;
+    }
+    
+    /* Ensure proper spacing for tag container */
+    #tags-container {
+        min-height: 2rem;
+    }
+    
+    /* Prevent text selection on tag items during interaction */
+    .tag-item {
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+    }
+    
+    /* Make sure tag links are still selectable for copying */
+    .tag-link {
+        -webkit-user-select: text;
+        -moz-user-select: text;
+        -ms-user-select: text;
+        user-select: text;
+    }
 </style>
 {% endblock %}
 
@@ -268,9 +316,15 @@
                         <button id="transcribe-btn" class="btn btn-info btn-sm" {% if space.transcripts %}data-has-transcript="true"{% endif %} {% if has_pending_transcript_job %}disabled{% endif %} data-bs-toggle="tooltip" data-bs-placement="top" title="{% if has_pending_transcript_job %}Transcription already in progress{% else %}Generate transcript from audio{% endif %}">
                             <i class="bi bi-mic"></i> <span class="d-none d-sm-inline">{% if has_pending_transcript_job %}Transcribing...{% else %}Transcribe{% endif %}</span>
                         </button>
-                        <a href="/download/{{ space.space_id }}?attachment=1" class="btn btn-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Download MP3">
-                            <i class="bi bi-download"></i> <span class="d-none d-sm-inline">Download</span>
-                        </a>
+                        <!-- Smart download button - will be populated by JavaScript -->
+                        <div id="download-container">
+                            <a href="/download/{{ space.space_id }}?attachment=1" class="btn btn-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Download file">
+                                <i class="bi bi-download"></i> <span class="d-none d-sm-inline">Download</span>
+                            </a>
+                        </div>
+                        <button id="generate-video-btn" class="btn btn-secondary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Generate MP4 video with waveform visualization">
+                            <i class="bi bi-camera-video"></i> <span class="d-none d-sm-inline">Generate Video</span>
+                        </button>
                         {% if can_edit_space %}
                         <button id="trim-btn" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#trimModal" data-bs-toggle="tooltip" data-bs-placement="top" title="Trim audio file">
                             <i class="bi bi-scissors"></i> <span class="d-none d-sm-inline">Trim</span>
@@ -772,27 +826,44 @@
 </div>
 
 <!-- Tags Section -->
-{% if tags %}
 <div class="row mt-4">
     <div class="col-md-12">
         <div class="card">
-            <div class="card-header">
-                <h4>Tags</h4>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">Tags</h4>
+                {% if can_edit_space %}
+                <button class="btn btn-sm btn-outline-primary" onclick="showAddTagModal()">
+                    <i class="bi bi-plus"></i> Add Tag
+                </button>
+                {% endif %}
             </div>
             <div class="card-body">
-                <div class="d-flex flex-wrap gap-2">
-                    {% for tag in tags %}
-                    <a href="{{ url_for('spaces_by_tag', tag_slug=tag.tag_slug) }}" 
-                       class="badge bg-secondary text-decoration-none fs-6 px-3 py-2">
-                        <i class="bi bi-tag"></i> {{ tag.tag_name }}
-                    </a>
-                    {% endfor %}
+                <div id="tags-container" class="d-flex flex-wrap gap-2">
+                    {% if tags %}
+                        {% for tag in tags %}
+                        <div class="tag-item position-relative" data-tag-id="{{ tag.id }}" data-tag-name="{{ tag.tag_name }}">
+                            <a href="{{ url_for('spaces_by_tag', tag_slug=tag.tag_slug) }}" 
+                               class="badge bg-secondary text-decoration-none fs-6 px-3 py-2 tag-link">
+                                <i class="bi bi-tag"></i> {{ tag.tag_name }}
+                            </a>
+                            {% if can_edit_space %}
+                            <button class="btn btn-sm btn-danger tag-delete-btn position-absolute top-0 end-0 translate-middle rounded-circle p-1" 
+                                    style="display: none; width: 20px; height: 20px; font-size: 10px;"
+                                    onclick="confirmRemoveTag({{ tag.id }}, '{{ tag.tag_name }}', event)"
+                                    title="Remove tag">
+                                <i class="bi bi-x"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted mb-0">No tags yet. {% if can_edit_space %}Click "Add Tag" to add some!{% endif %}</p>
+                    {% endif %}
                 </div>
             </div>
         </div>
     </div>
 </div>
-{% endif %}
 
 {% if can_edit_space %}
 <!-- Trim Modal -->
@@ -908,6 +979,57 @@
         </div>
     </div>
 </div>
+
+<!-- Add Tag Modal -->
+{% if can_edit_space %}
+<div class="modal fade" id="addTagModal" tabindex="-1" aria-labelledby="addTagModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addTagModalLabel">Add Tag</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addTagForm">
+                    <div class="mb-3">
+                        <label for="tag-name" class="form-label">Tag Name</label>
+                        <input type="text" class="form-control" id="tag-name" name="tag_name" 
+                               placeholder="Enter tag name..." maxlength="50" required>
+                        <div class="form-text">
+                            Tags help categorize and make spaces easier to find. Use descriptive keywords.
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="addTag()">Add Tag</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Confirm Remove Tag Modal -->
+<div class="modal fade" id="confirmRemoveTagModal" tabindex="-1" aria-labelledby="confirmRemoveTagModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="confirmRemoveTagModalLabel">Remove Tag</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to remove the tag "<span id="tag-to-remove-name"></span>" from this space?</p>
+                <p class="text-muted small">This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="removeTag()">Remove Tag</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 {% endblock %}
 
 
@@ -1808,9 +1930,9 @@
                         fullTimecode: `${timecode} `
                     });
                     
-                    // Add text to translation batch with segment markers
+                    // Build text for translation preserving original timecodes
                     if (text) {
-                        textToTranslate += `###SEGMENT_${segments.length - 1}### ${text}\n`;
+                        textToTranslate += `${timecode} ${text}\n`;
                     }
                 }
             } else {
@@ -1846,7 +1968,8 @@
                             text: textToTranslate,
                             source_lang: sourceLang,
                             target_lang: targetLang,
-                            space_id: spaceId
+                            space_id: spaceId,
+                            include_timecodes: hasTimecodes
                         })
                     });
                 })
@@ -1928,30 +2051,13 @@
                             </div>
                         `;
                     } else {
-                        // Reassemble translated text with preserved timecodes
+                        // Use translated text directly - backend should preserve timecodes
                         let finalTranslatedText = data.translated_text;
                         
-                        if (hasTimecodes && segments.length > 0) {
-                            // Parse the translated segments
-                            const translatedLines = data.translated_text.split('\n');
-                            let reassembledText = '';
-                            
-                            translatedLines.forEach(line => {
-                                const segmentMatch = line.match(/###SEGMENT_(\d+)###\s*(.*)/);
-                                if (segmentMatch) {
-                                    const segmentIndex = parseInt(segmentMatch[1]);
-                                    const translatedText = segmentMatch[2].trim();
-                                    
-                                    if (segments[segmentIndex]) {
-                                        reassembledText += `${segments[segmentIndex].timecode} ${translatedText}\n`;
-                                    }
-                                } else if (line.trim()) {
-                                    // If segment marker is lost, just add the line
-                                    reassembledText += line.trim() + '\n';
-                                }
-                            });
-                            
-                            finalTranslatedText = reassembledText.trim();
+                        // Clean up any residual segment markers (backup safety)
+                        if (finalTranslatedText.includes('###SEGMENT_')) {
+                            finalTranslatedText = finalTranslatedText.replace(/###SEGMENT_\d+###\s*/g, '');
+                            console.log('Cleaned up residual segment markers');
                         }
                         
                         // Format and display the translated text with timecode support
@@ -3499,6 +3605,84 @@
             });
         }
     });
+
+    // Smart download button functionality
+    function initializeSmartDownloadButton() {
+        const downloadContainer = document.getElementById('download-container');
+        const spaceId = '{{ space.space_id }}';
+        
+        // Fetch available download formats
+        fetch(`/api/spaces/${spaceId}/available-formats`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.formats.length > 0) {
+                    updateDownloadButton(data.formats);
+                } else {
+                    console.log('No download formats available');
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching download formats:', error);
+            });
+    }
+
+    function updateDownloadButton(formats) {
+        const downloadContainer = document.getElementById('download-container');
+        const spaceId = '{{ space.space_id }}';
+        
+        if (formats.length === 1) {
+            // Single format - show simple button
+            const format = formats[0];
+            downloadContainer.innerHTML = `
+                <a href="/download/${spaceId}?attachment=1&format=${format.format}" 
+                   class="btn btn-primary btn-sm" 
+                   data-bs-toggle="tooltip" 
+                   data-bs-placement="top" 
+                   title="Download ${format.name} (${format.size_formatted})">
+                    <i class="${format.icon}"></i> <span class="d-none d-sm-inline">Download</span>
+                </a>
+            `;
+        } else {
+            // Multiple formats - show dropdown
+            let dropdownItems = '';
+            formats.forEach(format => {
+                dropdownItems += `
+                    <li>
+                        <a class="dropdown-item" href="/download/${spaceId}?attachment=1&format=${format.format}">
+                            <i class="${format.icon} me-2"></i>${format.name} 
+                            <small class="text-muted">(${format.size_formatted})</small>
+                        </a>
+                    </li>
+                `;
+            });
+            
+            downloadContainer.innerHTML = `
+                <div class="btn-group">
+                    <a href="/download/${spaceId}?attachment=1&format=${formats[0].format}" 
+                       class="btn btn-primary btn-sm">
+                        <i class="bi bi-download"></i> <span class="d-none d-sm-inline">Download</span>
+                    </a>
+                    <button type="button" 
+                            class="btn btn-primary btn-sm dropdown-toggle dropdown-toggle-split" 
+                            data-bs-toggle="dropdown" 
+                            aria-expanded="false"
+                            data-bs-auto-close="true">
+                        <span class="visually-hidden">Toggle Dropdown</span>
+                    </button>
+                    <ul class="dropdown-menu">
+                        ${dropdownItems}
+                    </ul>
+                </div>
+            `;
+        }
+        
+        // Re-initialize tooltips for new elements
+        const newTooltips = downloadContainer.querySelectorAll('[data-bs-toggle="tooltip"]');
+        newTooltips.forEach(element => {
+            new bootstrap.Tooltip(element);
+        });
+    }
+
 </script>
 
 <!-- Load SummerNote JS -->
@@ -4285,6 +4469,335 @@
                 });
             });
         }
+        
+        // Initialize smart download button
+        initializeSmartDownloadButton();
+        
+        // Initialize video generation button
+        initializeVideoGeneration();
+        
+        // Video generation functionality
+        let currentVideoPollingInterval = null;
+        
+        function initializeVideoGeneration() {
+            const generateBtn = document.getElementById('generate-video-btn');
+            const spaceId = '{{ space.space_id }}';
+            
+            if (generateBtn) {
+                generateBtn.addEventListener('click', function() {
+                    generateVideo(spaceId);
+                });
+            }
+        }
+
+        function generateVideo(spaceId) {
+            const generateBtn = document.getElementById('generate-video-btn');
+            const originalHTML = generateBtn.innerHTML;
+            
+            // Clear any existing polling interval
+            if (currentVideoPollingInterval) {
+                clearInterval(currentVideoPollingInterval);
+                currentVideoPollingInterval = null;
+            }
+            
+            // Disable button and show loading
+            generateBtn.disabled = true;
+            generateBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> <span class="d-none d-sm-inline">Generating...</span>';
+            
+            fetch(`/api/spaces/${spaceId}/generate-video`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Video generation started! This may take a few minutes.', 'success');
+                    
+                    // Start polling for completion
+                    pollVideoStatus(spaceId, data.job_id);
+                } else {
+                    showToast(`Error: ${data.error}`, 'danger');
+                    generateBtn.disabled = false;
+                    generateBtn.innerHTML = originalHTML;
+                }
+            })
+            .catch(error => {
+                console.error('Error generating video:', error);
+                showToast('Error starting video generation', 'danger');
+                generateBtn.disabled = false;
+                generateBtn.innerHTML = originalHTML;
+            });
+        }
+
+        function pollVideoStatus(spaceId, jobId) {
+            const generateBtn = document.getElementById('generate-video-btn');
+            
+            // Clear any existing interval
+            if (currentVideoPollingInterval) {
+                clearInterval(currentVideoPollingInterval);
+            }
+            
+            currentVideoPollingInterval = setInterval(() => {
+                fetch(`/api/spaces/${spaceId}/video-status/${jobId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            const job = data.job;
+                            
+                            if (job.status === 'completed') {
+                                clearInterval(currentVideoPollingInterval);
+                                currentVideoPollingInterval = null;
+                                showToast('Video generated successfully!', 'success');
+                                
+                                // Update button to show download option
+                                generateBtn.innerHTML = '<i class="bi bi-camera-video-fill"></i> <span class="d-none d-sm-inline">Video Ready</span>';
+                                generateBtn.disabled = false;
+                                generateBtn.className = 'btn btn-success btn-sm';
+                                generateBtn.title = 'Video is ready! Use the download button to get your MP4.';
+                                
+                                // Force refresh download button to show MP4 option
+                                setTimeout(() => {
+                                    initializeSmartDownloadButton();
+                                }, 500);
+                                
+                            } else if (job.status === 'failed') {
+                                clearInterval(currentVideoPollingInterval);
+                                currentVideoPollingInterval = null;
+                                showToast(`Video generation failed: ${job.error || 'Unknown error'}`, 'danger');
+                                
+                                // Reset button
+                                generateBtn.disabled = false;
+                                generateBtn.innerHTML = '<i class="bi bi-camera-video"></i> <span class="d-none d-sm-inline">Generate Video</span>';
+                                generateBtn.className = 'btn btn-secondary btn-sm';
+                                
+                            } else if (job.status === 'processing') {
+                                // Update button with progress
+                                const progress = job.progress || 0;
+                                generateBtn.innerHTML = `<i class="bi bi-hourglass-split"></i> <span class="d-none d-sm-inline">${progress}%</span>`;
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error polling video status:', error);
+                    });
+            }, 2000); // Poll every 2 seconds
+            
+            // Stop polling after 10 minutes
+            setTimeout(() => {
+                if (currentVideoPollingInterval) {
+                    clearInterval(currentVideoPollingInterval);
+                    currentVideoPollingInterval = null;
+                }
+            }, 600000);
+        }
     });
+
+    // Tag Management Functions
+    {% if can_edit_space %}
+    
+    // Show/hide delete buttons on hover
+    document.addEventListener('DOMContentLoaded', function() {
+        const tagItems = document.querySelectorAll('.tag-item');
+        
+        tagItems.forEach(item => {
+            const deleteBtn = item.querySelector('.tag-delete-btn');
+            if (deleteBtn) {
+                item.addEventListener('mouseenter', function() {
+                    deleteBtn.style.display = 'block';
+                });
+                
+                item.addEventListener('mouseleave', function() {
+                    deleteBtn.style.display = 'none';
+                });
+            }
+        });
+    });
+    
+    // Variables for tag removal
+    let tagToRemoveId = null;
+    let tagToRemoveName = null;
+    
+    // Show add tag modal
+    function showAddTagModal() {
+        const modal = new bootstrap.Modal(document.getElementById('addTagModal'));
+        document.getElementById('tag-name').value = '';
+        modal.show();
+        
+        // Focus on input when modal is shown
+        document.getElementById('addTagModal').addEventListener('shown.bs.modal', function() {
+            document.getElementById('tag-name').focus();
+        });
+    }
+    
+    // Add tag function
+    function addTag() {
+        const tagName = document.getElementById('tag-name').value.trim();
+        
+        if (!tagName) {
+            showToast('Please enter a tag name', 'warning');
+            return;
+        }
+        
+        if (tagName.length > 50) {
+            showToast('Tag name must be 50 characters or less', 'warning');
+            return;
+        }
+        
+        // Check if tag already exists
+        const existingTags = Array.from(document.querySelectorAll('.tag-item')).map(item => 
+            item.getAttribute('data-tag-name').toLowerCase()
+        );
+        
+        if (existingTags.includes(tagName.toLowerCase())) {
+            showToast('This tag already exists on this space', 'warning');
+            return;
+        }
+        
+        // Send request to add tag
+        fetch(`/api/spaces/{{ space.space_id }}/tags`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                tag_name: tagName
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Add tag to UI
+                addTagToUI(data.tag);
+                
+                // Close modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById('addTagModal'));
+                modal.hide();
+                
+                showToast('Tag added successfully', 'success');
+            } else {
+                showToast(data.error || 'Failed to add tag', 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error adding tag:', error);
+            showToast('Error adding tag', 'danger');
+        });
+    }
+    
+    // Add tag to UI
+    function addTagToUI(tag) {
+        const container = document.getElementById('tags-container');
+        
+        // Remove "no tags" message if it exists
+        const noTagsMsg = container.querySelector('.text-muted');
+        if (noTagsMsg) {
+            noTagsMsg.remove();
+        }
+        
+        // Create new tag element
+        const tagElement = document.createElement('div');
+        tagElement.className = 'tag-item position-relative';
+        tagElement.setAttribute('data-tag-id', tag.id);
+        tagElement.setAttribute('data-tag-name', tag.tag_name);
+        
+        tagElement.innerHTML = `
+            <a href="/spaces/tag/${tag.tag_slug}" 
+               class="badge bg-secondary text-decoration-none fs-6 px-3 py-2 tag-link">
+                <i class="bi bi-tag"></i> ${tag.tag_name}
+            </a>
+            <button class="btn btn-sm btn-danger tag-delete-btn position-absolute top-0 end-0 translate-middle rounded-circle p-1" 
+                    style="display: none; width: 20px; height: 20px; font-size: 10px;"
+                    onclick="confirmRemoveTag(${tag.id}, '${tag.tag_name}', event)"
+                    title="Remove tag">
+                <i class="bi bi-x"></i>
+            </button>
+        `;
+        
+        container.appendChild(tagElement);
+        
+        // Add hover events to new tag
+        const deleteBtn = tagElement.querySelector('.tag-delete-btn');
+        tagElement.addEventListener('mouseenter', function() {
+            deleteBtn.style.display = 'block';
+        });
+        
+        tagElement.addEventListener('mouseleave', function() {
+            deleteBtn.style.display = 'none';
+        });
+    }
+    
+    // Show confirmation modal for tag removal
+    function confirmRemoveTag(tagId, tagName, event) {
+        event.preventDefault();
+        event.stopPropagation();
+        
+        tagToRemoveId = tagId;
+        tagToRemoveName = tagName;
+        
+        document.getElementById('tag-to-remove-name').textContent = tagName;
+        
+        const modal = new bootstrap.Modal(document.getElementById('confirmRemoveTagModal'));
+        modal.show();
+    }
+    
+    // Remove tag function
+    function removeTag() {
+        if (!tagToRemoveId) {
+            return;
+        }
+        
+        // Send request to remove tag
+        fetch(`/api/spaces/{{ space.space_id }}/tags/${tagToRemoveId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Remove tag from UI
+                const tagElement = document.querySelector(`[data-tag-id="${tagToRemoveId}"]`);
+                if (tagElement) {
+                    tagElement.remove();
+                }
+                
+                // Check if no tags left
+                const container = document.getElementById('tags-container');
+                const remainingTags = container.querySelectorAll('.tag-item');
+                if (remainingTags.length === 0) {
+                    container.innerHTML = '<p class="text-muted mb-0">No tags yet. Click "Add Tag" to add some!</p>';
+                }
+                
+                // Close modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById('confirmRemoveTagModal'));
+                modal.hide();
+                
+                showToast('Tag removed successfully', 'success');
+            } else {
+                showToast(data.error || 'Failed to remove tag', 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error removing tag:', error);
+            showToast('Error removing tag', 'danger');
+        })
+        .finally(() => {
+            tagToRemoveId = null;
+            tagToRemoveName = null;
+        });
+    }
+    
+    // Handle Enter key in add tag modal
+    document.getElementById('tag-name').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            addTag();
+        }
+    });
+    
+    {% endif %}
 </script>
 {% endblock %}

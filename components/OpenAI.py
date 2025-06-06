@@ -64,6 +64,15 @@ class OpenAI(AIProvider):
             timeout = max(120, 120 + (max_tokens / 100))  # Add 1 second per 100 tokens
             
             logger.info(f"Making request to OpenAI API with model {self.model}, timeout={timeout}s")
+            logger.info(f"========== OPENAI API PAYLOAD ==========")
+            logger.info(f"Model: {payload['model']}")
+            logger.info(f"Max tokens: {payload['max_tokens']}")
+            logger.info(f"Temperature: {payload['temperature']}")
+            logger.info(f"Messages count: {len(payload['messages'])}")
+            for i, msg in enumerate(payload['messages']):
+                logger.info(f"Message {i+1} ({msg['role']}): {msg['content'][:200]}{'...' if len(msg['content']) > 200 else ''}")
+            logger.info(f"=======================================")
+            
             response = self.session.post(self.endpoint, json=payload, timeout=timeout)
             
             if response.status_code != 200:
@@ -87,6 +96,10 @@ class OpenAI(AIProvider):
             if 'choices' in result and len(result['choices']) > 0:
                 content = result['choices'][0]['message']['content'].strip()
                 logger.info("Successfully received response from OpenAI")
+                logger.info(f"========== OPENAI API RESPONSE ==========")
+                logger.info(f"Response content: {content}")
+                logger.info(f"Response length: {len(content)} characters")
+                logger.info(f"========================================")
                 return True, content
             else:
                 logger.error(f"Unexpected OpenAI response format: {result}")
@@ -122,6 +135,31 @@ class OpenAI(AIProvider):
         
         if from_lang == to_lang:
             return True, content
+        
+        # Check if content has timecodes that need to be preserved
+        import re
+        timecode_pattern = r'\[(\d{2}):(\d{2}):(\d{2})\]'
+        has_timecodes = bool(re.search(timecode_pattern, content))
+        
+        logger.info(f"========== OPENAI TRANSLATION DEBUG ==========")
+        logger.info(f"From: {from_lang} -> To: {to_lang}")
+        logger.info(f"Content length: {len(content)} chars")
+        logger.info(f"Content preview: {content[:300]}...")
+        logger.info(f"Timecode detection: has_timecodes={has_timecodes}")
+        
+        if has_timecodes:
+            logger.info("✅ USING TIMECODE-PRESERVING TRANSLATION")
+            result = self._translate_with_timecodes(from_lang, to_lang, content)
+            logger.info(f"========== TRANSLATION RESULT ==========")
+            if result[0]:  # Success
+                logger.info(f"Translation successful, length: {len(result[1]) if result[1] else 0}")
+                logger.info(f"Result preview: {result[1][:300] if result[1] else 'None'}...")
+            else:
+                logger.error(f"Translation failed: {result[1]}")
+            logger.info(f"======================================")
+            return result
+        else:
+            logger.info("❌ USING STANDARD TRANSLATION (no timecodes detected)")
         
         # Map language codes to full names for better results
         lang_map = {
@@ -294,6 +332,155 @@ class OpenAI(AIProvider):
                 return self._retry_translation_with_strict_prompts(content, from_language, to_language)
         
         return True, full_translation
+    
+    def _translate_with_timecodes(self, from_lang: str, to_lang: str, content: str) -> Tuple[bool, Union[str, Dict]]:
+        """
+        Translate content while preserving timecodes in [HH:MM:SS] format.
+        
+        Args:
+            from_lang (str): Source language code or name
+            to_lang (str): Target language code or name
+            content (str): Content with timecodes to translate
+            
+        Returns:
+            Tuple[bool, Union[str, Dict]]: Success flag and translated text or error dict
+        """
+        import re
+        
+        logger.info(f"STARTING TIMECODE-PRESERVING TRANSLATION: {from_lang} -> {to_lang}")
+        
+        # Map language codes to full names for better results
+        lang_map = {
+            'en': 'English', 'es': 'Spanish', 'fr': 'French', 'de': 'German',
+            'it': 'Italian', 'pt': 'Portuguese', 'ru': 'Russian', 'zh': 'Chinese',
+            'ja': 'Japanese', 'ar': 'Arabic', 'bn': 'Bengali (বাংলা)', 'hi': 'Hindi',
+            'ko': 'Korean', 'nl': 'Dutch', 'sv': 'Swedish', 'tr': 'Turkish'
+        }
+        
+        from_language = lang_map.get(from_lang.lower(), from_lang)
+        to_language = lang_map.get(to_lang.lower(), to_lang)
+        
+        logger.info(f"Language mapping: {from_lang} -> {from_language}, {to_lang} -> {to_language}")
+        
+        # Split content into lines with timecodes
+        lines = content.strip().split('\n')
+        translated_lines = []
+        
+        logger.info(f"Processing {len(lines)} lines of content")
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+                
+            # Match timecode pattern [HH:MM:SS] followed by text
+            timecode_match = re.match(r'^(\[\d{2}:\d{2}:\d{2}\])\s*(.*)$', line)
+            
+            if timecode_match:
+                timecode = timecode_match.group(1)
+                text_to_translate = timecode_match.group(2).strip()
+                
+                if text_to_translate:
+                    # Translate just the text part, preserving the timecode
+                    prompt = f"""Translate the following text from {from_language} to {to_language}.
+                    
+CRITICAL INSTRUCTIONS:
+- Translate ONLY the text content
+- Do NOT translate or modify the timecode
+- Do NOT add any formatting, markers, or segment numbers
+- Do NOT use ###SEGMENT_X### or any other markers
+- Return ONLY the translated text, nothing else
+- Preserve the original meaning and tone
+
+Text to translate: {text_to_translate}"""
+
+                    system_content = f"""You are a professional translator. Your task is to translate text while preserving timecodes.
+
+CRITICAL RULES:
+- Translate ONLY the text content to {to_language}
+- Do NOT modify, translate, or remove timecodes [HH:MM:SS]
+- Do NOT add segment markers like ###SEGMENT_X###
+- Do NOT add any formatting or bullet points
+- Return ONLY the translated text without any additional content
+- Preserve the original tone and meaning"""
+
+                    messages = [
+                        {
+                            "role": "system",
+                            "content": system_content
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ]
+                    
+                    # LOG THE EXACT REQUEST BEING SENT TO AI
+                    logger.info(f"========== SENDING TO AI (Line with timecode {timecode}) ==========")
+                    logger.info(f"System prompt: {system_content}")
+                    logger.info(f"User prompt: {prompt}")
+                    logger.info(f"Original text to translate: '{text_to_translate}'")
+                    logger.info(f"Max tokens: 200, temperature: 0.1")
+                    logger.info(f"====================================================================")
+                    
+                    success, translated_text = self._make_request(messages, max_tokens=200, temperature=0.1)
+                    
+                    # LOG THE AI RESPONSE
+                    logger.info(f"========== AI RESPONSE (Line with timecode {timecode}) ==========")
+                    if success:
+                        logger.info(f"Translation successful: '{translated_text}'")
+                    else:
+                        logger.error(f"Translation failed: {translated_text}")
+                    logger.info(f"=================================================================")
+                    
+                    if success:
+                        # Clean up the translated text to remove any unwanted formatting
+                        translated_text = translated_text.strip()
+                        # Remove any segment markers that might have been added
+                        translated_text = re.sub(r'###SEGMENT_\d+###\s*', '', translated_text)
+                        translated_text = re.sub(r'\*+.*?\*+', '', translated_text)  # Remove markdown formatting
+                        translated_text = translated_text.strip()
+                        
+                        # Combine timecode with translated text
+                        translated_lines.append(f"{timecode} {translated_text}")
+                    else:
+                        logger.warning(f"Failed to translate line: {line}")
+                        # Keep original line if translation fails
+                        translated_lines.append(line)
+                else:
+                    # Empty text after timecode, keep timecode only
+                    translated_lines.append(timecode)
+            else:
+                # Line without timecode, translate directly
+                if line:
+                    prompt = f"Translate this text from {from_language} to {to_language}: {line}"
+                    system_content = f"Translate to {to_language} only. No additional formatting."
+                    
+                    messages = [
+                        {"role": "system", "content": system_content},
+                        {"role": "user", "content": prompt}
+                    ]
+                    
+                    success, translated_text = self._make_request(messages, max_tokens=200, temperature=0.1)
+                    
+                    if success:
+                        translated_lines.append(translated_text.strip())
+                    else:
+                        translated_lines.append(line)
+        
+        # Join all translated lines
+        final_translation = '\n'.join(translated_lines)
+        
+        logger.info(f"Timecode-preserving translation completed: {len(translated_lines)} lines")
+        logger.info(f"Final translation preview: {final_translation[:300]}...")
+        
+        # Verify no segment markers were generated
+        if '###SEGMENT_' in final_translation:
+            logger.error("WARNING: Found ###SEGMENT markers in final translation!")
+        else:
+            logger.info("SUCCESS: No ###SEGMENT markers found in final translation")
+        
+        return True, final_translation
     
     def _retry_translation_with_strict_prompts(self, content: str, from_language: str, to_language: str) -> Tuple[bool, Union[str, Dict]]:
         """

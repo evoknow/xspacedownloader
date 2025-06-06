@@ -201,7 +201,6 @@ def get_space_component():
         # Always create a new Space component to avoid threading issues
         # This prevents memory corruption from shared database connections
         space_component = Space()
-        logger.info("Created new Space component instance")
         return space_component
         
     except Exception as e:
@@ -1437,12 +1436,16 @@ def space_page(space_id):
         can_edit_space = False
         user_id = session.get('user_id', 0)
         cookie_id = request.cookies.get('xspace_user_id', '')
+        is_admin = session.get('is_admin', False)
         
         if space_details:
             space_user_id = space_details.get('user_id', 0)
             space_cookie_id = space_details.get('cookie_id', '')
             
-            if user_id > 0:
+            if is_admin:
+                # Admin can always edit
+                can_edit_space = True
+            elif user_id > 0:
                 # Logged in user - must match user_id
                 can_edit_space = (space_user_id == user_id)
             else:
@@ -1513,6 +1516,7 @@ def space_page(space_id):
                                job=job,
                                clips=clips,
                                can_edit_space=can_edit_space,
+                               is_admin=is_admin,
                                is_favorite=is_favorite,
                                tags=tags,
                                reviews=reviews,
@@ -2500,7 +2504,19 @@ def download_space(space_id):
         file_size = 0
         content_type = 'audio/mpeg'  # Default
         
-        for ext in ['mp3', 'm4a', 'wav']:
+        # Check for specific format if requested
+        format_requested = request.args.get('format', '').lower()
+        
+        # Define priority order for file formats
+        if format_requested == 'mp4':
+            search_extensions = ['mp4']
+        elif format_requested == 'audio':
+            search_extensions = ['mp3', 'm4a', 'wav']
+        else:
+            # Default: prefer audio, but include video if no audio found
+            search_extensions = ['mp3', 'm4a', 'wav', 'mp4']
+        
+        for ext in search_extensions:
             path = os.path.join(download_dir, f"{space_id}.{ext}")
             if os.path.exists(path) and os.path.getsize(path) > 1024*1024:  # > 1MB
                 file_path = path
@@ -2511,7 +2527,8 @@ def download_space(space_id):
                     'm4a': 'audio/mp4',
                     'wav': 'audio/wav',
                     'ogg': 'audio/ogg',
-                    'flac': 'audio/flac'
+                    'flac': 'audio/flac',
+                    'mp4': 'video/mp4'
                 }
                 content_type = mime_types.get(ext, f'audio/{ext}')
                 break
@@ -2549,6 +2566,8 @@ def download_space(space_id):
             ext = 'ogg'
         elif content_type == 'audio/flac':
             ext = 'flac'
+        elif content_type == 'video/mp4':
+            ext = 'mp4'
         else:
             ext = os.path.splitext(file_path)[1][1:]  # Extract from path as fallback
         
@@ -2564,6 +2583,57 @@ def download_space(space_id):
         logger.error(f"Error downloading space: {e}", exc_info=True)
         flash(f'An error occurred: {str(e)}', 'error')
         return redirect(url_for('space_page', space_id=space_id))
+
+@app.route('/api/spaces/<space_id>/available-formats', methods=['GET'])
+def get_available_formats(space_id):
+    """Get available download formats for a space."""
+    try:
+        download_dir = app.config['DOWNLOAD_DIR']
+        available_formats = []
+        
+        # Check for different file formats
+        formats_to_check = {
+            'mp3': {'type': 'audio', 'name': 'MP3 Audio', 'icon': 'bi-music-note'},
+            'm4a': {'type': 'audio', 'name': 'M4A Audio', 'icon': 'bi-music-note'},
+            'wav': {'type': 'audio', 'name': 'WAV Audio', 'icon': 'bi-music-note'},
+            'mp4': {'type': 'video', 'name': 'MP4 Video', 'icon': 'bi-camera-video'}
+        }
+        
+        for ext, format_info in formats_to_check.items():
+            file_path = os.path.join(download_dir, f"{space_id}.{ext}")
+            if os.path.exists(file_path) and os.path.getsize(file_path) > 1024*1024:  # > 1MB
+                file_size = os.path.getsize(file_path)
+                available_formats.append({
+                    'format': ext,
+                    'type': format_info['type'],
+                    'name': format_info['name'],
+                    'icon': format_info['icon'],
+                    'size': file_size,
+                    'size_formatted': format_file_size(file_size)
+                })
+        
+        return jsonify({
+            'success': True,
+            'formats': available_formats
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting available formats for space {space_id}: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+def format_file_size(size_bytes):
+    """Format file size in human readable format."""
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024*1024:
+        return f"{size_bytes/1024:.1f} KB"
+    elif size_bytes < 1024*1024*1024:
+        return f"{size_bytes/(1024*1024):.1f} MB"
+    else:
+        return f"{size_bytes/(1024*1024*1024):.1f} GB"
 
 @app.route('/share/<space_id>.jpg')
 @app.route('/share/<space_id>.large.jpg')
@@ -2884,12 +2954,19 @@ def api_translate():
         source_lang = data.get('source_lang', 'auto')
         target_lang = data.get('target_lang')
         space_id = data.get('space_id')  # Optional: for database storage
+        include_timecodes = data.get('include_timecodes', False)
         
         # Debug logging
-        logger.info(f"Translation request - Text length: {len(text) if text else 0}, Source: {source_lang}, Target: {target_lang}, Space ID: {space_id}")
+        logger.info(f"========== TRANSLATION REQUEST ==========")
+        logger.info(f"Text length: {len(text) if text else 0}")
+        logger.info(f"Source: {source_lang}")
+        logger.info(f"Target: {target_lang}")
+        logger.info(f"Space ID: {space_id}")
+        logger.info(f"Include timecodes: {include_timecodes}")
         if text:
-            logger.info(f"First 200 chars: {text[:200]}...")
-            logger.info(f"Last 200 chars: ...{text[-200:]}")
+            logger.info(f"First 300 chars: {text[:300]}...")
+            logger.info(f"Last 300 chars: ...{text[-300:]}")
+        logger.info(f"=========================================")
         
         # Validate required fields
         if not text:
@@ -2954,6 +3031,7 @@ def api_translate():
             
         # Perform translation
         logger.info(f"Starting AI translation from {source_lang} to {target_lang}")
+        logger.info(f"Include timecodes parameter: {include_timecodes}")
         success, result = translator.translate(text, source_lang, target_lang)
         
         if not success:
@@ -4309,12 +4387,16 @@ def admin_dashboard():
         
         cursor.close()
         
+        # Check if running on localhost for development tools
+        is_localhost = request.host.startswith('localhost') or request.host.startswith('127.0.0.1')
+        
         return render_template('admin.html',
                              total_users=total_users,
                              total_spaces=total_spaces,
                              total_downloads=total_downloads,
                              total_plays=total_plays,
-                             rate_limits=rate_limit_config)
+                             rate_limits=rate_limit_config,
+                             is_localhost=is_localhost)
         
     except Exception as e:
         logger.error(f"Error in admin dashboard: {e}", exc_info=True)
@@ -4568,6 +4650,270 @@ def admin_delete_space(space_id):
         logger.error(f"Error deleting space: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/spaces/<space_id>/tags', methods=['POST'])
+def add_tag_to_space(space_id):
+    """Add a tag to a space. Only space owner or admin can add tags."""
+    try:
+        # Check if user can edit this space
+        space = get_space_component()
+        
+        # Get space details for permission checking
+        cursor = space.connection.cursor(dictionary=True)
+        cursor.execute("SELECT user_id, cookie_id FROM spaces WHERE space_id = %s", (space_id,))
+        space_details = cursor.fetchone()
+        cursor.close()
+        
+        if not space_details:
+            return jsonify({'error': 'Space not found'}), 404
+        
+        # Check permissions: space owner OR admin
+        user_id = session.get('user_id', 0)
+        cookie_id = request.cookies.get('xspace_user_id', '')
+        is_admin = session.get('is_admin', False)
+        
+        can_edit = False
+        
+        if is_admin:
+            can_edit = True
+        elif user_id > 0:
+            # Logged in user - must match user_id
+            can_edit = (space_details['user_id'] == user_id)
+        else:
+            # Not logged in - must match cookie_id
+            can_edit = (space_details['cookie_id'] == cookie_id and space_details['user_id'] == 0)
+        
+        if not can_edit:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        # Get tag name from request
+        data = request.get_json() or {}
+        tag_name = data.get('tag_name', '').strip()
+        
+        if not tag_name:
+            return jsonify({'error': 'Tag name is required'}), 400
+        
+        # Add tag using Tag component
+        from components.Tag import Tag
+        tag_component = Tag(space.connection)
+        
+        # Create or get tag ID
+        tag_id = tag_component.create_tag(tag_name)
+        if not tag_id:
+            return jsonify({'error': 'Failed to create tag'}), 500
+        
+        # Add tag to space
+        added_count = tag_component.add_tags_to_space(space_id, [tag_name], user_id or 0)
+        
+        if added_count > 0:
+            # Create slug for response
+            tag_slug = tag_name.lower().replace(' ', '-').replace('_', '-')
+            
+            return jsonify({
+                'success': True,
+                'message': 'Tag added successfully',
+                'tag': {
+                    'id': tag_id,
+                    'name': tag_name,
+                    'tag_name': tag_name,
+                    'tag_slug': tag_slug
+                }
+            })
+        else:
+            return jsonify({'error': 'Tag may already exist on this space'}), 400
+        
+    except Exception as e:
+        logger.error(f"Error adding tag to space {space_id}: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to add tag'}), 500
+
+@app.route('/api/spaces/<space_id>/tags/<int:tag_id>', methods=['DELETE'])
+def remove_tag_from_space(space_id, tag_id):
+    """Remove a tag from a space. Only space owner or admin can remove tags."""
+    try:
+        # Check if user can edit this space
+        space = get_space_component()
+        
+        # Get space details for permission checking
+        cursor = space.connection.cursor(dictionary=True)
+        cursor.execute("SELECT user_id, cookie_id FROM spaces WHERE space_id = %s", (space_id,))
+        space_details = cursor.fetchone()
+        cursor.close()
+        
+        if not space_details:
+            return jsonify({'error': 'Space not found'}), 404
+        
+        # Check permissions: space owner OR admin
+        user_id = session.get('user_id', 0)
+        cookie_id = request.cookies.get('xspace_user_id', '')
+        is_admin = session.get('is_admin', False)
+        
+        can_edit = False
+        
+        if is_admin:
+            can_edit = True
+        elif user_id > 0:
+            # Logged in user - must match user_id
+            can_edit = (space_details['user_id'] == user_id)
+        else:
+            # Not logged in - must match cookie_id
+            can_edit = (space_details['cookie_id'] == cookie_id and space_details['user_id'] == 0)
+        
+        if not can_edit:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        # Remove tag using Tag component
+        from components.Tag import Tag
+        tag_component = Tag(space.connection)
+        
+        # Since we've already verified permissions (space owner or admin),
+        # we can force remove the tag regardless of who originally added it
+        success = tag_component.remove_tag_from_space(space_id, tag_id, user_id or 0, force_remove=True)
+        
+        if success:
+            logger.info(f"Successfully removed tag {tag_id} from space {space_id} by user {user_id} (admin: {is_admin})")
+            return jsonify({
+                'success': True,
+                'message': 'Tag removed successfully'
+            })
+        else:
+            logger.warning(f"Failed to remove tag {tag_id} from space {space_id} - tag may not exist or DB error")
+            return jsonify({'error': 'Tag not found or could not be removed'}), 400
+        
+    except Exception as e:
+        logger.error(f"Error removing tag {tag_id} from space {space_id}: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to remove tag'}), 500
+
+@app.route('/api/spaces/<space_id>/generate-video', methods=['POST'])
+def generate_video(space_id):
+    """Generate MP4 video for a space with audio visualization."""
+    try:
+        # Check if user can edit this space or is admin
+        space = get_space_component()
+        
+        # Get space details for permission checking
+        cursor = space.connection.cursor(dictionary=True)
+        cursor.execute("SELECT user_id, cookie_id FROM spaces WHERE space_id = %s", (space_id,))
+        space_details = cursor.fetchone()
+        cursor.close()
+        
+        if not space_details:
+            return jsonify({'error': 'Space not found'}), 404
+        
+        # Check permissions: space owner OR admin
+        user_id = session.get('user_id', 0)
+        cookie_id = request.cookies.get('xspace_user_id', '')
+        is_admin = session.get('is_admin', False)
+        
+        can_edit = False
+        
+        if is_admin:
+            can_edit = True
+        elif user_id > 0:
+            # Logged in user - must match user_id
+            can_edit = (space_details['user_id'] == user_id)
+        else:
+            # Not logged in - must match cookie_id
+            can_edit = (space_details['cookie_id'] == cookie_id and space_details['user_id'] == 0)
+        
+        if not can_edit:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        # Check if audio file exists
+        download_dir = app.config['DOWNLOAD_DIR']
+        audio_path = None
+        
+        for ext in ['mp3', 'm4a', 'wav']:
+            path = os.path.join(download_dir, f"{space_id}.{ext}")
+            if os.path.exists(path) and os.path.getsize(path) > 1024*1024:  # > 1MB
+                audio_path = path
+                break
+        
+        if not audio_path:
+            return jsonify({'error': 'Audio file not found for this space'}), 404
+        
+        # Get space details with metadata
+        space_data = space.get_space(space_id)
+        if not space_data:
+            return jsonify({'error': 'Space data not found'}), 404
+        
+        # Generate video using background task
+        from components.VideoGenerator import VideoGenerator
+        video_generator = VideoGenerator()
+        
+        # Create video generation job
+        job_id = video_generator.create_video_job(
+            space_id=space_id,
+            audio_path=audio_path,
+            space_data=space_data,
+            user_id=user_id or 0
+        )
+        
+        if job_id:
+            return jsonify({
+                'success': True,
+                'job_id': job_id,
+                'message': 'Video generation started'
+            })
+        else:
+            return jsonify({'error': 'Failed to start video generation'}), 500
+        
+    except Exception as e:
+        logger.error(f"Error generating video for space {space_id}: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to generate video'}), 500
+
+@app.route('/api/spaces/<space_id>/video-status/<job_id>', methods=['GET'])
+def get_video_status(space_id, job_id):
+    """Get video generation status."""
+    try:
+        from components.VideoGenerator import VideoGenerator
+        video_generator = VideoGenerator()
+        
+        status = video_generator.get_job_status(job_id)
+        if status:
+            return jsonify(status)
+        else:
+            return jsonify({'error': 'Job not found'}), 404
+            
+    except Exception as e:
+        logger.error(f"Error getting video status for job {job_id}: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to get video status'}), 500
+
+@app.route('/api/spaces/<space_id>/download-video/<job_id>')
+def download_video(space_id, job_id):
+    """Download generated video file."""
+    try:
+        from components.VideoGenerator import VideoGenerator
+        video_generator = VideoGenerator()
+        
+        video_path = video_generator.get_video_path(job_id)
+        if video_path and os.path.exists(video_path):
+            # Get space title for filename
+            space = get_space_component()
+            space_data = space.get_space(space_id)
+            
+            title = "Space"
+            if space_data:
+                title = space_data.get('title', space_id)
+                if space_data.get('metadata', {}).get('title'):
+                    title = space_data['metadata']['title']
+            
+            # Clean filename
+            import re
+            safe_title = re.sub(r'[^\w\s-]', '', title)[:50]
+            filename = f"{safe_title}_{space_id}.mp4"
+            
+            return send_file(
+                video_path,
+                as_attachment=True,
+                download_name=filename,
+                mimetype='video/mp4'
+            )
+        else:
+            return jsonify({'error': 'Video file not found'}), 404
+            
+    except Exception as e:
+        logger.error(f"Error downloading video for job {job_id}: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to download video'}), 500
+
 @app.route('/admin/api/spaces/<space_id>/redo-tags', methods=['POST'])
 def admin_redo_tags(space_id):
     """Regenerate tags for a space using its transcript."""
@@ -4703,6 +5049,123 @@ def admin_re_transcribe(space_id):
     except Exception as e:
         logger.error(f"Error creating re-transcription job for space {space_id}: {e}", exc_info=True)
         return jsonify({'error': f'Error creating transcription job: {str(e)}'}), 500
+
+@app.route('/admin/api/transcription_config', methods=['GET', 'POST'])
+def admin_transcription_config():
+    """Get or update transcription configuration."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    config_file = 'transcription_config.json'
+    
+    if request.method == 'GET':
+        # Load existing configuration
+        try:
+            if os.path.exists(config_file):
+                with open(config_file, 'r') as f:
+                    config = json.load(f)
+            else:
+                # Default configuration
+                config = {
+                    'provider': 'local',
+                    'default_model': 'tiny',
+                    'device': 'auto',
+                    'openai_model': 'gpt-4o-mini-transcribe',
+                    'enable_corrective_filter': False,
+                    'correction_model': 'gpt-4o-mini'
+                }
+            
+            # Check for OpenAI API key in environment variables
+            env_openai_key = os.environ.get('OPENAI_API_KEY')
+            has_env_key = bool(env_openai_key)
+            
+            # Don't send the actual API key for security, but indicate availability
+            display_config = config.copy()
+            if has_env_key:
+                display_config['openai_api_key'] = '***from_env***'
+                display_config['openai_key_source'] = 'environment'
+            elif 'openai_api_key' in display_config and display_config['openai_api_key']:
+                display_config['openai_api_key'] = '***hidden***'
+                display_config['openai_key_source'] = 'config'
+            else:
+                display_config['openai_key_source'] = 'none'
+            
+            return jsonify({
+                'success': True,
+                'config': display_config
+            })
+            
+        except Exception as e:
+            logger.error(f"Error loading transcription config: {e}")
+            return jsonify({'error': 'Failed to load configuration'}), 500
+    
+    elif request.method == 'POST':
+        # Update configuration
+        try:
+            data = request.get_json()
+            
+            # Validate provider
+            provider = data.get('provider', 'local')
+            if provider not in ['local', 'openai']:
+                return jsonify({'error': 'Invalid provider. Must be "local" or "openai"'}), 400
+            
+            # Build new configuration
+            new_config = {
+                'provider': provider,
+                'default_model': data.get('default_model', 'tiny'),
+                'device': data.get('device', 'auto'),
+                'openai_model': data.get('openai_model', 'gpt-4o-mini-transcribe'),
+                'enable_corrective_filter': data.get('enable_corrective_filter', False),
+                'correction_model': data.get('correction_model', 'gpt-4o-mini')
+            }
+            
+            # Handle OpenAI API key
+            openai_api_key = data.get('openai_api_key', '').strip()
+            env_openai_key = os.environ.get('OPENAI_API_KEY')
+            
+            if openai_api_key and openai_api_key not in ['***hidden***', '***from_env***']:
+                # New API key provided - save to .env file
+                try:
+                    from load_env import save_env_var
+                    save_env_var('OPENAI_API_KEY', openai_api_key)
+                    logger.info("OpenAI API key saved to .env file")
+                except Exception as e:
+                    logger.error(f"Error saving API key to .env: {e}")
+                    # Fallback to config file
+                    new_config['openai_api_key'] = openai_api_key
+            elif openai_api_key in ['***hidden***', '***from_env***']:
+                # Keep existing key (either from env or config)
+                if env_openai_key:
+                    # Environment key exists, don't store in config
+                    pass
+                elif os.path.exists(config_file):
+                    # Preserve existing API key from config if not in env
+                    try:
+                        with open(config_file, 'r') as f:
+                            existing_config = json.load(f)
+                            if 'openai_api_key' in existing_config:
+                                new_config['openai_api_key'] = existing_config['openai_api_key']
+                    except:
+                        pass
+            
+            # Validate OpenAI settings if provider is OpenAI
+            if provider == 'openai':
+                has_api_key = env_openai_key or new_config.get('openai_api_key')
+                if not has_api_key:
+                    return jsonify({'error': 'OpenAI API key is required when using OpenAI provider. Please provide an API key or set OPENAI_API_KEY in environment variables.'}), 400
+            
+            # Save configuration
+            with open(config_file, 'w') as f:
+                json.dump(new_config, f, indent=2)
+            
+            return jsonify({
+                'success': True,
+                'message': 'Transcription configuration updated successfully'
+            })
+            
+        except Exception as e:
+            logger.error(f"Error updating transcription config: {e}")
+            return jsonify({'error': 'Failed to update configuration'}), 500
 
 @app.route('/admin/api/update_rate_limits', methods=['POST'])
 def admin_update_rate_limits():
@@ -4954,6 +5417,388 @@ def admin_get_stats(stat_type):
         logger.error(f"Error getting stats: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
+@app.route('/admin/api/logs')
+def admin_get_logs():
+    """Get system logs for admin dashboard."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        offset = int(request.args.get('offset', 0))
+        limit = int(request.args.get('limit', 100))
+        
+        # Read logs from the logs directory
+        logs_dir = Path('./logs')
+        log_files = []
+        
+        # Find all log files, prioritizing the main app log
+        if logs_dir.exists():
+            for log_file in logs_dir.glob('*.log'):
+                if log_file.name in ['app.log', 'xspacedownloader.log']:
+                    log_files.insert(0, log_file)  # Main logs first
+                else:
+                    log_files.append(log_file)
+        
+        # If no logs directory, try reading from root directory
+        if not log_files:
+            for pattern in ['*.log', 'app.log', 'xspacedownloader.log']:
+                for log_file in Path('.').glob(pattern):
+                    log_files.append(log_file)
+        
+        all_log_entries = []
+        
+        # Read logs from all files
+        for log_file in log_files:
+            try:
+                with open(log_file, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                    # Get recent lines (last 1000 to avoid memory issues)
+                    recent_lines = lines[-1000:] if len(lines) > 1000 else lines
+                    
+                    for line in recent_lines:
+                        line = line.strip()
+                        if line:  # Skip empty lines
+                            all_log_entries.append({
+                                'message': line,
+                                'source': log_file.name,
+                                'timestamp': None  # We'll parse this if needed
+                            })
+            except Exception as e:
+                logger.warning(f"Error reading log file {log_file}: {e}")
+                continue
+        
+        # Sort by most recent (assuming logs are chronological)
+        all_log_entries.reverse()
+        
+        # Apply offset and limit
+        start_idx = offset
+        end_idx = offset + limit
+        logs_slice = all_log_entries[start_idx:end_idx]
+        
+        return jsonify({
+            'success': True,
+            'logs': logs_slice,
+            'total': len(all_log_entries),
+            'offset': offset,
+            'next_offset': end_idx if end_idx < len(all_log_entries) else None,
+            'has_more': end_idx < len(all_log_entries)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting logs: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/system_stats')
+def admin_get_system_stats():
+    """Get system resource usage statistics."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        import psutil
+        import shutil
+        from datetime import datetime
+        
+        # CPU Usage
+        cpu_percent = psutil.cpu_percent(interval=1)
+        cpu_count = psutil.cpu_count()
+        cpu_freq = psutil.cpu_freq()
+        
+        # Memory Usage
+        memory = psutil.virtual_memory()
+        memory_used_gb = memory.used / (1024**3)
+        memory_total_gb = memory.total / (1024**3)
+        
+        # Disk Usage (for current directory)
+        disk_usage = shutil.disk_usage('.')
+        disk_total_gb = disk_usage.total / (1024**3)
+        disk_used_gb = (disk_usage.total - disk_usage.free) / (1024**3)
+        disk_percent = (disk_used_gb / disk_total_gb) * 100
+        
+        # GPU Usage (try to get GPU info - NVIDIA, Apple Silicon, etc.)
+        gpu_info = None
+        gpu_utilization = 0
+        gpu_memory_percent = 0
+        gpu_memory_used_gb = 0
+        gpu_memory_total_gb = 0
+        gpu_name = "Unknown GPU"
+        
+        # Try NVIDIA GPU first
+        try:
+            import pynvml
+            pynvml.nvmlInit()
+            device_count = pynvml.nvmlDeviceGetCount()
+            
+            if device_count > 0:
+                handle = pynvml.nvmlDeviceGetHandleByIndex(0)  # First GPU
+                gpu_info = {
+                    'name': pynvml.nvmlDeviceGetName(handle).decode('utf-8'),
+                    'memory_info': pynvml.nvmlDeviceGetMemoryInfo(handle),
+                    'utilization': pynvml.nvmlDeviceGetUtilizationRates(handle),
+                    'temperature': pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
+                }
+                
+                gpu_memory_used_gb = gpu_info['memory_info'].used / (1024**3)
+                gpu_memory_total_gb = gpu_info['memory_info'].total / (1024**3)
+                gpu_memory_percent = (gpu_memory_used_gb / gpu_memory_total_gb) * 100
+                gpu_utilization = gpu_info['utilization'].gpu
+                gpu_name = gpu_info['name']
+                
+        except (ImportError, Exception) as e:
+            if "ImportError" not in str(type(e)):
+                logger.warning(f"Error getting NVIDIA GPU info: {e}")
+        
+        # If no NVIDIA GPU found, try Apple Silicon or other methods
+        if not gpu_info:
+            try:
+                import subprocess
+                import platform
+                
+                if platform.system() == 'Darwin':  # macOS
+                    # Try to get Apple Silicon GPU info
+                    try:
+                        result = subprocess.run(['system_profiler', 'SPDisplaysDataType'], 
+                                              capture_output=True, text=True, timeout=10)
+                        if result.returncode == 0:
+                            output = result.stdout
+                            
+                            # Parse Apple GPU info
+                            if 'Apple M' in output and 'Total Number of Cores:' in output:
+                                lines = output.split('\n')
+                                apple_gpu_name = None
+                                gpu_cores = None
+                                
+                                for i, line in enumerate(lines):
+                                    if 'Apple M' in line and ':' in line:
+                                        apple_gpu_name = line.split(':')[0].strip()
+                                    elif 'Total Number of Cores:' in line:
+                                        cores_str = line.split(':')[1].strip()
+                                        gpu_cores = int(cores_str)
+                                
+                                if apple_gpu_name and gpu_cores:
+                                    # Extract just the chip name (e.g., "Apple M2 Ultra" -> "M2 Ultra")
+                                    chip_name = apple_gpu_name.replace("Apple ", "")
+                                    gpu_name = f"{chip_name} ({gpu_cores}c)"
+                                    
+                                    # For Apple Silicon, we can't get real-time utilization easily
+                                    # But we can show it as detected
+                                    gpu_info = {'apple_silicon': True}
+                                    
+                                    # Try to get memory info from activity monitor if available
+                                    try:
+                                        # Get total system memory as proxy for GPU memory (unified memory)
+                                        total_memory_gb = memory_total_gb
+                                        gpu_memory_total_gb = total_memory_gb  # Unified memory
+                                        gpu_memory_used_gb = memory_used_gb * 0.1  # Rough estimate
+                                        gpu_memory_percent = (gpu_memory_used_gb / gpu_memory_total_gb) * 100
+                                        gpu_utilization = min(cpu_percent * 0.3, 100)  # Rough estimate based on CPU
+                                    except:
+                                        pass
+                                        
+                    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, Exception) as e:
+                        logger.warning(f"Error getting Apple GPU info: {e}")
+                        
+            except Exception as e:
+                logger.warning(f"Error getting system GPU info: {e}")
+        
+        # Prepare response
+        stats = {
+            'cpu': {
+                'usage_percent': round(cpu_percent, 1),
+                'cores': cpu_count,
+                'frequency': round(cpu_freq.current, 0) if cpu_freq else None,
+                'details': f"{cpu_count} cores @ {round(cpu_freq.current, 0)} MHz" if cpu_freq else f"{cpu_count} cores"
+            },
+            'memory': {
+                'usage_percent': round(memory.percent, 1),
+                'used_gb': round(memory_used_gb, 1),
+                'total_gb': round(memory_total_gb, 1),
+                'details': f"{round(memory_used_gb, 1)} GB / {round(memory_total_gb, 1)} GB"
+            },
+            'disk': {
+                'usage_percent': round(disk_percent, 1),
+                'used_gb': round(disk_used_gb, 1),
+                'total_gb': round(disk_total_gb, 1),
+                'details': f"{round(disk_used_gb, 1)} GB / {round(disk_total_gb, 1)} GB"
+            }
+        }
+        
+        if gpu_info:
+            if gpu_info.get('apple_silicon'):
+                # Apple Silicon GPU
+                stats['gpu'] = {
+                    'usage_percent': round(gpu_utilization, 1),
+                    'memory_percent': round(gpu_memory_percent, 1),
+                    'memory_used_gb': round(gpu_memory_used_gb, 1),
+                    'memory_total_gb': round(gpu_memory_total_gb, 1),
+                    'name': gpu_name,
+                    'available': True,
+                    'details': f"{gpu_name} - Unified"
+                }
+            else:
+                # NVIDIA GPU
+                stats['gpu'] = {
+                    'usage_percent': gpu_utilization,
+                    'memory_percent': round(gpu_memory_percent, 1),
+                    'memory_used_gb': round(gpu_memory_used_gb, 1),
+                    'memory_total_gb': round(gpu_memory_total_gb, 1),
+                    'temperature': gpu_info['temperature'],
+                    'name': gpu_info['name'],
+                    'available': True,
+                    'details': f"{gpu_info['name']} - {round(gpu_memory_used_gb, 1)} GB / {round(gpu_memory_total_gb, 1)} GB - {gpu_info['temperature']}°C"
+                }
+        else:
+            stats['gpu'] = {
+                'usage_percent': 0,
+                'memory_percent': 0,
+                'available': False,
+                'details': "No GPU detected"
+            }
+        
+        return jsonify({
+            'success': True,
+            'stats': stats,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting system stats: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/dev/clear_spaces_data', methods=['POST'])
+def admin_dev_clear_spaces_data():
+    """Development tool: Clear all spaces data and files (localhost only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    # Check if running on localhost
+    if not (request.host.startswith('localhost') or request.host.startswith('127.0.0.1')):
+        return jsonify({'error': 'Development tools only available on localhost'}), 403
+    
+    try:
+        data = request.get_json()
+        if data.get('confirm') != 'DELETE ALL SPACES':
+            return jsonify({'error': 'Invalid confirmation'}), 400
+        
+        import glob
+        import os
+        from pathlib import Path
+        
+        space = get_space_component()
+        cursor = space.connection.cursor()
+        
+        # List of all space-related tables to clear
+        tables_to_clear = [
+            'space_transcripts',
+            'space_tags', 
+            'space_reviews',
+            'space_play_history',
+            'space_notes',
+            'space_metadata',
+            'space_favs',
+            'space_download_scheduler',
+            'space_download_history',
+            'space_clips',
+            'spaces'  # This should be last due to foreign key constraints
+        ]
+        
+        # Clear database tables
+        tables_cleared = []
+        for table in tables_to_clear:
+            try:
+                cursor.execute(f"DELETE FROM {table}")
+                rows_affected = cursor.rowcount
+                tables_cleared.append(f"{table} ({rows_affected} rows)")
+                logger.info(f"[DEV] Cleared table {table}: {rows_affected} rows")
+            except Exception as e:
+                logger.warning(f"[DEV] Error clearing table {table}: {e}")
+        
+        space.connection.commit()
+        
+        # Clear audio files
+        files_deleted = []
+        downloads_dir = Path('./downloads')
+        if downloads_dir.exists():
+            for pattern in ['*.mp3', '*.m4a', '*.wav']:
+                for file_path in downloads_dir.glob(pattern):
+                    try:
+                        file_path.unlink()
+                        files_deleted.append(file_path.name)
+                    except Exception as e:
+                        logger.warning(f"[DEV] Error deleting file {file_path}: {e}")
+        
+        # Clear transcript job files
+        transcript_jobs_dir = Path('./transcript_jobs')
+        if transcript_jobs_dir.exists():
+            for file_path in transcript_jobs_dir.glob('*.json'):
+                try:
+                    file_path.unlink()
+                    files_deleted.append(f"transcript_jobs/{file_path.name}")
+                except Exception as e:
+                    logger.warning(f"[DEV] Error deleting transcript job {file_path}: {e}")
+        
+        cursor.close()
+        
+        message = f"Successfully cleared {len(tables_cleared)} database tables and {len(files_deleted)} files"
+        logger.info(f"[DEV] {message}")
+        
+        return jsonify({
+            'success': True,
+            'message': message,
+            'tables_cleared': tables_cleared,
+            'files_deleted': len(files_deleted)
+        })
+        
+    except Exception as e:
+        logger.error(f"[DEV] Error clearing spaces data: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/dev/clear_non_admin_users', methods=['POST'])
+def admin_dev_clear_non_admin_users():
+    """Development tool: Clear all non-admin users (localhost only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    # Check if running on localhost
+    if not (request.host.startswith('localhost') or request.host.startswith('127.0.0.1')):
+        return jsonify({'error': 'Development tools only available on localhost'}), 403
+    
+    try:
+        data = request.get_json()
+        if data.get('confirm') != 'DELETE NON ADMIN USERS':
+            return jsonify({'error': 'Invalid confirmation'}), 400
+        
+        space = get_space_component()
+        cursor = space.connection.cursor()
+        
+        # Count users before deletion
+        cursor.execute("SELECT COUNT(*) as total FROM users WHERE is_admin = 0")
+        users_to_delete = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) as total FROM users WHERE is_admin = 1")
+        admin_users = cursor.fetchone()[0]
+        
+        # Delete non-admin users
+        cursor.execute("DELETE FROM users WHERE is_admin = 0")
+        rows_affected = cursor.rowcount
+        
+        space.connection.commit()
+        cursor.close()
+        
+        message = f"Deleted {rows_affected} non-admin users. {admin_users} admin users preserved."
+        logger.info(f"[DEV] {message}")
+        
+        return jsonify({
+            'success': True,
+            'message': message,
+            'users_deleted': rows_affected,
+            'admins_preserved': admin_users
+        })
+        
+    except Exception as e:
+        logger.error(f"[DEV] Error clearing non-admin users: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
 # Route for FAQ page
 @app.route('/faq')
 def faq():
@@ -4987,6 +5832,7 @@ def transcribe_space(space_id):
             detect_language = request.json.get('detect_language', False)
             translate_to = request.json.get('translate_to')
             overwrite = request.json.get('overwrite', True)
+            include_timecodes = request.json.get('include_timecodes', True)  # Default to True for better UX
         else:
             # Form submission
             language = request.form.get('language', 'en')
@@ -4994,6 +5840,7 @@ def transcribe_space(space_id):
             detect_language = request.form.get('detect_language', 'false') == 'true'
             translate_to = request.form.get('translate_to')
             overwrite = request.form.get('overwrite', 'true') == 'true'
+            include_timecodes = request.form.get('include_timecodes', 'true') == 'true'  # Default to True for better UX
         
         # Get Space component
         space = get_space_component()
@@ -5078,7 +5925,8 @@ def transcribe_space(space_id):
             'model': model,
             'detect_language': detect_language,
             'translate_to': translate_to if translate_to else None,
-            'overwrite': overwrite
+            'overwrite': overwrite,
+            'include_timecodes': include_timecodes
         }
         
         # Create a background job file

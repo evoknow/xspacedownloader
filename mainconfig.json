@@ -3,6 +3,9 @@
     "scan_interval": 5,
     "download_dir": "./downloads",
     "log_dir": "./logs",
+    "brand_name": "XSpace Downloader",
+    "brand_color": "#FF6B35",
+    "brand_logo_url": null,
     "database": {
         "type": "mysql",
         "mysql": {
