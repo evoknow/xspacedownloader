@@ -295,17 +295,23 @@ class VideoGenerator:
         # Video codec
         if self._hardware_accel:
             params.extend(['-c:v', self._hardware_accel])
-            logger.info(f"Using hardware acceleration: {self._hardware_accel}")
+            # For hardware acceleration, limit threads as they can interfere
+            optimal_threads = min(8, self._cpu_cores)
+            params.extend(['-threads', str(optimal_threads)])
+            # Add VideoToolbox optimizations
+            if 'videotoolbox' in self._hardware_accel:
+                params.extend(['-b:v', '2M'])  # Set bitrate for better quality/speed balance
+                params.extend(['-allow_sw', '1'])  # Allow software fallback if needed
+            logger.info(f"Using hardware acceleration: {self._hardware_accel} with {optimal_threads} threads")
         else:
             params.extend(['-c:v', 'libx264'])
             # Add preset for software encoding
             params.extend(['-preset', 'veryfast'])
+            # For software encoding, use more threads
+            if self._cpu_cores > 1:
+                params.extend(['-threads', str(self._cpu_cores)])
+                logger.debug(f"Using software encoding with {self._cpu_cores} threads")
             logger.info("Using software encoding with veryfast preset")
-        
-        # Threading
-        if self._cpu_cores > 1:
-            params.extend(['-threads', str(self._cpu_cores)])
-            logger.debug(f"Using {self._cpu_cores} threads for encoding")
         
         return params
     
@@ -381,7 +387,7 @@ class VideoGenerator:
                     filter_complex = f"""
                         color=c=0x{bg_color_hex}:s=1920x1080:d=1[bg_base];
                         [bg_base]drawbox=x=0:y=0:w=1920:h=1080:
-                        color=0x4A90A4@0.3:thickness=fill[bg_gradient];"""
+                        color=0x{bg_color_hex}@0.1:thickness=fill[bg_gradient];"""
                     
                     # Add logo if available, otherwise use text branding
                     if logo_path and os.path.exists(logo_path):
@@ -403,7 +409,7 @@ class VideoGenerator:
                     filter_complex += f"""
                         
                         [{current_bg}]drawtext=text='{clean_title}':
-                        fontsize=64:fontcolor=white:x=(w-text_w)/2:y=200:
+                        fontsize=48:fontcolor=white:x=(w-text_w)/2:y=200:
                         shadowcolor=black@0.5:shadowx=3:shadowy=3[bg_title];
                         
                         [bg_title]drawtext=text='Host\\: {clean_host}':
@@ -442,7 +448,7 @@ class VideoGenerator:
                         color=c=0x{bg_color_hex}:s=1920x1080:d=1[bg_base];
                         
                         [bg_base]drawtext=text='{clean_title}':
-                        fontsize=64:fontcolor=white:x=(w-text_w)/2:y=200:
+                        fontsize=48:fontcolor=white:x=(w-text_w)/2:y=200:
                         shadowcolor=black@0.5:shadowx=3:shadowy=3[bg_title];
                         
                         [bg_title]drawtext=text='Host\\: {clean_host}':
@@ -492,7 +498,7 @@ class VideoGenerator:
                     filter_complex = f"""
                         color=c=0x{bg_color_hex}:s=1920x1080:d=1[bg_base];
                         [bg_base]drawbox=x=0:y=0:w=1920:h=1080:
-                        color=0x4A90A4@0.3:thickness=fill[bg_gradient];"""
+                        color=0x{bg_color_hex}@0.1:thickness=fill[bg_gradient];"""
                     
                     # Add logo if available, otherwise use text branding
                     if logo_path and os.path.exists(logo_path):
@@ -514,7 +520,7 @@ class VideoGenerator:
                     filter_complex += f"""
                         
                         [{current_bg}]drawtext=text='{clean_title}':
-                        fontsize=64:fontcolor=white:x=(w-text_w)/2:y=200:
+                        fontsize=48:fontcolor=white:x=(w-text_w)/2:y=200:
                         shadowcolor=black@0.5:shadowx=3:shadowy=3[bg_title];
                         
                         [bg_title]drawtext=text='Host\\: {clean_host}':
@@ -556,7 +562,7 @@ class VideoGenerator:
                         color=c=0x{bg_color_hex}:s=1920x1080:d=1[bg_base];
                         
                         [bg_base]drawtext=text='{clean_title}':
-                        fontsize=64:fontcolor=white:x=(w-text_w)/2:y=200:
+                        fontsize=48:fontcolor=white:x=(w-text_w)/2:y=200:
                         shadowcolor=black@0.5:shadowx=3:shadowy=3[bg_title];
                         
                         [bg_title]drawtext=text='Host\\: {clean_host}':
@@ -614,7 +620,7 @@ class VideoGenerator:
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=300  # 5 minute timeout
+                timeout=600  # 10 minute timeout for complex operations
             )
             
             if result.returncode == 0:
