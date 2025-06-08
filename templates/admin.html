@@ -594,6 +594,131 @@
                         </div>
                     </div>
                     
+                    <!-- Video Generation Branding Configuration -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h6 class="mb-0"><i class="bi bi-palette"></i> Video Generation Branding Configuration</h6>
+                        </div>
+                        <div class="card-body">
+                            <form id="brandingConfigForm">
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label for="brandingTitle" class="form-label">Video Title Branding</label>
+                                        <input type="text" class="form-control" id="brandingTitle" 
+                                               placeholder="Your Brand Name - Space Archive">
+                                        <div class="form-text">Appears at the beginning of generated video titles</div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="brandingWatermark" class="form-label">Video Watermark Text</label>
+                                        <input type="text" class="form-control" id="brandingWatermark" 
+                                               placeholder="yoursite.com">
+                                        <div class="form-text">Text watermark shown on the video (optional)</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label for="brandingColor" class="form-label">Primary Brand Color</label>
+                                        <div class="input-group">
+                                            <input type="color" class="form-control form-control-color" 
+                                                   id="brandingColor" value="#007bff" title="Choose brand color">
+                                            <input type="text" class="form-control" id="brandingColorHex" 
+                                                   value="#007bff" placeholder="#007bff">
+                                        </div>
+                                        <div class="form-text">Used for video UI elements and progress bars</div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="brandingBackgroundColor" class="form-label">Background Color</label>
+                                        <div class="input-group">
+                                            <input type="color" class="form-control form-control-color" 
+                                                   id="brandingBackgroundColor" value="#ffffff" title="Choose background color">
+                                            <input type="text" class="form-control" id="brandingBackgroundColorHex" 
+                                                   value="#ffffff" placeholder="#ffffff">
+                                        </div>
+                                        <div class="form-text">Background color for video elements</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label for="brandingFont" class="form-label">Font Family</label>
+                                        <select class="form-select" id="brandingFont">
+                                            <option value="Arial">Arial (default)</option>
+                                            <option value="Helvetica">Helvetica</option>
+                                            <option value="Georgia">Georgia</option>
+                                            <option value="Times New Roman">Times New Roman</option>
+                                            <option value="Verdana">Verdana</option>
+                                            <option value="Trebuchet MS">Trebuchet MS</option>
+                                        </select>
+                                        <div class="form-text">Font used for text in generated videos</div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <!-- Empty column for layout balance -->
+                                    </div>
+                                </div>
+                                
+                                <div class="row mb-3">
+                                    <div class="col-md-12">
+                                        <label for="brandingLogo" class="form-label">Logo/Branding Image URL</label>
+                                        <input type="url" class="form-control" id="brandingLogo" 
+                                               placeholder="https://example.com/logo.png">
+                                        <div class="form-text">
+                                            URL to your logo image (PNG/JPG, recommended size: 200x50px). 
+                                            Will be displayed in the top corner of generated videos.
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="row mb-3">
+                                    <div class="col-md-12">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="brandingEnabled" checked>
+                                            <label class="form-check-label" for="brandingEnabled">
+                                                <strong>Enable Video Branding</strong>
+                                            </label>
+                                        </div>
+                                        <div class="form-text">
+                                            When enabled, all generated videos will include your branding elements.
+                                            When disabled, videos will use default styling.
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Preview Section -->
+                                <div class="mb-3">
+                                    <hr>
+                                    <h6 class="text-primary mb-3">Branding Preview</h6>
+                                    <div class="card bg-light" id="brandingPreviewCard">
+                                        <div class="card-body">
+                                            <div class="d-flex align-items-center mb-2">
+                                                <div id="brandingPreviewLogo" style="width: 100px; height: 25px; background: #ddd; margin-right: 10px; display: none;">
+                                                    <img id="brandingPreviewLogoImg" src="" alt="Logo" style="max-width: 100px; max-height: 25px;">
+                                                </div>
+                                                <h6 class="mb-0" id="brandingPreviewTitle" style="color: #007bff;">
+                                                    Your Brand Name - Sample Space Title
+                                                </h6>
+                                            </div>
+                                            <div class="d-flex align-items-center">
+                                                <div style="width: 200px; height: 8px; background: #e9ecef; border-radius: 4px; margin-right: 10px;">
+                                                    <div id="brandingPreviewProgress" style="width: 60%; height: 100%; background: #007bff; border-radius: 4px;"></div>
+                                                </div>
+                                                <small id="brandingPreviewWatermark" class="text-muted">yoursite.com</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-save"></i> Save Branding Settings
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary ms-2" onclick="resetBrandingDefaults()">
+                                    <i class="bi bi-arrow-clockwise"></i> Reset to Defaults
+                                </button>
+                                <div class="alert alert-info mt-3" style="display: none;" id="brandingConfigMessage"></div>
+                            </form>
+                        </div>
+                    </div>
+                    
                     <!-- Other settings can be added here -->
                 </div>
             </div>
@@ -1366,6 +1491,7 @@ document.getElementById('trackingConfigForm').addEventListener('submit', async f
 document.getElementById('settings-tab').addEventListener('shown.bs.tab', function() {
     loadTrackingConfig();
     loadTranscriptionConfig();
+    loadBrandingConfig();
 });
 
 // Transcription Configuration
@@ -1916,6 +2042,241 @@ document.addEventListener('DOMContentLoaded', function() {
     if (usersCheckbox) {
         usersCheckbox.addEventListener('change', enableClearUsersButton);
     }
+    
+    // Initialize branding configuration
+    initializeBrandingConfig();
 });
+
+// Branding Configuration Functions
+function initializeBrandingConfig() {
+    // Set up color picker sync
+    const colorPicker = document.getElementById('brandingColor');
+    const colorHex = document.getElementById('brandingColorHex');
+    const backgroundColorPicker = document.getElementById('brandingBackgroundColor');
+    const backgroundColorHex = document.getElementById('brandingBackgroundColorHex');
+    
+    if (colorPicker && colorHex) {
+        colorPicker.addEventListener('input', function() {
+            colorHex.value = this.value;
+            updateBrandingPreview();
+        });
+        
+        colorHex.addEventListener('input', function() {
+            if (/^#[0-9A-F]{6}$/i.test(this.value)) {
+                colorPicker.value = this.value;
+                updateBrandingPreview();
+            }
+        });
+    }
+    
+    // Sync background color picker with hex input
+    if (backgroundColorPicker && backgroundColorHex) {
+        backgroundColorPicker.addEventListener('input', function() {
+            backgroundColorHex.value = this.value;
+            updateBrandingPreview();
+        });
+        
+        backgroundColorHex.addEventListener('input', function() {
+            if (/^#[0-9A-F]{6}$/i.test(this.value)) {
+                backgroundColorPicker.value = this.value;
+                updateBrandingPreview();
+            }
+        });
+    }
+    
+    // Set up real-time preview updates
+    const previewElements = [
+        'brandingTitle', 'brandingWatermark', 'brandingLogo', 
+        'brandingFont', 'brandingEnabled'
+    ];
+    
+    previewElements.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.addEventListener('input', updateBrandingPreview);
+            element.addEventListener('change', updateBrandingPreview);
+        }
+    });
+    
+    // Set up form submit handler
+    const brandingForm = document.getElementById('brandingConfigForm');
+    if (brandingForm) {
+        brandingForm.addEventListener('submit', handleBrandingFormSubmit);
+    }
+    
+    // Initial preview update
+    updateBrandingPreview();
+}
+
+function updateBrandingPreview() {
+    const enabled = document.getElementById('brandingEnabled')?.checked ?? true;
+    const title = document.getElementById('brandingTitle')?.value || 'Your Brand Name';
+    const watermark = document.getElementById('brandingWatermark')?.value || 'yoursite.com';
+    const color = document.getElementById('brandingColor')?.value || '#007bff';
+    const backgroundColor = document.getElementById('brandingBackgroundColor')?.value || '#ffffff';
+    const logo = document.getElementById('brandingLogo')?.value;
+    const font = document.getElementById('brandingFont')?.value || 'Arial';
+    
+    // Update preview elements
+    const previewTitle = document.getElementById('brandingPreviewTitle');
+    const previewWatermark = document.getElementById('brandingPreviewWatermark');
+    const previewProgress = document.getElementById('brandingPreviewProgress');
+    const previewLogo = document.getElementById('brandingPreviewLogo');
+    const previewLogoImg = document.getElementById('brandingPreviewLogoImg');
+    const previewCard = document.querySelector('#brandingPreviewCard');
+    
+    if (!enabled) {
+        // Show disabled state
+        if (previewTitle) {
+            previewTitle.textContent = 'Sample Space Title (Branding Disabled)';
+            previewTitle.style.color = '#6c757d';
+            previewTitle.style.fontFamily = 'Arial';
+        }
+        if (previewWatermark) {
+            previewWatermark.textContent = '';
+        }
+        if (previewProgress) {
+            previewProgress.style.background = '#6c757d';
+        }
+        if (previewLogo) {
+            previewLogo.style.display = 'none';
+        }
+        if (previewCard) {
+            previewCard.style.setProperty('background-color', '#f8f9fa', 'important');
+        }
+        return;
+    }
+    
+    // Update title
+    if (previewTitle) {
+        previewTitle.textContent = `${title} - Sample Space Title`;
+        previewTitle.style.color = color;
+        previewTitle.style.fontFamily = font;
+    }
+    
+    // Update background color
+    if (previewCard) {
+        previewCard.style.setProperty('background-color', backgroundColor, 'important');
+    }
+    
+    // Update watermark
+    if (previewWatermark) {
+        previewWatermark.textContent = watermark;
+    }
+    
+    // Update progress bar color
+    if (previewProgress) {
+        previewProgress.style.background = color;
+    }
+    
+    // Update logo
+    if (previewLogo && previewLogoImg) {
+        if (logo && logo.trim()) {
+            previewLogoImg.src = logo;
+            previewLogo.style.display = 'block';
+            
+            // Handle logo load error
+            previewLogoImg.onerror = function() {
+                previewLogo.style.display = 'none';
+            };
+        } else {
+            previewLogo.style.display = 'none';
+        }
+    }
+}
+
+// Load branding configuration from server
+async function loadBrandingConfig() {
+    console.log('Loading branding configuration...');
+    try {
+        const response = await fetch('/admin/api/branding_config');
+        const result = await response.json();
+        console.log('Branding config response:', result);
+        
+        if (result.success && result.config) {
+            // Set form values
+            document.getElementById('brandingTitle').value = result.config.video_title_branding || '';
+            document.getElementById('brandingWatermark').value = result.config.video_watermark_text || '';
+            document.getElementById('brandingColor').value = result.config.brand_color || '#007bff';
+            document.getElementById('brandingColorHex').value = result.config.brand_color || '#007bff';
+            document.getElementById('brandingBackgroundColor').value = result.config.background_color || '#ffffff';
+            document.getElementById('brandingBackgroundColorHex').value = result.config.background_color || '#ffffff';
+            document.getElementById('brandingFont').value = result.config.font_family || 'Arial';
+            document.getElementById('brandingLogo').value = result.config.brand_logo_url || '';
+            document.getElementById('brandingEnabled').checked = result.config.branding_enabled !== false;
+            
+            // Update preview
+            updateBrandingPreview();
+        }
+    } catch (error) {
+        console.error('Error loading branding config:', error);
+    }
+}
+
+// Save branding configuration
+async function handleBrandingFormSubmit(e) {
+    e.preventDefault();
+    console.log('Saving branding configuration...');
+    
+    const messageDiv = document.getElementById('brandingConfigMessage');
+    messageDiv.style.display = 'none';
+    
+    const data = {
+        video_title_branding: document.getElementById('brandingTitle').value,
+        video_watermark_text: document.getElementById('brandingWatermark').value,
+        brand_color: document.getElementById('brandingColor').value,
+        background_color: document.getElementById('brandingBackgroundColor').value,
+        font_family: document.getElementById('brandingFont').value,
+        brand_logo_url: document.getElementById('brandingLogo').value,
+        branding_enabled: document.getElementById('brandingEnabled').checked
+    };
+    
+    console.log('Branding data to save:', data);
+    
+    try {
+        const response = await fetch('/admin/api/branding_config', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            messageDiv.className = 'alert alert-success mt-3';
+            messageDiv.textContent = result.message || 'Branding configuration updated successfully';
+            messageDiv.style.display = 'block';
+        } else {
+            messageDiv.className = 'alert alert-danger mt-3';
+            messageDiv.textContent = 'Error: ' + (result.error || 'Failed to update branding configuration');
+            messageDiv.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Error saving branding config:', error);
+        messageDiv.className = 'alert alert-danger mt-3';
+        messageDiv.textContent = 'Error: ' + error.message;
+        messageDiv.style.display = 'block';
+    }
+}
+
+// Reset branding to defaults
+function resetBrandingDefaults() {
+    if (!confirm('Reset all branding settings to default values?')) return;
+    
+    document.getElementById('brandingTitle').value = '';
+    document.getElementById('brandingWatermark').value = '';
+    document.getElementById('brandingColor').value = '#007bff';
+    document.getElementById('brandingColorHex').value = '#007bff';
+    document.getElementById('brandingBackgroundColor').value = '#ffffff';
+    document.getElementById('brandingBackgroundColorHex').value = '#ffffff';
+    document.getElementById('brandingFont').value = 'Arial';
+    document.getElementById('brandingLogo').value = '';
+    document.getElementById('brandingEnabled').checked = true;
+    
+    updateBrandingPreview();
+}
+
 </script>
 {% endblock %}

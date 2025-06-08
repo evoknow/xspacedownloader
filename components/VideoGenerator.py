@@ -8,7 +8,8 @@ import uuid
 import subprocess
 import logging
 import requests
-from typing import Dict, Optional, Tuple
+import platform
+from typing import Dict, Optional, Tuple, List
 from datetime import datetime
 from urllib.parse import urlparse
 
@@ -28,7 +29,13 @@ class VideoGenerator:
         os.makedirs(self.downloads_dir, exist_ok=True)
         os.makedirs("temp", exist_ok=True)  # For downloaded images
         
-        logger.info("VideoGenerator initialized")
+        # Detect hardware acceleration support
+        self._hardware_accel = self._detect_hardware_acceleration()
+        
+        # Detect CPU cores for multi-threading
+        self._cpu_cores = self._detect_cpu_cores()
+        
+        logger.info(f"VideoGenerator initialized (hardware acceleration: {self._hardware_accel or 'none'}, CPU cores: {self._cpu_cores})")
     
     def create_video_job(self, space_id: str, audio_path: str, space_data: Dict, user_id: str = None) -> str:
         """
@@ -213,6 +220,95 @@ class VideoGenerator:
         except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
             return False
     
+    def _detect_hardware_acceleration(self) -> Optional[str]:
+        """
+        Detect available hardware acceleration for video encoding.
+        
+        Returns:
+            Optional[str]: Hardware acceleration codec name or None
+        """
+        try:
+            # Check if we're on macOS
+            if platform.system() != 'Darwin':
+                return None
+            
+            # Check available hardware accelerations
+            result = subprocess.run(
+                ['ffmpeg', '-hwaccels'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            
+            if result.returncode != 0:
+                return None
+            
+            # Check if videotoolbox is available
+            if 'videotoolbox' not in result.stdout:
+                return None
+            
+            # Verify h264_videotoolbox encoder is available
+            result = subprocess.run(
+                ['ffmpeg', '-encoders'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            
+            if result.returncode == 0 and 'h264_videotoolbox' in result.stdout:
+                logger.info("Detected VideoToolbox hardware acceleration support")
+                return 'h264_videotoolbox'
+            
+            return None
+            
+        except Exception as e:
+            logger.debug(f"Error detecting hardware acceleration: {e}")
+            return None
+    
+    def _detect_cpu_cores(self) -> int:
+        """
+        Detect number of CPU cores for multi-threading.
+        
+        Returns:
+            int: Number of CPU cores to use for encoding
+        """
+        try:
+            import multiprocessing
+            cores = multiprocessing.cpu_count()
+            # Use most cores but leave 1-2 for system
+            optimal_cores = max(1, cores - 1 if cores > 2 else cores)
+            logger.info(f"Detected {cores} CPU cores, will use {optimal_cores} for encoding")
+            return optimal_cores
+        except Exception as e:
+            logger.debug(f"Error detecting CPU cores: {e}")
+            return 1
+    
+    def _get_encoding_params(self) -> List[str]:
+        """
+        Get optimal encoding parameters based on available hardware and CPU.
+        
+        Returns:
+            List[str]: List of ffmpeg parameters for video encoding
+        """
+        params = []
+        
+        # Video codec
+        if self._hardware_accel:
+            params.extend(['-c:v', self._hardware_accel])
+            logger.info(f"Using hardware acceleration: {self._hardware_accel}")
+        else:
+            params.extend(['-c:v', 'libx264'])
+            # Add preset for software encoding
+            params.extend(['-preset', 'veryfast'])
+            logger.info("Using software encoding with veryfast preset")
+        
+        # Threading
+        if self._cpu_cores > 1:
+            params.extend(['-threads', str(self._cpu_cores)])
+            logger.debug(f"Using {self._cpu_cores} threads for encoding")
+        
+        return params
+    
     def _create_video_with_waveform(self, audio_path: str, video_path: str, job_file: str, job_data: Dict) -> bool:
         """
         Create MP4 video with styled cover and audio waveform bar at bottom.
@@ -245,111 +341,265 @@ class VideoGenerator:
             brand_config = self._get_brand_config()
             brand_name = brand_config['brand_name']
             brand_color = brand_config['brand_color']
+            brand_logo_url = brand_config['brand_logo_url']
+            video_title_branding = brand_config['video_title_branding']
+            video_watermark_text = brand_config['video_watermark_text']
+            branding_enabled = brand_config['branding_enabled']
+            background_color = brand_config['background_color']
+            
+            # Convert hex colors to ffmpeg format (remove # and ensure 6 digits)
+            bg_color_hex = background_color.replace('#', '') if background_color else '808080'
+            brand_color_hex = brand_color.replace('#', '') if brand_color else 'FF6B35'
+            
+            # Download brand logo if URL provided
+            logo_path = None
+            if branding_enabled and brand_logo_url:
+                logo_filename = f"brand_logo_{job_id}.png"
+                logo_path = self._download_image(brand_logo_url, logo_filename)
+                if logo_path:
+                    logger.info(f"Downloaded brand logo: {logo_path}")
             
             # Download host profile picture
             profile_pic_path = self._get_host_profile_picture(space_data, job_id)
+            
+            # Get optimal encoding parameters
+            encoding_params = self._get_encoding_params()
             
             # Clean text for ffmpeg (escape special characters)
             clean_title = self._escape_ffmpeg_text(title)
             clean_host = self._escape_ffmpeg_text(host)
             clean_brand = self._escape_ffmpeg_text(brand_name)
+            clean_video_title_branding = self._escape_ffmpeg_text(video_title_branding)
+            clean_watermark = self._escape_ffmpeg_text(video_watermark_text)
             
             # Build filter complex with profile picture and configurable branding
             if profile_pic_path and os.path.exists(profile_pic_path):
                 # Use downloaded profile picture
-                filter_complex = f"""
-                    color=c=0x808080:s=1920x1080:d=1[bg_base];
-                    [bg_base]drawbox=x=0:y=0:w=1920:h=1080:
-                    color=0x4A90A4@0.3:thickness=fill[bg_gradient];
+                # Build filter complex conditionally based on branding settings
+                if branding_enabled:
+                    # Start with custom background color
+                    filter_complex = f"""
+                        color=c=0x{bg_color_hex}:s=1920x1080:d=1[bg_base];
+                        [bg_base]drawbox=x=0:y=0:w=1920:h=1080:
+                        color=0x4A90A4@0.3:thickness=fill[bg_gradient];"""
                     
-                    [bg_gradient]drawtext=text='{clean_brand}':
-                    fontsize=32:fontcolor=white:x=50:y=50:
-                    box=1:boxcolor={brand_color}@0.8:boxborderw=10[bg_logo];
+                    # Add logo if available, otherwise use text branding
+                    if logo_path and os.path.exists(logo_path):
+                        # Calculate index for logo input (2 if profile pic exists, 1 if not)
+                        logo_input_idx = 2
+                        filter_complex += f"""
+                        
+                        [{logo_input_idx}:v]scale=200:-1:force_original_aspect_ratio=1[logo_scaled];
+                        [bg_gradient][logo_scaled]overlay=50:50[bg_with_logo];"""
+                        current_bg = "bg_with_logo"
+                    else:
+                        filter_complex += f"""
+                        
+                        [bg_gradient]drawtext=text='{clean_video_title_branding}':
+                        fontsize=32:fontcolor=white:x=50:y=50:
+                        box=1:boxcolor=0x{brand_color_hex}@0.8:boxborderw=10[bg_with_logo];"""
+                        current_bg = "bg_with_logo"
                     
-                    [bg_logo]drawtext=text='{clean_title}':
-                    fontsize=64:fontcolor=white:x=(w-text_w)/2:y=200:
-                    shadowcolor=black@0.5:shadowx=3:shadowy=3[bg_title];
+                    filter_complex += f"""
+                        
+                        [{current_bg}]drawtext=text='{clean_title}':
+                        fontsize=64:fontcolor=white:x=(w-text_w)/2:y=200:
+                        shadowcolor=black@0.5:shadowx=3:shadowy=3[bg_title];
+                        
+                        [bg_title]drawtext=text='Host\\: {clean_host}':
+                        fontsize=36:fontcolor=0xF0F0F0:x=(w-text_w)/2:y=300[bg_host];
+                        
+                        [1:v]scale=400:400:force_original_aspect_ratio=1,
+                        pad=400:400:(ow-iw)/2:(oh-ih)/2:black[profile_scaled];
+                        
+                        [bg_host][profile_scaled]overlay=760:400[bg_with_profile];"""
                     
-                    [bg_title]drawtext=text='Host\\: {clean_host}':
-                    fontsize=36:fontcolor=0xF0F0F0:x=(w-text_w)/2:y=300[bg_host];
-                    
-                    [1:v]scale=400:400:force_original_aspect_ratio=1,
-                    pad=400:400:(ow-iw)/2:(oh-ih)/2:black[profile_scaled];
-                    
-                    [bg_host][profile_scaled]overlay=760:400[bg_with_profile];
-                    
-                    [0:a]aformat=channel_layouts=mono,
-                    showwaves=s=1920x200:mode=p2p:colors=white:
-                    scale=sqrt:split_channels=1:
-                    draw=scale[waveform_base];
-                    
-                    [waveform_base]crop=1920:150:0:25[waveform];
-                    
-                    [bg_with_profile][waveform]overlay=0:880[v]
-                """
-                # Add profile picture as second input
+                    # Add watermark if specified
+                    if clean_watermark:
+                        filter_complex += f"""
+                        
+                        [bg_with_profile]drawtext=text='{clean_watermark}':
+                        fontsize=24:fontcolor=white@0.7:x=w-text_w-20:y=h-text_h-150:
+                        shadowcolor=black@0.8:shadowx=2:shadowy=2[bg_watermarked];"""
+                        last_filter = "bg_watermarked"
+                    else:
+                        last_filter = "bg_with_profile"
+                        
+                    filter_complex += f"""
+                        
+                        [0:a]aformat=channel_layouts=mono,
+                        showwaves=s=1920x200:mode=p2p:colors=white:
+                        scale=sqrt:split_channels=1:
+                        draw=scale[waveform_base];
+                        
+                        [waveform_base]crop=1920:150:0:25[waveform];
+                        
+                        [{last_filter}][waveform]overlay=0:880[v]
+                    """
+                else:
+                    # Minimal branding when disabled
+                    filter_complex = f"""
+                        color=c=0x{bg_color_hex}:s=1920x1080:d=1[bg_base];
+                        
+                        [bg_base]drawtext=text='{clean_title}':
+                        fontsize=64:fontcolor=white:x=(w-text_w)/2:y=200:
+                        shadowcolor=black@0.5:shadowx=3:shadowy=3[bg_title];
+                        
+                        [bg_title]drawtext=text='Host\\: {clean_host}':
+                        fontsize=36:fontcolor=0xF0F0F0:x=(w-text_w)/2:y=300[bg_host];
+                        
+                        [1:v]scale=400:400:force_original_aspect_ratio=1,
+                        pad=400:400:(ow-iw)/2:(oh-ih)/2:black[profile_scaled];
+                        
+                        [bg_host][profile_scaled]overlay=760:400[bg_with_profile];
+                        
+                        [0:a]aformat=channel_layouts=mono,
+                        showwaves=s=1920x200:mode=p2p:colors=white:
+                        scale=sqrt:split_channels=1:
+                        draw=scale[waveform_base];
+                        
+                        [waveform_base]crop=1920:150:0:25[waveform];
+                        
+                        [bg_with_profile][waveform]overlay=0:880[v]
+                    """
+                
+                # Build command with inputs
                 cmd = [
                     'ffmpeg',
-                    '-i', processed_audio_path,  # Input audio (with silence removed)
-                    '-i', profile_pic_path,  # Profile picture
+                    '-i', processed_audio_path,  # Input 0: audio (with silence removed)
+                    '-i', profile_pic_path,  # Input 1: profile picture
+                ]
+                
+                # Add logo as input if available
+                if branding_enabled and logo_path and os.path.exists(logo_path):
+                    cmd.extend(['-i', logo_path])  # Input 2: logo
+                
+                cmd.extend([
                     '-filter_complex', filter_complex,
                     '-map', '[v]',     # Video from complex filter
                     '-map', '0:a',     # Audio from first input
-                    '-c:v', 'libx264', # Video codec
+                ] + encoding_params + [
                     '-c:a', 'aac',     # Audio codec
                     '-shortest',       # Stop when shortest stream ends
                     '-r', '30',        # 30 FPS
                     '-y',              # Overwrite output file
                     video_path
-                ]
+                ])
             else:
                 # Fallback without profile picture
-                filter_complex = f"""
-                    color=c=0x808080:s=1920x1080:d=1[bg_base];
-                    [bg_base]drawbox=x=0:y=0:w=1920:h=1080:
-                    color=0x4A90A4@0.3:thickness=fill[bg_gradient];
+                if branding_enabled:
+                    # Start with custom background color
+                    filter_complex = f"""
+                        color=c=0x{bg_color_hex}:s=1920x1080:d=1[bg_base];
+                        [bg_base]drawbox=x=0:y=0:w=1920:h=1080:
+                        color=0x4A90A4@0.3:thickness=fill[bg_gradient];"""
                     
-                    [bg_gradient]drawtext=text='{clean_brand}':
-                    fontsize=32:fontcolor=white:x=50:y=50:
-                    box=1:boxcolor={brand_color}@0.8:boxborderw=10[bg_logo];
+                    # Add logo if available, otherwise use text branding
+                    if logo_path and os.path.exists(logo_path):
+                        # Calculate index for logo input (1 without profile pic)
+                        logo_input_idx = 1
+                        filter_complex += f"""
+                        
+                        [{logo_input_idx}:v]scale=200:-1:force_original_aspect_ratio=1[logo_scaled];
+                        [bg_gradient][logo_scaled]overlay=50:50[bg_with_logo];"""
+                        current_bg = "bg_with_logo"
+                    else:
+                        filter_complex += f"""
+                        
+                        [bg_gradient]drawtext=text='{clean_video_title_branding}':
+                        fontsize=32:fontcolor=white:x=50:y=50:
+                        box=1:boxcolor=0x{brand_color_hex}@0.8:boxborderw=10[bg_with_logo];"""
+                        current_bg = "bg_with_logo"
                     
-                    [bg_logo]drawtext=text='{clean_title}':
-                    fontsize=64:fontcolor=white:x=(w-text_w)/2:y=200:
-                    shadowcolor=black@0.5:shadowx=3:shadowy=3[bg_title];
+                    filter_complex += f"""
+                        
+                        [{current_bg}]drawtext=text='{clean_title}':
+                        fontsize=64:fontcolor=white:x=(w-text_w)/2:y=200:
+                        shadowcolor=black@0.5:shadowx=3:shadowy=3[bg_title];
+                        
+                        [bg_title]drawtext=text='Host\\: {clean_host}':
+                        fontsize=36:fontcolor=0xF0F0F0:x=(w-text_w)/2:y=300[bg_host];
+                        
+                        [bg_host]drawbox=x=710:y=400:w=500:h=400:
+                        color=white@0.9:thickness=fill[bg_placeholder_bg];
+                        [bg_placeholder_bg]drawbox=x=710:y=400:w=500:h=400:
+                        color=0x2C3E50:thickness=8[bg_placeholder];
+                        
+                        [bg_placeholder]drawtext=text='🎤':fontsize=150:
+                        fontcolor=0x34495E:x=960-75:y=600-75[bg_with_placeholder];"""
                     
-                    [bg_title]drawtext=text='Host\\: {clean_host}':
-                    fontsize=36:fontcolor=0xF0F0F0:x=(w-text_w)/2:y=300[bg_host];
-                    
-                    [bg_host]drawbox=x=710:y=400:w=500:h=400:
-                    color=white@0.9:thickness=fill[bg_placeholder_bg];
-                    [bg_placeholder_bg]drawbox=x=710:y=400:w=500:h=400:
-                    color=0x2C3E50:thickness=8[bg_placeholder];
-                    
-                    [bg_placeholder]drawtext=text='🎤':fontsize=150:
-                    fontcolor=0x34495E:x=960-75:y=600-75[bg_with_placeholder];
-                    
-                    [0:a]aformat=channel_layouts=mono,
-                    showwaves=s=1920x200:mode=p2p:colors=white:
-                    scale=sqrt:split_channels=1:
-                    draw=scale[waveform_base];
-                    
-                    [waveform_base]crop=1920:150:0:25[waveform];
-                    
-                    [bg_with_placeholder][waveform]overlay=0:880[v]
-                """
+                    # Add watermark if specified
+                    if clean_watermark:
+                        filter_complex += f"""
+                        
+                        [bg_with_placeholder]drawtext=text='{clean_watermark}':
+                        fontsize=24:fontcolor=white@0.7:x=w-text_w-20:y=h-text_h-150:
+                        shadowcolor=black@0.8:shadowx=2:shadowy=2[bg_watermarked];"""
+                        last_filter = "bg_watermarked"
+                    else:
+                        last_filter = "bg_with_placeholder"
+                        
+                    filter_complex += f"""
+                        
+                        [0:a]aformat=channel_layouts=mono,
+                        showwaves=s=1920x200:mode=p2p:colors=white:
+                        scale=sqrt:split_channels=1:
+                        draw=scale[waveform_base];
+                        
+                        [waveform_base]crop=1920:150:0:25[waveform];
+                        
+                        [{last_filter}][waveform]overlay=0:880[v]
+                    """
+                else:
+                    # Minimal branding when disabled
+                    filter_complex = f"""
+                        color=c=0x{bg_color_hex}:s=1920x1080:d=1[bg_base];
+                        
+                        [bg_base]drawtext=text='{clean_title}':
+                        fontsize=64:fontcolor=white:x=(w-text_w)/2:y=200:
+                        shadowcolor=black@0.5:shadowx=3:shadowy=3[bg_title];
+                        
+                        [bg_title]drawtext=text='Host\\: {clean_host}':
+                        fontsize=36:fontcolor=0xF0F0F0:x=(w-text_w)/2:y=300[bg_host];
+                        
+                        [bg_host]drawbox=x=710:y=400:w=500:h=400:
+                        color=gray@0.5:thickness=fill[bg_placeholder_bg];
+                        [bg_placeholder_bg]drawbox=x=710:y=400:w=500:h=400:
+                        color=0x606060:thickness=4[bg_placeholder];
+                        
+                        [bg_placeholder]drawtext=text='🎤':fontsize=150:
+                        fontcolor=0x808080:x=960-75:y=600-75[bg_with_placeholder];
+                        
+                        [0:a]aformat=channel_layouts=mono,
+                        showwaves=s=1920x200:mode=p2p:colors=white:
+                        scale=sqrt:split_channels=1:
+                        draw=scale[waveform_base];
+                        
+                        [waveform_base]crop=1920:150:0:25[waveform];
+                        
+                        [bg_with_placeholder][waveform]overlay=0:880[v]
+                    """
+                # Build command with inputs
                 cmd = [
                     'ffmpeg',
-                    '-i', processed_audio_path,  # Input audio (with silence removed)
+                    '-i', processed_audio_path,  # Input 0: audio (with silence removed)
+                ]
+                
+                # Add logo as input if available
+                if branding_enabled and logo_path and os.path.exists(logo_path):
+                    cmd.extend(['-i', logo_path])  # Input 1: logo
+                
+                cmd.extend([
                     '-filter_complex', filter_complex,
                     '-map', '[v]',     # Video from complex filter
-                    '-map', '0:a',     # Audio from input
-                    '-c:v', 'libx264', # Video codec
+                    '-map', '0:a',     # Audio from first input
+                ] + encoding_params + [
                     '-c:a', 'aac',     # Audio codec
                     '-shortest',       # Stop when shortest stream ends
                     '-r', '30',        # 30 FPS
                     '-y',              # Overwrite output file
                     video_path
-                ]
+                ])
             
             logger.info(f"Creating styled video cover for: {title}")
             logger.info(f"Running ffmpeg command: {' '.join(cmd)}")
@@ -375,13 +625,21 @@ class VideoGenerator:
                 with open(job_file, 'w') as f:
                     json.dump(job_data, f, indent=2)
                 
-                # Clean up temporary trimmed audio file if it was created
+                # Clean up temporary files
                 if processed_audio_path != audio_path and os.path.exists(processed_audio_path):
                     try:
                         os.remove(processed_audio_path)
                         logger.debug(f"Cleaned up temporary audio file: {processed_audio_path}")
                     except Exception as e:
                         logger.warning(f"Failed to clean up temporary audio: {e}")
+                
+                # Clean up downloaded logo if it was created
+                if logo_path and os.path.exists(logo_path):
+                    try:
+                        os.remove(logo_path)
+                        logger.debug(f"Cleaned up temporary logo file: {logo_path}")
+                    except Exception as e:
+                        logger.warning(f"Failed to clean up temporary logo: {e}")
                 
                 # Verify file was created and has reasonable size
                 if os.path.exists(video_path) and os.path.getsize(video_path) > 1024:
@@ -393,10 +651,16 @@ class VideoGenerator:
                 logger.error(f"FFmpeg failed with return code {result.returncode}")
                 logger.error(f"FFmpeg stderr: {result.stderr}")
                 
-                # Clean up temporary trimmed audio file on failure too
+                # Clean up temporary files on failure too
                 if processed_audio_path != audio_path and os.path.exists(processed_audio_path):
                     try:
                         os.remove(processed_audio_path)
+                    except:
+                        pass
+                
+                if logo_path and os.path.exists(logo_path):
+                    try:
+                        os.remove(logo_path)
                     except:
                         pass
                         
@@ -404,19 +668,31 @@ class VideoGenerator:
                 
         except subprocess.TimeoutExpired:
             logger.error("FFmpeg command timed out")
-            # Clean up temporary trimmed audio file on timeout
+            # Clean up temporary files on timeout
             if 'processed_audio_path' in locals() and processed_audio_path != audio_path and os.path.exists(processed_audio_path):
                 try:
                     os.remove(processed_audio_path)
                 except:
                     pass
+            
+            if 'logo_path' in locals() and logo_path and os.path.exists(logo_path):
+                try:
+                    os.remove(logo_path)
+                except:
+                    pass
             return False
         except Exception as e:
             logger.error(f"Error creating video: {e}")
-            # Clean up temporary trimmed audio file on error
+            # Clean up temporary files on error
             if 'processed_audio_path' in locals() and processed_audio_path != audio_path and os.path.exists(processed_audio_path):
                 try:
                     os.remove(processed_audio_path)
+                except:
+                    pass
+            
+            if 'logo_path' in locals() and logo_path and os.path.exists(logo_path):
+                try:
+                    os.remove(logo_path)
                 except:
                     pass
             return False
@@ -580,24 +856,44 @@ class VideoGenerator:
     
     def _get_brand_config(self) -> Dict:
         """Get branding configuration from config file."""
+        # Default configuration
+        default_config = {
+            'brand_name': 'XSpace',
+            'brand_color': '#FF6B35',
+            'brand_logo_url': None,
+            'video_title_branding': 'XSpace Downloader',
+            'video_watermark_text': '',
+            'font_family': 'Arial',
+            'branding_enabled': True,
+            'background_color': '#808080'
+        }
+        
         try:
             if os.path.exists(self.config_file):
                 with open(self.config_file, 'r') as f:
                     config = json.load(f)
-                    return {
-                        'brand_name': config.get('brand_name', 'XSpace'),
-                        'brand_color': config.get('brand_color', '#FF6B35'),
-                        'brand_logo_url': config.get('brand_logo_url', None)
+                    
+                    # Extract all branding-related settings
+                    brand_config = {
+                        'brand_name': config.get('brand_name', default_config['brand_name']),
+                        'brand_color': config.get('brand_color', default_config['brand_color']),
+                        'brand_logo_url': config.get('brand_logo_url', default_config['brand_logo_url']),
+                        'video_title_branding': config.get('video_title_branding', default_config['video_title_branding']),
+                        'video_watermark_text': config.get('video_watermark_text', default_config['video_watermark_text']),
+                        'font_family': config.get('font_family', default_config['font_family']),
+                        'branding_enabled': config.get('branding_enabled', default_config['branding_enabled']),
+                        'background_color': config.get('background_color', default_config['background_color'])
                     }
+                    
+                    logger.debug(f"Loaded brand config: {brand_config}")
+                    return brand_config
+                    
         except Exception as e:
             logger.warning(f"Could not load brand config: {e}")
         
-        # Default fallback
-        return {
-            'brand_name': 'XSpace',
-            'brand_color': '#FF6B35',
-            'brand_logo_url': None
-        }
+        # Return default fallback
+        logger.debug(f"Using default brand config: {default_config}")
+        return default_config
     
     def _download_image(self, url: str, filename: str) -> Optional[str]:
         """Download image from URL and save to temp directory."""

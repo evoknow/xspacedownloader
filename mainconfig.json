@@ -1,46 +1,51 @@
 {
-    "max_concurrent_downloads": 5,
-    "scan_interval": 5,
-    "download_dir": "./downloads",
-    "log_dir": "./logs",
-    "brand_name": "XSpace Downloader",
-    "brand_color": "#FF6B35",
-    "brand_logo_url": null,
-    "database": {
-        "type": "mysql",
-        "mysql": {
-            "host": "173.255.245.16",
-            "port": 3306,
-            "database": "xspacedownloader",
-            "user": "xspaceuser",
-            "password": "l0veAi@2025.xyz",
-            "use_ssl": false
-        }
-    },
-    "translate": {
-        "api_url": "direct",
-        "api_key": "",
-        "self_hosted": true,
-        "self_hosted_url": "http://localhost:5000/translate",
-        "comment": "Legacy translation config - now using AI component"
-    },
-    "ai": {
-        "provider": "openai",
-        "comment": "AI provider: 'openai' or 'claude'. API keys are read from environment variables: OPENAI_API_KEY or ANTHROPIC_API_KEY",
-        "openai": {
-            "endpoint": "https://api.openai.com/v1/chat/completions",
-            "model": "gpt-4o",
-            "comment": "gpt-4o is the latest GPT-4 model with 128K context window and excellent performance for all tasks"
-        },
-        "claude": {
-            "endpoint": "https://api.anthropic.com/v1/messages",
-            "model": "claude-3-sonnet-20240229"
-        }
-    },
-    "rate_limits": {
-        "daily_limit": 100,
-        "hourly_limit": 10,
-        "enabled": false,
-        "comment": "Rate limiting configuration for download requests. Set enabled to false to disable rate limiting."
+  "max_concurrent_downloads": 5,
+  "scan_interval": 5,
+  "download_dir": "./downloads",
+  "log_dir": "./logs",
+  "brand_name": "XSpace",
+  "brand_color": "#ff6b35",
+  "brand_logo_url": "https://aktiful.com/content/images/2025/03/transparent-aktiful-logo-1.png",
+  "database": {
+    "type": "mysql",
+    "mysql": {
+      "host": "173.255.245.16",
+      "port": 3306,
+      "database": "xspacedownloader",
+      "user": "xspaceuser",
+      "password": "l0veAi@2025.xyz",
+      "use_ssl": false
     }
+  },
+  "translate": {
+    "api_url": "direct",
+    "api_key": "",
+    "self_hosted": true,
+    "self_hosted_url": "http://localhost:5000/translate",
+    "comment": "Legacy translation config - now using AI component"
+  },
+  "ai": {
+    "provider": "openai",
+    "comment": "AI provider: 'openai' or 'claude'. API keys are read from environment variables: OPENAI_API_KEY or ANTHROPIC_API_KEY",
+    "openai": {
+      "endpoint": "https://api.openai.com/v1/chat/completions",
+      "model": "gpt-4o",
+      "comment": "gpt-4o is the latest GPT-4 model with 128K context window and excellent performance for all tasks"
+    },
+    "claude": {
+      "endpoint": "https://api.anthropic.com/v1/messages",
+      "model": "claude-3-sonnet-20240229"
+    }
+  },
+  "rate_limits": {
+    "daily_limit": 100,
+    "hourly_limit": 10,
+    "enabled": false,
+    "comment": "Rate limiting configuration for download requests. Set enabled to false to disable rate limiting."
+  },
+  "video_title_branding": "X Space Downloader",
+  "video_watermark_text": "xspacedownload.com",
+  "font_family": "Trebuchet MS",
+  "branding_enabled": true,
+  "background_color": "#ea1a1a"
 }

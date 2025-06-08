@@ -4484,10 +4484,36 @@
             const spaceId = '{{ space.space_id }}';
             
             if (generateBtn) {
+                // Check if video already exists
+                checkExistingVideo(spaceId, generateBtn);
+                
                 generateBtn.addEventListener('click', function() {
-                    generateVideo(spaceId);
+                    // Only generate if button is not in "ready" state
+                    if (!generateBtn.classList.contains('btn-success')) {
+                        generateVideo(spaceId);
+                    }
                 });
             }
+        }
+
+        function checkExistingVideo(spaceId, generateBtn) {
+            fetch(`/api/spaces/${spaceId}/available-formats`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.formats) {
+                        const hasMP4 = data.formats.some(format => format.format === 'mp4');
+                        if (hasMP4) {
+                            // Video already exists, update button to show it's ready
+                            generateBtn.innerHTML = '<i class="bi bi-camera-video-fill"></i> <span class="d-none d-sm-inline">Video Ready</span>';
+                            generateBtn.className = 'btn btn-success btn-sm';
+                            generateBtn.title = 'Video is ready! Use the download button to get your MP4.';
+                            generateBtn.disabled = false;
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.debug('Error checking existing video:', error);
+                });
         }
 
         function generateVideo(spaceId) {
@@ -4543,10 +4569,14 @@
                 fetch(`/api/spaces/${spaceId}/video-status/${jobId}`)
                     .then(response => response.json())
                     .then(data => {
-                        if (data.success) {
-                            const job = data.job;
+                        console.log('Video status response:', data); // Debug logging
+                        
+                        // Check if we have job data (the response structure from your example)
+                        if (data && data.status) {
+                            console.log('Processing status:', data.status); // Debug logging
                             
-                            if (job.status === 'completed') {
+                            if (data.status === 'completed') {
+                                console.log('Video completed, clearing interval'); // Debug logging
                                 clearInterval(currentVideoPollingInterval);
                                 currentVideoPollingInterval = null;
                                 showToast('Video generated successfully!', 'success');
@@ -4558,25 +4588,33 @@
                                 generateBtn.title = 'Video is ready! Use the download button to get your MP4.';
                                 
                                 // Force refresh download button to show MP4 option
+                                console.log('Refreshing download button'); // Debug logging
                                 setTimeout(() => {
                                     initializeSmartDownloadButton();
                                 }, 500);
                                 
-                            } else if (job.status === 'failed') {
+                                return; // Exit after handling completion
+                                
+                            } else if (data.status === 'failed') {
                                 clearInterval(currentVideoPollingInterval);
                                 currentVideoPollingInterval = null;
-                                showToast(`Video generation failed: ${job.error || 'Unknown error'}`, 'danger');
+                                showToast(`Video generation failed: ${data.error || 'Unknown error'}`, 'danger');
                                 
                                 // Reset button
                                 generateBtn.disabled = false;
                                 generateBtn.innerHTML = '<i class="bi bi-camera-video"></i> <span class="d-none d-sm-inline">Generate Video</span>';
                                 generateBtn.className = 'btn btn-secondary btn-sm';
                                 
-                            } else if (job.status === 'processing') {
+                                return; // Exit after handling failure
+                                
+                            } else if (data.status === 'processing') {
                                 // Update button with progress
-                                const progress = job.progress || 0;
+                                const progress = data.progress || 0;
                                 generateBtn.innerHTML = `<i class="bi bi-hourglass-split"></i> <span class="d-none d-sm-inline">${progress}%</span>`;
+                                return; // Exit after handling processing
                             }
+                        } else {
+                            console.error('Unexpected response structure:', data);
                         }
                     })
                     .catch(error => {

@@ -4837,7 +4837,7 @@ def generate_video(space_id):
         
         # Generate video using background task
         from components.VideoGenerator import VideoGenerator
-        video_generator = VideoGenerator()
+        video_generator = VideoGenerator(downloads_dir=app.config['DOWNLOAD_DIR'])
         
         # Create video generation job
         job_id = video_generator.create_video_job(
@@ -4865,7 +4865,7 @@ def get_video_status(space_id, job_id):
     """Get video generation status."""
     try:
         from components.VideoGenerator import VideoGenerator
-        video_generator = VideoGenerator()
+        video_generator = VideoGenerator(downloads_dir=app.config['DOWNLOAD_DIR'])
         
         status = video_generator.get_job_status(job_id)
         if status:
@@ -4882,7 +4882,7 @@ def download_video(space_id, job_id):
     """Download generated video file."""
     try:
         from components.VideoGenerator import VideoGenerator
-        video_generator = VideoGenerator()
+        video_generator = VideoGenerator(downloads_dir=app.config['DOWNLOAD_DIR'])
         
         video_path = video_generator.get_video_path(job_id)
         if video_path and os.path.exists(video_path):
@@ -5290,6 +5290,103 @@ def admin_update_tracking_config():
         
     except Exception as e:
         logger.error(f"Error updating tracking config: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/admin/api/branding_config', methods=['GET'])
+def admin_get_branding_config():
+    """Get branding configuration for video generation."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        # Load branding configuration from mainconfig.json
+        config_file = 'mainconfig.json'
+        default_config = {
+            'brand_name': 'XSpace',
+            'brand_color': '#FF6B35',
+            'brand_logo_url': None,
+            'video_title_branding': 'XSpace Downloader',
+            'video_watermark_text': '',
+            'font_family': 'Arial',
+            'branding_enabled': True,
+            'background_color': '#808080'
+        }
+        
+        if os.path.exists(config_file):
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+                # Extract branding-related settings
+                branding_config = {
+                    'brand_name': config.get('brand_name', default_config['brand_name']),
+                    'brand_color': config.get('brand_color', default_config['brand_color']),
+                    'brand_logo_url': config.get('brand_logo_url', default_config['brand_logo_url']),
+                    'video_title_branding': config.get('video_title_branding', default_config['video_title_branding']),
+                    'video_watermark_text': config.get('video_watermark_text', default_config['video_watermark_text']),
+                    'font_family': config.get('font_family', default_config['font_family']),
+                    'branding_enabled': config.get('branding_enabled', default_config['branding_enabled']),
+                    'background_color': config.get('background_color', default_config['background_color'])
+                }
+                return jsonify({'success': True, 'config': branding_config})
+        else:
+            return jsonify({'success': True, 'config': default_config})
+            
+    except Exception as e:
+        logger.error(f"Error getting branding config: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/admin/api/branding_config', methods=['POST'])
+def admin_update_branding_config():
+    """Update branding configuration for video generation."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+        
+        # Validate color format if provided
+        brand_color = data.get('brand_color', '#FF6B35')
+        if brand_color and not brand_color.startswith('#'):
+            brand_color = '#' + brand_color
+        if not re.match(r'^#[0-9A-Fa-f]{6}$', brand_color):
+            return jsonify({'success': False, 'error': 'Invalid color format. Use hex format like #FF6B35'}), 400
+        
+        # Load existing config or create new
+        config_file = 'mainconfig.json'
+        config = {}
+        if os.path.exists(config_file):
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+        
+        # Validate background color format if provided
+        background_color = data.get('background_color', '#808080')
+        if background_color and not background_color.startswith('#'):
+            background_color = '#' + background_color
+        if not re.match(r'^#[0-9A-Fa-f]{6}$', background_color):
+            background_color = '#808080'  # Default fallback for invalid color
+        
+        # Update branding settings
+        config.update({
+            'brand_name': data.get('brand_name', 'XSpace'),
+            'brand_color': brand_color,
+            'brand_logo_url': data.get('brand_logo_url'),
+            'video_title_branding': data.get('video_title_branding', 'XSpace Downloader'),
+            'video_watermark_text': data.get('video_watermark_text', ''),
+            'font_family': data.get('font_family', 'Arial'),
+            'branding_enabled': data.get('branding_enabled', True),
+            'background_color': background_color
+        })
+        
+        # Save updated config
+        with open(config_file, 'w') as f:
+            json.dump(config, f, indent=2)
+        
+        logger.info(f"Branding configuration updated by admin user {session.get('user_id')}")
+        return jsonify({'success': True, 'message': 'Branding configuration updated successfully'})
+        
+    except Exception as e:
+        logger.error(f"Error updating branding config: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/admin/api/stats/<stat_type>')
