@@ -21,6 +21,9 @@ openai-whisper>=20231117
 Pillow>=10.0.0
 # Rate limiting
 Flask-Limiter>=3.5.0
+# System monitoring
+psutil>=5.9.0
+pynvml>=11.5.0  # Optional: for NVIDIA GPU monitoring
 
 # Production deployment (optional)
 # gunicorn>=20.1.0  # WSGI server for production

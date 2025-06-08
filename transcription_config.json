@@ -1,0 +1,8 @@
+{
+  "provider": "openai",
+  "default_model": "base",
+  "device": "auto",
+  "openai_model": "gpt-4o-mini-transcribe",
+  "enable_corrective_filter": true,
+  "correction_model": "gpt-4o-mini"
+}

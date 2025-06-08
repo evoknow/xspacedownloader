@@ -64,6 +64,83 @@
         </div>
     </div>
     
+    <!-- System Monitoring -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="bi bi-cpu"></i> System Resources
+                        <span class="badge bg-success ms-2" id="systemStatus">Monitoring...</span>
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <!-- CPU Usage -->
+                        <div class="col-md-3 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="card-title">
+                                        <i class="bi bi-cpu"></i> CPU Usage
+                                    </h6>
+                                    <div class="progress mb-2" style="height: 20px;">
+                                        <div class="progress-bar" role="progressbar" id="cpuProgress" style="width: 0%">0%</div>
+                                    </div>
+                                    <small class="text-muted" id="cpuDetails">Loading...</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Memory Usage -->
+                        <div class="col-md-3 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="card-title">
+                                        <i class="bi bi-memory"></i> Memory Usage
+                                    </h6>
+                                    <div class="progress mb-2" style="height: 20px;">
+                                        <div class="progress-bar" role="progressbar" id="memoryProgress" style="width: 0%">0%</div>
+                                    </div>
+                                    <small class="text-muted" id="memoryDetails">Loading...</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- GPU Usage -->
+                        <div class="col-md-3 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="card-title">
+                                        <i class="bi bi-gpu-card"></i> GPU Usage
+                                    </h6>
+                                    <div class="progress mb-2" style="height: 20px;">
+                                        <div class="progress-bar" role="progressbar" id="gpuProgress" style="width: 0%">0%</div>
+                                    </div>
+                                    <small class="text-muted" id="gpuDetails">Loading...</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Disk Usage -->
+                        <div class="col-md-3 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="card-title">
+                                        <i class="bi bi-hdd"></i> Disk Usage
+                                    </h6>
+                                    <div class="progress mb-2" style="height: 20px;">
+                                        <div class="progress-bar" role="progressbar" id="diskProgress" style="width: 0%">0%</div>
+                                    </div>
+                                    <small class="text-muted" id="diskDetails">Loading...</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <!-- Navigation Tabs -->
     <ul class="nav nav-tabs" id="adminTabs" role="tablist">
         <li class="nav-item" role="presentation">
@@ -86,6 +163,18 @@
                 <i class="bi bi-gear"></i> Settings
             </button>
         </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="logs-tab" data-bs-toggle="tab" data-bs-target="#logs" type="button" role="tab">
+                <i class="bi bi-file-text"></i> Logs
+            </button>
+        </li>
+        {% if is_localhost %}
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="development-tab" data-bs-toggle="tab" data-bs-target="#development" type="button" role="tab">
+                <i class="bi bi-code-slash text-warning"></i> Development
+            </button>
+        </li>
+        {% endif %}
     </ul>
     
     <!-- Tab Content -->
@@ -386,10 +475,321 @@
                         </div>
                     </div>
                     
+                    <!-- Transcription Configuration -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h6 class="mb-0"><i class="bi bi-mic"></i> Transcription Configuration</h6>
+                        </div>
+                        <div class="card-body">
+                            <form id="transcriptionConfigForm">
+                                <div class="row mb-3">
+                                    <div class="col-md-12">
+                                        <label class="form-label">Transcription Provider</label>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="transcriptionProvider" 
+                                                   id="localWhisper" value="local" checked>
+                                            <label class="form-check-label" for="localWhisper">
+                                                <strong>Local Whisper</strong> - Uses local OpenAI Whisper models
+                                            </label>
+                                            <div class="form-text ms-4">
+                                                <i class="bi bi-cpu text-info"></i> 
+                                                CPU-intensive, free, works offline. Default model: tiny (fast), admin can upgrade to base.
+                                            </div>
+                                        </div>
+                                        <div class="form-check mt-2">
+                                            <input class="form-check-input" type="radio" name="transcriptionProvider" 
+                                                   id="openaiApi" value="openai">
+                                            <label class="form-check-label" for="openaiApi">
+                                                <strong>OpenAI API</strong> - Uses OpenAI's cloud transcription service
+                                            </label>
+                                            <div class="form-text ms-4">
+                                                <i class="bi bi-cloud text-success"></i> 
+                                                Fast, accurate, costs money per minute. Requires API key.
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div id="openaiApiSettings" style="display: none;">
+                                    <div class="row mb-3">
+                                        <div class="col-md-8">
+                                            <label for="openaiApiKey" class="form-label">OpenAI API Key</label>
+                                            <input type="password" class="form-control" id="openaiApiKey" 
+                                                   placeholder="sk-...">
+                                            <div class="form-text">
+                                                <span id="apiKeyStatus">Your OpenAI API key for transcription service.</span>
+                                                <br><small class="text-muted">Leave unchanged to keep existing key, or enter new key to update.</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="openaiModel" class="form-label">Model</label>
+                                            <select class="form-select" id="openaiModel">
+                                                <option value="gpt-4o-mini-transcribe">gpt-4o-mini-transcribe (recommended - better & cheaper)</option>
+                                                <option value="whisper-1">whisper-1 (legacy)</option>
+                                            </select>
+                                            <div class="form-text">OpenAI transcription model</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div id="localWhisperSettings">
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label for="defaultWhisperModel" class="form-label">Default Whisper Model</label>
+                                            <select class="form-select" id="defaultWhisperModel">
+                                                <option value="tiny" selected>tiny (fastest, less accurate)</option>
+                                                <option value="base">base (balanced)</option>
+                                                <option value="small">small (slower, more accurate)</option>
+                                                <option value="medium">medium (much slower, very accurate)</option>
+                                                <option value="large">large (slowest, most accurate)</option>
+                                            </select>
+                                            <div class="form-text">Default model for new transcriptions</div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="whisperDevice" class="form-label">Processing Device</label>
+                                            <select class="form-select" id="whisperDevice">
+                                                <option value="auto" selected>Auto-detect</option>
+                                                <option value="cpu">CPU only</option>
+                                                <option value="cuda">CUDA (NVIDIA GPU)</option>
+                                            </select>
+                                            <div class="form-text">Device for Whisper processing</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Corrective Filter Settings -->
+                                <div class="row mb-3">
+                                    <div class="col-12">
+                                        <hr>
+                                        <h6 class="text-primary mb-3">Corrective Filter (Post-Processing)</h6>
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" id="enableCorrectiveFilter">
+                                            <label class="form-check-label" for="enableCorrectiveFilter">
+                                                <strong>Enable Corrective Filter</strong>
+                                            </label>
+                                            <div class="form-text">
+                                                Uses GPT to improve transcript accuracy by fixing spelling, punctuation, and common transcription errors.
+                                                <br><small class="text-warning">⚠️ Requires OpenAI API key and will increase processing time and costs.</small>
+                                            </div>
+                                        </div>
+                                        <div class="row" id="correctiveFilterSettings">
+                                            <div class="col-md-6">
+                                                <label for="correctionModel" class="form-label">Correction Model</label>
+                                                <select class="form-select" id="correctionModel">
+                                                    <option value="gpt-4o-mini">gpt-4o-mini (recommended - fast & cheap)</option>
+                                                    <option value="gpt-4o">gpt-4o (higher quality, more expensive)</option>
+                                                    <option value="gpt-3.5-turbo">gpt-3.5-turbo (legacy)</option>
+                                                </select>
+                                                <div class="form-text">Model used for correcting transcripts</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-save"></i> Save Transcription Settings
+                                </button>
+                                <div class="alert alert-info mt-3" style="display: none;" id="transcriptionConfigMessage"></div>
+                            </form>
+                        </div>
+                    </div>
+                    
                     <!-- Other settings can be added here -->
                 </div>
             </div>
         </div>
+        
+        <!-- Logs Tab -->
+        <div class="tab-pane fade" id="logs" role="tabpanel">
+            <div class="card mt-3">
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <h5 class="card-title">
+                                <i class="bi bi-file-text"></i> System Logs
+                            </h5>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-outline-primary" onclick="refreshLogs()" title="Refresh logs">
+                                    <i class="bi bi-arrow-clockwise"></i> Refresh
+                                </button>
+                                <button type="button" class="btn btn-outline-primary" onclick="clearLogs()">
+                                    <i class="bi bi-trash"></i> Clear
+                                </button>
+                                <button type="button" class="btn btn-outline-primary" onclick="toggleAutoScroll()" id="autoScrollBtn">
+                                    <i class="bi bi-arrow-down-circle"></i> Auto-scroll: ON
+                                </button>
+                                <button type="button" class="btn btn-outline-primary" onclick="toggleLogStreaming()" id="streamingBtn">
+                                    <i class="bi bi-play-circle"></i> Start Streaming
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Log Filters -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label for="logLevel" class="form-label">Log Level</label>
+                            <select class="form-select" id="logLevel" onchange="filterLogs()">
+                                <option value="">All Levels</option>
+                                <option value="DEBUG">Debug</option>
+                                <option value="INFO">Info</option>
+                                <option value="WARNING">Warning</option>
+                                <option value="ERROR">Error</option>
+                                <option value="CRITICAL">Critical</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="logSource" class="form-label">Source</label>
+                            <select class="form-select" id="logSource" onchange="filterLogs()">
+                                <option value="">All Sources</option>
+                                <option value="transcribe">Transcription</option>
+                                <option value="download">Downloads</option>
+                                <option value="app">Application</option>
+                                <option value="api">API</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="logSearch" class="form-label">Search</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="logSearch" placeholder="Search logs..." onkeyup="filterLogs()">
+                                <button class="btn btn-outline-secondary" type="button" onclick="resetFilters()" title="Reset all filters">
+                                    <i class="bi bi-x-circle"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Log Display -->
+                    <div class="card">
+                        <div class="card-header bg-dark text-white">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <small>Live System Logs</small>
+                                </div>
+                                <div class="col-md-6 text-end">
+                                    <small id="logStatus">Stopped</small>
+                                    <span class="badge bg-secondary ms-2" id="logCount">0 lines</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-body p-0" style="background-color: #1e1e1e;">
+                            <div id="logContainer" style="height: 500px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 12px; color: #f8f9fa; padding: 10px;">
+                                <div class="text-muted text-center mt-5">
+                                    <i class="bi bi-file-text" style="font-size: 2rem;"></i>
+                                    <p>Click "Start Streaming" to view live logs</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Log Legend -->
+                    <div class="mt-3">
+                        <small class="text-muted">
+                            <strong>Legend:</strong>
+                            <span class="badge bg-primary ms-2">INFO</span>
+                            <span class="badge bg-warning ms-2">WARNING</span>
+                            <span class="badge bg-danger ms-2">ERROR</span>
+                            <span class="badge bg-success ms-2">OPENAI</span>
+                            <span class="badge bg-info ms-2">LOCAL</span>
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        {% if is_localhost %}
+        <!-- Development Tab -->
+        <div class="tab-pane fade" id="development" role="tabpanel">
+            <div class="card mt-3">
+                <div class="card-header bg-warning">
+                    <h6 class="mb-0 text-dark">
+                        <i class="bi bi-exclamation-triangle"></i> 
+                        <strong>DANGER ZONE - Development Tools (Localhost Only)</strong>
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-danger" role="alert">
+                        <h5 class="alert-heading"><i class="bi bi-shield-exclamation"></i> Warning!</h5>
+                        <p>These operations are <strong>IRREVERSIBLE</strong> and will permanently delete data. Only use in development environments.</p>
+                        <hr>
+                        <p class="mb-0">These tools are only available when running on localhost for safety.</p>
+                    </div>
+                    
+                    <!-- Clear All Spaces Data -->
+                    <div class="card mb-4">
+                        <div class="card-header bg-danger text-white">
+                            <h6 class="mb-0">
+                                <i class="bi bi-trash3"></i> Clear All Spaces Data
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <p>This will permanently delete:</p>
+                            <ul>
+                                <li><strong>Database Tables:</strong> spaces, space_clips, space_download_history, space_download_scheduler, space_favs, space_metadata, space_notes, space_play_history, space_reviews, space_tags, space_transcripts</li>
+                                <li><strong>Audio Files:</strong> downloads/*.mp3, downloads/*.m4a, downloads/*.wav</li>
+                                <li><strong>Transcript Jobs:</strong> transcript_jobs/*.json</li>
+                            </ul>
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="confirmClearSpaces">
+                                    <label class="form-check-label" for="confirmClearSpaces">
+                                        I understand this will permanently delete ALL spaces data and files
+                                    </label>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-danger" onclick="clearAllSpacesData()" disabled id="clearSpacesBtn">
+                                <i class="bi bi-trash3-fill"></i> Clear All Spaces Data
+                            </button>
+                            <div class="alert alert-info mt-3" style="display: none;" id="clearSpacesMessage"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Clear Non-Admin Users -->
+                    <div class="card mb-4">
+                        <div class="card-header bg-danger text-white">
+                            <h6 class="mb-0">
+                                <i class="bi bi-people"></i> Clear Non-Admin Users
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <p>This will permanently delete all users except those with <code>is_admin = 1</code>.</p>
+                            <div class="alert alert-warning" role="alert">
+                                <strong>Preserved:</strong> Admin users will be kept safe.
+                            </div>
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="confirmClearUsers">
+                                    <label class="form-check-label" for="confirmClearUsers">
+                                        I understand this will permanently delete all non-admin users
+                                    </label>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-danger" onclick="clearNonAdminUsers()" disabled id="clearUsersBtn">
+                                <i class="bi bi-people-fill"></i> Clear Non-Admin Users
+                            </button>
+                            <div class="alert alert-info mt-3" style="display: none;" id="clearUsersMessage"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- System Info -->
+                    <div class="card">
+                        <div class="card-header bg-info text-white">
+                            <h6 class="mb-0">
+                                <i class="bi bi-info-circle"></i> Development Environment Info
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Environment:</strong> Localhost Development</p>
+                            <p><strong>Host:</strong> {{ request.host }}</p>
+                            <p class="mb-0"><strong>Note:</strong> These tools are automatically hidden in production environments.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 
@@ -965,6 +1365,557 @@ document.getElementById('trackingConfigForm').addEventListener('submit', async f
 // Load tracking config when settings tab is shown
 document.getElementById('settings-tab').addEventListener('shown.bs.tab', function() {
     loadTrackingConfig();
+    loadTranscriptionConfig();
+});
+
+// Transcription Configuration
+document.querySelectorAll('input[name="transcriptionProvider"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        const openaiSettings = document.getElementById('openaiApiSettings');
+        const localSettings = document.getElementById('localWhisperSettings');
+        
+        if (this.value === 'openai') {
+            openaiSettings.style.display = 'block';
+            localSettings.style.display = 'none';
+        } else {
+            openaiSettings.style.display = 'none';
+            localSettings.style.display = 'block';
+        }
+    });
+});
+
+async function loadTranscriptionConfig() {
+    try {
+        const response = await fetch('/admin/api/transcription_config');
+        if (response.ok) {
+            const result = await response.json();
+            
+            if (result.success && result.config) {
+                // Set provider
+                const provider = result.config.provider || 'local';
+                document.getElementById(provider === 'openai' ? 'openaiApi' : 'localWhisper').checked = true;
+                
+                // Trigger change event to show/hide sections
+                document.querySelector(`input[value="${provider}"]`).dispatchEvent(new Event('change'));
+                
+                // Set OpenAI settings
+                const apiKeyInput = document.getElementById('openaiApiKey');
+                const apiKeyStatus = document.getElementById('apiKeyStatus');
+                const keySource = result.config.openai_key_source || 'none';
+                
+                if (keySource === 'environment') {
+                    apiKeyInput.value = '***from_env***';
+                    apiKeyInput.placeholder = 'Using API key from environment variables';
+                    apiKeyInput.title = 'OpenAI API key is set in environment variables (.env file)';
+                    apiKeyStatus.innerHTML = '<i class="bi bi-check-circle text-success"></i> API key configured in environment variables (.env file).';
+                } else if (keySource === 'config') {
+                    apiKeyInput.value = '***hidden***';
+                    apiKeyInput.placeholder = 'Using API key from configuration';
+                    apiKeyInput.title = 'OpenAI API key is set in configuration file';
+                    apiKeyStatus.innerHTML = '<i class="bi bi-check-circle text-success"></i> API key configured in settings file.';
+                } else {
+                    apiKeyInput.value = '';
+                    apiKeyInput.placeholder = 'sk-...';
+                    apiKeyInput.title = 'Enter your OpenAI API key';
+                    apiKeyStatus.innerHTML = '<i class="bi bi-exclamation-triangle text-warning"></i> No API key configured. Enter one to use OpenAI transcription.';
+                }
+                
+                document.getElementById('openaiModel').value = result.config.openai_model || 'gpt-4o-mini-transcribe';
+                
+                // Set local Whisper settings
+                document.getElementById('defaultWhisperModel').value = result.config.default_model || 'tiny';
+                document.getElementById('whisperDevice').value = result.config.device || 'auto';
+                
+                // Set corrective filter settings
+                document.getElementById('enableCorrectiveFilter').checked = result.config.enable_corrective_filter !== false;
+                document.getElementById('correctionModel').value = result.config.correction_model || 'gpt-4o-mini';
+            }
+        }
+    } catch (error) {
+        console.error('Error loading transcription config:', error);
+    }
+}
+
+document.getElementById('transcriptionConfigForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const messageDiv = document.getElementById('transcriptionConfigMessage');
+    messageDiv.style.display = 'none';
+    
+    const provider = document.querySelector('input[name="transcriptionProvider"]:checked').value;
+    
+    const data = {
+        provider: provider,
+        openai_api_key: document.getElementById('openaiApiKey').value,
+        openai_model: document.getElementById('openaiModel').value,
+        default_model: document.getElementById('defaultWhisperModel').value,
+        device: document.getElementById('whisperDevice').value,
+        enable_corrective_filter: document.getElementById('enableCorrectiveFilter').checked,
+        correction_model: document.getElementById('correctionModel').value
+    };
+    
+    try {
+        const response = await fetch('/admin/api/transcription_config', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            messageDiv.className = 'alert alert-success mt-3';
+            messageDiv.textContent = result.message || 'Transcription configuration updated successfully';
+            messageDiv.style.display = 'block';
+        } else {
+            messageDiv.className = 'alert alert-danger mt-3';
+            messageDiv.textContent = 'Error: ' + (result.error || 'Failed to update configuration');
+            messageDiv.style.display = 'block';
+        }
+    } catch (error) {
+        messageDiv.className = 'alert alert-danger mt-3';
+        messageDiv.textContent = 'Error: ' + error.message;
+        messageDiv.style.display = 'block';
+    }
+});
+
+// Log Streaming Variables
+let logStreamingActive = false;
+let logStreamingInterval = null;
+let autoScrollEnabled = true;
+let allLogs = [];
+let logOffset = 0;
+
+// Log Management Functions
+function toggleLogStreaming() {
+    const btn = document.getElementById('streamingBtn');
+    const status = document.getElementById('logStatus');
+    
+    if (logStreamingActive) {
+        // Stop streaming
+        clearInterval(logStreamingInterval);
+        logStreamingActive = false;
+        btn.innerHTML = '<i class="bi bi-play-circle"></i> Start Streaming';
+        btn.classList.remove('btn-success');
+        btn.classList.add('btn-outline-primary');
+        status.textContent = 'Stopped';
+        status.className = 'text-danger';
+    } else {
+        // Start streaming
+        logStreamingActive = true;
+        btn.innerHTML = '<i class="bi bi-stop-circle"></i> Stop Streaming';
+        btn.classList.remove('btn-outline-primary');
+        btn.classList.add('btn-success');
+        status.textContent = 'Streaming';
+        status.className = 'text-success';
+        
+        // Reset and start fresh
+        allLogs = [];
+        logOffset = 0;
+        
+        // Initial load
+        loadLogs();
+        
+        // Set up polling every 2 seconds
+        logStreamingInterval = setInterval(loadLogs, 2000);
+    }
+}
+
+async function loadLogs() {
+    try {
+        const response = await fetch(`/admin/api/logs?offset=${logOffset}`);
+        const result = await response.json();
+        
+        console.log('API Response:', result);
+        
+        if (result.success) {
+            if (result.logs.length > 0) {
+                allLogs = allLogs.concat(result.logs);
+                logOffset = result.next_offset || logOffset + result.logs.length;
+                displayLogs();
+                updateLogCount();
+            } else {
+                console.log('No new logs received from API');
+                // Still call displayLogs to show existing logs
+                displayLogs();
+                updateLogCount();
+            }
+        } else {
+            console.error('API returned error:', result.error);
+        }
+    } catch (error) {
+        console.error('Error loading logs:', error);
+    }
+}
+
+function displayLogs() {
+    const container = document.getElementById('logContainer');
+    const level = document.getElementById('logLevel').value;
+    const source = document.getElementById('logSource').value;
+    const search = document.getElementById('logSearch').value.toLowerCase();
+    
+    // Debug logging
+    console.log('Total logs:', allLogs.length);
+    console.log('Filters:', { level, source, search });
+    
+    // Filter logs
+    let filteredLogs = allLogs.filter(log => {
+        if (level && !log.message.includes(`[${level}]`)) return false;
+        if (source && !log.message.toLowerCase().includes(source)) return false;
+        if (search && !log.message.toLowerCase().includes(search)) return false;
+        return true;
+    });
+    
+    console.log('Filtered logs count:', filteredLogs.length);
+    
+    // Display filtered logs
+    const logHtml = filteredLogs.map(log => formatLogLine(log.message)).join('\n');
+    
+    if (allLogs.length === 0) {
+        container.innerHTML = '<div class="text-muted text-center mt-5"><i class="bi bi-file-text" style="font-size: 2rem;"></i><p>No logs available yet</p></div>';
+    } else if (filteredLogs.length === 0) {
+        container.innerHTML = '<div class="text-muted text-center mt-5">No logs match the current filters<br><small>Try clearing filters or changing search terms</small></div>';
+    } else {
+        container.innerHTML = `<pre style="color: inherit; margin: 0; white-space: pre-wrap; word-wrap: break-word;">${logHtml}</pre>`;
+        
+        // Auto-scroll to bottom if enabled
+        if (autoScrollEnabled) {
+            container.scrollTop = container.scrollHeight;
+        }
+    }
+}
+
+function formatLogLine(message) {
+    // Enhanced formatting to highlight transcription provider
+    let formatted = message;
+    
+    // Highlight log levels
+    formatted = formatted.replace(/\[DEBUG\]/g, '<span class="badge bg-secondary">[DEBUG]</span>');
+    formatted = formatted.replace(/\[INFO\]/g, '<span class="badge bg-primary">[INFO]</span>');
+    formatted = formatted.replace(/\[WARNING\]/g, '<span class="badge bg-warning">[WARNING]</span>');
+    formatted = formatted.replace(/\[ERROR\]/g, '<span class="badge bg-danger">[ERROR]</span>');
+    formatted = formatted.replace(/\[CRITICAL\]/g, '<span class="badge bg-danger">[CRITICAL]</span>');
+    
+    // Highlight transcription providers
+    formatted = formatted.replace(/OpenAI API|openai_api|OpenAI client/gi, '<span class="badge bg-success">OPENAI</span>');
+    formatted = formatted.replace(/local Whisper|whisper\.load_model|Local transcription/gi, '<span class="badge bg-info">LOCAL</span>');
+    
+    // Highlight important transcription events
+    formatted = formatted.replace(/Starting transcription/gi, '<span class="text-warning">Starting transcription</span>');
+    formatted = formatted.replace(/transcription completed/gi, '<span class="text-success">transcription completed</span>');
+    formatted = formatted.replace(/Error.*transcrib/gi, '<span class="text-danger">$&</span>');
+    
+    return formatted;
+}
+
+function clearLogs() {
+    if (confirm('Clear all logs from the display?')) {
+        allLogs = [];
+        logOffset = 0;
+        document.getElementById('logContainer').innerHTML = '<div class="text-muted text-center mt-5">Logs cleared</div>';
+        updateLogCount();
+    }
+}
+
+function toggleAutoScroll() {
+    autoScrollEnabled = !autoScrollEnabled;
+    const btn = document.getElementById('autoScrollBtn');
+    
+    if (autoScrollEnabled) {
+        btn.innerHTML = '<i class="bi bi-arrow-down-circle"></i> Auto-scroll: ON';
+        btn.classList.remove('btn-outline-secondary');
+        btn.classList.add('btn-outline-primary');
+    } else {
+        btn.innerHTML = '<i class="bi bi-arrow-down-circle"></i> Auto-scroll: OFF';
+        btn.classList.remove('btn-outline-primary');
+        btn.classList.add('btn-outline-secondary');
+    }
+}
+
+function filterLogs() {
+    displayLogs();
+}
+
+function resetFilters() {
+    document.getElementById('logLevel').value = '';
+    document.getElementById('logSource').value = '';
+    document.getElementById('logSearch').value = '';
+    displayLogs();
+}
+
+function refreshLogs() {
+    // Reset and reload logs from the beginning
+    allLogs = [];
+    logOffset = 0;
+    loadLogs();
+}
+
+function updateLogCount() {
+    const count = document.getElementById('logCount');
+    count.textContent = `${allLogs.length} lines`;
+}
+
+// Initialize logs tab when activated
+document.getElementById('logs-tab').addEventListener('shown.bs.tab', function() {
+    if (!logStreamingActive) {
+        // Reset logs and load from beginning when tab is first opened
+        allLogs = [];
+        logOffset = 0;
+        loadLogs();
+    }
+});
+
+// System Monitoring Variables
+let systemMonitoringActive = false;
+let systemMonitoringInterval = null;
+
+// System Monitoring Functions
+async function loadSystemStats() {
+    try {
+        const response = await fetch('/admin/api/system_stats');
+        const result = await response.json();
+        
+        if (result.success) {
+            updateSystemDisplay(result.stats);
+            document.getElementById('systemStatus').textContent = 'Live';
+            document.getElementById('systemStatus').className = 'badge bg-success ms-2';
+        } else {
+            console.error('Error loading system stats:', result.error);
+            document.getElementById('systemStatus').textContent = 'Error';
+            document.getElementById('systemStatus').className = 'badge bg-danger ms-2';
+        }
+    } catch (error) {
+        console.error('Error loading system stats:', error);
+        document.getElementById('systemStatus').textContent = 'Offline';
+        document.getElementById('systemStatus').className = 'badge bg-secondary ms-2';
+    }
+}
+
+function updateSystemDisplay(stats) {
+    // Update CPU
+    const cpuProgress = document.getElementById('cpuProgress');
+    const cpuDetails = document.getElementById('cpuDetails');
+    cpuProgress.style.width = `${stats.cpu.usage_percent}%`;
+    cpuProgress.textContent = `${stats.cpu.usage_percent}%`;
+    cpuProgress.className = `progress-bar ${getProgressBarColor(stats.cpu.usage_percent)}`;
+    cpuDetails.textContent = stats.cpu.details;
+    
+    // Update Memory
+    const memoryProgress = document.getElementById('memoryProgress');
+    const memoryDetails = document.getElementById('memoryDetails');
+    memoryProgress.style.width = `${stats.memory.usage_percent}%`;
+    memoryProgress.textContent = `${stats.memory.usage_percent}%`;
+    memoryProgress.className = `progress-bar ${getProgressBarColor(stats.memory.usage_percent)}`;
+    memoryDetails.textContent = stats.memory.details;
+    
+    // Update Disk
+    const diskProgress = document.getElementById('diskProgress');
+    const diskDetails = document.getElementById('diskDetails');
+    diskProgress.style.width = `${stats.disk.usage_percent}%`;
+    diskProgress.textContent = `${stats.disk.usage_percent}%`;
+    diskProgress.className = `progress-bar ${getProgressBarColor(stats.disk.usage_percent)}`;
+    diskDetails.textContent = stats.disk.details;
+    
+    // Update GPU
+    const gpuProgress = document.getElementById('gpuProgress');
+    const gpuDetails = document.getElementById('gpuDetails');
+    
+    if (stats.gpu.available !== false) {
+        const gpuUsage = stats.gpu.usage_percent || 0;
+        gpuProgress.style.width = `${gpuUsage}%`;
+        gpuProgress.textContent = `${gpuUsage}%`;
+        gpuProgress.className = `progress-bar ${getProgressBarColor(gpuUsage)}`;
+        gpuDetails.textContent = stats.gpu.details;
+    } else {
+        gpuProgress.style.width = '0%';
+        gpuProgress.textContent = 'N/A';
+        gpuProgress.className = 'progress-bar bg-secondary';
+        gpuDetails.textContent = stats.gpu.details;
+    }
+}
+
+function getProgressBarColor(percentage) {
+    if (percentage < 50) return 'bg-success';
+    if (percentage < 75) return 'bg-warning';
+    return 'bg-danger';
+}
+
+function startSystemMonitoring() {
+    if (!systemMonitoringActive) {
+        systemMonitoringActive = true;
+        // Load immediately
+        loadSystemStats();
+        // Set up 30-second interval
+        systemMonitoringInterval = setInterval(loadSystemStats, 30000);
+    }
+}
+
+function stopSystemMonitoring() {
+    if (systemMonitoringActive) {
+        systemMonitoringActive = false;
+        clearInterval(systemMonitoringInterval);
+        document.getElementById('systemStatus').textContent = 'Stopped';
+        document.getElementById('systemStatus').className = 'badge bg-secondary ms-2';
+    }
+}
+
+// Start system monitoring when the page loads
+document.addEventListener('DOMContentLoaded', function() {
+    startSystemMonitoring();
+});
+
+// Stop monitoring when the page is about to unload
+window.addEventListener('beforeunload', function() {
+    stopSystemMonitoring();
+});
+
+// Development Tab Functions (only available on localhost)
+function enableClearSpacesButton() {
+    const checkbox = document.getElementById('confirmClearSpaces');
+    const button = document.getElementById('clearSpacesBtn');
+    button.disabled = !checkbox.checked;
+}
+
+function enableClearUsersButton() {
+    const checkbox = document.getElementById('confirmClearUsers');
+    const button = document.getElementById('clearUsersBtn');
+    button.disabled = !checkbox.checked;
+}
+
+async function clearAllSpacesData() {
+    const confirmed = confirm(
+        "⚠️ FINAL WARNING ⚠️\n\n" +
+        "This will PERMANENTLY DELETE:\n" +
+        "• ALL spaces from database\n" +
+        "• ALL audio files (downloads/)\n" +
+        "• ALL transcript jobs\n\n" +
+        "This action CANNOT be undone!\n\n" +
+        "Type 'DELETE ALL SPACES' in the next dialog to proceed."
+    );
+    
+    if (!confirmed) return;
+    
+    const confirmText = prompt("Type 'DELETE ALL SPACES' to confirm:");
+    if (confirmText !== 'DELETE ALL SPACES') {
+        alert("Confirmation text did not match. Operation cancelled.");
+        return;
+    }
+    
+    const messageDiv = document.getElementById('clearSpacesMessage');
+    const button = document.getElementById('clearSpacesBtn');
+    
+    try {
+        button.disabled = true;
+        button.innerHTML = '<i class="bi bi-arrow-clockwise spin"></i> Clearing...';
+        
+        const response = await fetch('/admin/api/dev/clear_spaces_data', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ confirm: 'DELETE ALL SPACES' })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            messageDiv.className = 'alert alert-success mt-3';
+            messageDiv.textContent = result.message;
+            messageDiv.style.display = 'block';
+            
+            // Uncheck the confirmation
+            document.getElementById('confirmClearSpaces').checked = false;
+            
+            // Refresh the page after a delay
+            setTimeout(() => {
+                window.location.reload();
+            }, 3000);
+        } else {
+            messageDiv.className = 'alert alert-danger mt-3';
+            messageDiv.textContent = 'Error: ' + (result.error || 'Failed to clear spaces data');
+            messageDiv.style.display = 'block';
+        }
+    } catch (error) {
+        messageDiv.className = 'alert alert-danger mt-3';
+        messageDiv.textContent = 'Error: ' + error.message;
+        messageDiv.style.display = 'block';
+    } finally {
+        button.disabled = false;
+        button.innerHTML = '<i class="bi bi-trash3-fill"></i> Clear All Spaces Data';
+    }
+}
+
+async function clearNonAdminUsers() {
+    const confirmed = confirm(
+        "⚠️ FINAL WARNING ⚠️\n\n" +
+        "This will PERMANENTLY DELETE all users except admins!\n\n" +
+        "Admin users (is_admin = 1) will be preserved.\n\n" +
+        "This action CANNOT be undone!\n\n" +
+        "Type 'DELETE NON ADMIN USERS' in the next dialog to proceed."
+    );
+    
+    if (!confirmed) return;
+    
+    const confirmText = prompt("Type 'DELETE NON ADMIN USERS' to confirm:");
+    if (confirmText !== 'DELETE NON ADMIN USERS') {
+        alert("Confirmation text did not match. Operation cancelled.");
+        return;
+    }
+    
+    const messageDiv = document.getElementById('clearUsersMessage');
+    const button = document.getElementById('clearUsersBtn');
+    
+    try {
+        button.disabled = true;
+        button.innerHTML = '<i class="bi bi-arrow-clockwise spin"></i> Clearing...';
+        
+        const response = await fetch('/admin/api/dev/clear_non_admin_users', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ confirm: 'DELETE NON ADMIN USERS' })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            messageDiv.className = 'alert alert-success mt-3';
+            messageDiv.textContent = result.message;
+            messageDiv.style.display = 'block';
+            
+            // Uncheck the confirmation
+            document.getElementById('confirmClearUsers').checked = false;
+        } else {
+            messageDiv.className = 'alert alert-danger mt-3';
+            messageDiv.textContent = 'Error: ' + (result.error || 'Failed to clear users');
+            messageDiv.style.display = 'block';
+        }
+    } catch (error) {
+        messageDiv.className = 'alert alert-danger mt-3';
+        messageDiv.textContent = 'Error: ' + error.message;
+        messageDiv.style.display = 'block';
+    } finally {
+        button.disabled = false;
+        button.innerHTML = '<i class="bi bi-people-fill"></i> Clear Non-Admin Users';
+    }
+}
+
+// Add event listeners for development checkboxes when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Only add listeners if development tab exists (localhost only)
+    const spacesCheckbox = document.getElementById('confirmClearSpaces');
+    const usersCheckbox = document.getElementById('confirmClearUsers');
+    
+    if (spacesCheckbox) {
+        spacesCheckbox.addEventListener('change', enableClearSpacesButton);
+    }
+    
+    if (usersCheckbox) {
+        usersCheckbox.addEventListener('change', enableClearUsersButton);
+    }
 });
 </script>
 {% endblock %}

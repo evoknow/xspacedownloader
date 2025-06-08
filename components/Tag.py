@@ -279,15 +279,16 @@ class Tag:
             if cursor:
                 cursor.close()
     
-    def remove_tag_from_space(self, space_id, tag_id, user_id=None, visitor_id=None):
+    def remove_tag_from_space(self, space_id, tag_id, user_id=None, visitor_id=None, force_remove=False):
         """
         Remove a tag from a space.
         
         Args:
             space_id (str): The unique space identifier
             tag_id (int): Tag ID
-            user_id (int, optional): User ID
+            user_id (int, optional): User ID - if provided, only removes tags added by this user
             visitor_id (str, optional): Visitor unique ID (not used in current schema)
+            force_remove (bool): If True, removes tag regardless of who added it
             
         Returns:
             bool: True if successful, False otherwise
@@ -295,15 +296,24 @@ class Tag:
         try:
             cursor = self.connection.cursor()
             
-            query = """
-            DELETE FROM space_tags
-            WHERE space_id = %s AND tag_id = %s
-            """
-            params = [space_id, tag_id]
-            
-            if user_id:
-                query += " AND user_id = %s"
-                params.append(user_id)
+            if force_remove:
+                # Remove tag regardless of who added it (for admins or space owners)
+                query = """
+                DELETE FROM space_tags
+                WHERE space_id = %s AND tag_id = %s
+                """
+                params = [space_id, tag_id]
+            else:
+                # Original behavior - respect user_id constraint
+                query = """
+                DELETE FROM space_tags
+                WHERE space_id = %s AND tag_id = %s
+                """
+                params = [space_id, tag_id]
+                
+                if user_id is not None:
+                    query += " AND user_id = %s"
+                    params.append(user_id)
             
             cursor.execute(query, params)
             self.connection.commit()
@@ -311,7 +321,9 @@ class Tag:
             return cursor.rowcount > 0
             
         except Error as e:
-            print(f"Error removing tag from space: {e}")
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error removing tag {tag_id} from space {space_id}: {e}")
             self.connection.rollback()
             return False
         finally:

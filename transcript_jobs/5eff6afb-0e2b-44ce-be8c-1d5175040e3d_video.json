@@ -1,0 +1,76 @@
+{
+  "job_id": "5eff6afb-0e2b-44ce-be8c-1d5175040e3d",
+  "space_id": "1dRJZEpyjlNGB",
+  "audio_path": "./downloads/1dRJZEpyjlNGB.mp3",
+  "space_data": {
+    "id": 430,
+    "space_id": "1dRJZEpyjlNGB",
+    "title": "Cyber security with @mjkabir #USABizParty",
+    "space_url": "https://x.com/i/spaces/1dRJZEpyjlNGB",
+    "filename": "1dRJZEpyjlNGB.mp3",
+    "format": "mp3",
+    "notes": null,
+    "created_at": "2025-06-04T15:18:22",
+    "downloaded_at": "2025-06-04T15:19:19",
+    "download_cnt": 144,
+    "playback_cnt": 3,
+    "user_id": 933,
+    "cookie_id": null,
+    "browser_id": null,
+    "status": "completed",
+    "updated_at": "2025-06-06T12:16:51",
+    "transcripts": [
+      {
+        "id": 105,
+        "language": "en-EN",
+        "created_at": "2025-06-06T00:47:42"
+      }
+    ],
+    "metadata": {
+      "id": 62,
+      "space_id": "1dRJZEpyjlNGB",
+      "scraped_title": "Cyber security with @mjkabir #USABizParty",
+      "host": "#USABizparty",
+      "host_handle": "@USABizparty",
+      "speakers": [
+        "@SchellerAnna"
+      ],
+      "tags": [],
+      "participants_count": null,
+      "start_time": null,
+      "end_time": null,
+      "duration": null,
+      "description": null,
+      "status": null,
+      "is_recorded": 0,
+      "raw_metadata": {
+        "url": "https://spacesdashboard.com/space/1dRJZEpyjlNGB/",
+        "host": "#USABizparty",
+        "tags": [],
+        "title": "Cyber security with @mjkabir #USABizParty",
+        "status": null,
+        "duration": null,
+        "end_time": null,
+        "space_id": "1dRJZEpyjlNGB",
+        "speakers": [
+          "@SchellerAnna (Anna Scheller, Small Business Enthusiast! \ud83c\uddfa\ud83c\uddf8)"
+        ],
+        "scraped_at": "2025-06-04T15:19:44.319034",
+        "start_time": null,
+        "description": null,
+        "host_handle": "@USABizparty",
+        "is_recorded": false,
+        "participants_count": null
+      },
+      "scraped_at": "2025-06-04T15:19:44",
+      "updated_at": "2025-06-04T15:19:44"
+    }
+  },
+  "user_id": 933,
+  "status": "completed",
+  "created_at": "2025-06-06T12:16:52.624828",
+  "updated_at": "2025-06-06T12:17:06.707466",
+  "progress": 100,
+  "error": null,
+  "video_path": "downloads/1dRJZEpyjlNGB.mp4"
+}

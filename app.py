@@ -129,7 +129,7 @@ else:
 
 # Default configuration
 app.config.update(
-    DOWNLOAD_DIR=os.environ.get('DOWNLOAD_DIR', './downloads'),
+    DOWNLOAD_DIR=os.path.abspath(os.environ.get('DOWNLOAD_DIR', './downloads')),
     MAX_CONCURRENT_DOWNLOADS=int(os.environ.get('MAX_CONCURRENT_DOWNLOADS', 5)),
     DEBUG=os.environ.get('DEBUG', 'false').lower() == 'true'
 )

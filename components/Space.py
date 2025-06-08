@@ -89,7 +89,6 @@ class Space:
                     
                 # Connect to the database
                 self.connection = mysql.connector.connect(**clean_config)
-                logger.info("Connected to MySQL database")
             else:
                 raise ValueError(f"Unsupported database type: {config['type']}")
                 
@@ -1813,10 +1812,8 @@ class Space:
                 query += " ORDER BY id DESC LIMIT %s OFFSET %s"
             params.extend([limit, offset])
             
-            logger.info(f"Executing query: {query} with params: {params}")
             cursor.execute(query, params)
             results = cursor.fetchall()
-            logger.info(f"Found {len(results)} download jobs with status={status}")
             return results
             
         except Error as e:

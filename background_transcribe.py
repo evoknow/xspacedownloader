@@ -26,6 +26,16 @@ logger = logging.getLogger('background_transcribe')
 # Add parent directory to path for importing components
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# Load environment variables from .env file
+try:
+    from load_env import load_env
+    load_env()
+    logger.info("Environment variables loaded from .env file")
+except ImportError:
+    logger.warning("load_env module not found - using system environment variables only")
+except Exception as e:
+    logger.warning(f"Error loading .env file: {e}")
+
 # Import components
 try:
     from components.SpeechToText import SpeechToText
@@ -548,7 +558,6 @@ def save_transcript_to_db(space_id, transcript_text, language="en-US"):
         if connection:
             try:
                 connection.close()
-                logger.info("Database connection closed")
             except:
                 pass
 
@@ -589,24 +598,15 @@ class TranscriptionWorker:
         Returns:
             bool: True if loaded successfully, False otherwise
         """
-        logger.info(f"[DEBUG] load_speech_to_text called with model_name: {model_name}")
-        
-        if self.stt is None:
-            logger.info(f"[DEBUG] SpeechToText not loaded, creating new instance")
-        elif self.stt.model_name != model_name:
-            logger.info(f"[DEBUG] Model change requested from {self.stt.model_name} to {model_name}")
-        else:
-            logger.info(f"[DEBUG] SpeechToText already loaded with correct model: {model_name}")
-            return True
-            
-        try:
-            logger.info(f"[DEBUG] Loading SpeechToText with model: {model_name}")
-            self.stt = SpeechToText(model_name=model_name)
-            logger.info(f"[DEBUG] SpeechToText loaded successfully")
-            return True
-        except Exception as e:
-            logger.error(f"[DEBUG] ERROR: Failed to load SpeechToText: {e}", exc_info=True)
-            return False
+        if self.stt is None or self.stt.model_name != model_name:
+            try:
+                logger.info(f"Loading SpeechToText model: {model_name}")
+                self.stt = SpeechToText(model_name=model_name)
+                return True
+            except Exception as e:
+                logger.error(f"Failed to load SpeechToText: {e}")
+                return False
+        return True
     
     def create_job(self, space_id, language='en-US', model='base', detect_language=False, 
                   translate_to=None, callback_url=None):
@@ -624,12 +624,7 @@ class TranscriptionWorker:
         Returns:
             str: Job ID
         """
-        logger.info(f"[DEBUG] create_job called with:")
-        logger.info(f"[DEBUG]   space_id: {space_id}")
-        logger.info(f"[DEBUG]   language: {language}")
-        logger.info(f"[DEBUG]   model: {model}")
-        logger.info(f"[DEBUG]   detect_language: {detect_language}")
-        logger.info(f"[DEBUG]   translate_to: {translate_to}")
+        logger.info(f"Creating transcription job for space {space_id} with model {model}")
         
         job_id = f"{space_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
         
@@ -651,19 +646,11 @@ class TranscriptionWorker:
         
         # Save job data to file
         job_file_path = self.status_dir / f"{job_id}.json"
-        logger.info(f"[DEBUG] Saving job to: {job_file_path}")
         
         with open(job_file_path, 'w') as f:
             json.dump(job_data, f, indent=4)
         
-        logger.info(f"[DEBUG] Created transcription job {job_id} for space {space_id}")
-        logger.info(f"[DEBUG] Job file saved at: {job_file_path.absolute()}")
-        
-        # Verify file was created
-        if job_file_path.exists():
-            logger.info(f"[DEBUG] Verified job file exists: {job_file_path}")
-        else:
-            logger.error(f"[DEBUG] ERROR: Job file was not created: {job_file_path}")
+        logger.info(f"Created transcription job {job_id} for space {space_id}")
             
         return job_id
     
@@ -738,38 +725,27 @@ class TranscriptionWorker:
         Returns:
             list: List of pending job data
         """
-        logger.info(f"[DEBUG] get_pending_jobs called")
-        logger.info(f"[DEBUG] Looking for JSON files in: {self.status_dir}")
-        logger.info(f"[DEBUG] Status dir absolute path: {self.status_dir.absolute()}")
-        
         pending_jobs = []
         
         try:
             json_files = list(self.status_dir.glob('*.json'))
-            logger.info(f"[DEBUG] Found {len(json_files)} JSON files in directory")
             
             for job_file in json_files:
-                logger.info(f"[DEBUG] Checking file: {job_file.name}")
                 try:
                     with open(job_file, 'r') as f:
                         job_data = json.load(f)
                         
                     status = job_data.get('status', 'unknown')
-                    logger.info(f"[DEBUG] File {job_file.name} has status: {status}")
                     
                     if status == 'pending':
-                        logger.info(f"[DEBUG] Adding pending job: {job_file.name}")
                         pending_jobs.append(job_data)
-                    else:
-                        logger.info(f"[DEBUG] Skipping job with status: {status}")
                         
                 except Exception as e:
-                    logger.error(f"[DEBUG] ERROR reading job file {job_file}: {e}", exc_info=True)
+                    logger.error(f"Error reading job file {job_file}: {e}")
                     
         except Exception as e:
-            logger.error(f"[DEBUG] ERROR listing directory: {e}", exc_info=True)
+            logger.error(f"Error listing directory: {e}")
         
-        logger.info(f"[DEBUG] Total pending jobs found: {len(pending_jobs)}")
         return pending_jobs
     
     def process_job(self, job_data):
@@ -782,26 +758,17 @@ class TranscriptionWorker:
         Returns:
             bool: True if successful, False otherwise
         """
-        logger.info(f"[DEBUG] ========== STARTING PROCESS_JOB ==========")
-        logger.info(f"[DEBUG] Job Data Keys: {list(job_data.keys())}")
-        logger.info(f"[DEBUG] Full Job Data: {json.dumps(job_data, indent=2, default=str)}")
-        
         # Handle both 'job_id' and 'id' field names for backward compatibility
         job_id = job_data.get('job_id') or job_data.get('id')
         space_id = job_data.get('space_id')
         
-        logger.info(f"[DEBUG] Extracted job_id: {job_id}")
-        logger.info(f"[DEBUG] Extracted space_id: {space_id}")
-        
         if not space_id:
-            logger.error(f"[DEBUG] ERROR: Job {job_id} missing required space_id field")
-            logger.error(f"[DEBUG] Job data was: {job_data}")
+            logger.error(f"Job {job_id} missing required space_id field")
             self.update_job_status(job_id, 'failed', error="Missing space_id field")
             return False
         
         try:
             # Update job status to processing
-            logger.info(f"[DEBUG] Updating job status to 'processing' with progress=5")
             self.update_job_status(job_id, 'processing', progress=5)
             
             # Note: We no longer need a Space instance during transcription
@@ -810,58 +777,38 @@ class TranscriptionWorker:
             # Load the right model
             # Handle both direct 'model' field and nested in 'options'
             model = job_data.get('model') or job_data.get('options', {}).get('model', 'tiny')
-            logger.info(f"[DEBUG] Model to load: {model}")
             
             if not self.load_speech_to_text(model_name=model):
-                logger.error(f"[DEBUG] ERROR: Failed to load model: {model}")
+                logger.error(f"Failed to load model: {model}")
                 self.update_job_status(job_id, 'failed', error=f"Failed to load model: {model}")
                 return False
             
-            logger.info(f"[DEBUG] Model loaded successfully: {model}")
-            
             # Update progress
-            logger.info(f"[DEBUG] Updating progress to 10")
             self.update_job_status(job_id, 'processing', progress=10)
             
-            # Process audio file
-            logger.info(f"[DEBUG] Starting transcription for job {job_id} (space {space_id})")
-            
             # Find the audio file - load config directly
-            logger.info(f"[DEBUG] Loading mainconfig.json to find download directory")
             try:
                 with open('mainconfig.json', 'r') as f:
                     config = json.load(f)
                 download_dir = config.get('download_dir', './downloads')
-                logger.info(f"[DEBUG] Download directory from config: {download_dir}")
             except Exception as e:
-                logger.warning(f"[DEBUG] Failed to load mainconfig.json: {e}")
+                logger.warning(f"Failed to load mainconfig.json: {e}")
                 download_dir = './downloads'
-                logger.info(f"[DEBUG] Using default download directory: {download_dir}")
                 
             audio_path = None
-            logger.info(f"[DEBUG] Searching for audio file for space {space_id}")
             
             for ext in ['mp3', 'm4a', 'wav']:
                 file_path = os.path.join(download_dir, f"{space_id}.{ext}")
-                logger.info(f"[DEBUG] Checking for file: {file_path}")
                 
                 if os.path.exists(file_path):
                     file_size = os.path.getsize(file_path)
-                    logger.info(f"[DEBUG] File exists: {file_path}, size: {file_size} bytes")
                     
                     if file_size > 0:
                         audio_path = file_path
-                        logger.info(f"[DEBUG] Found valid audio file: {audio_path}")
                         break
-                    else:
-                        logger.warning(f"[DEBUG] File exists but is empty: {file_path}")
-                else:
-                    logger.info(f"[DEBUG] File does not exist: {file_path}")
             
             if not audio_path:
-                logger.error(f"[DEBUG] ERROR: No audio file found for space {space_id}")
-                logger.error(f"[DEBUG] Searched in directory: {download_dir}")
-                logger.error(f"[DEBUG] Tried extensions: mp3, m4a, wav")
+                logger.error(f"No audio file found for space {space_id} in {download_dir}")
                 self.update_job_status(job_id, 'failed', error=f"Audio file not found for space {space_id}")
                 return False
             
@@ -871,18 +818,11 @@ class TranscriptionWorker:
             # Set up transcription options
             # Handle both direct fields and nested in 'options'
             job_options = job_data.get('options', {})
-            logger.info(f"[DEBUG] Job options: {job_options}")
             
             language = job_data.get('language') or job_options.get('language', 'en-US')
             detect_language = job_data.get('detect_language', job_options.get('detect_language', False))
             translate_to = job_data.get('translate_to', job_options.get('translate_to'))
             include_timecodes = job_data.get('include_timecodes', job_options.get('include_timecodes', True))
-            
-            logger.info(f"[DEBUG] Transcription parameters:")
-            logger.info(f"[DEBUG]   - language: {language}")
-            logger.info(f"[DEBUG]   - detect_language: {detect_language}")
-            logger.info(f"[DEBUG]   - translate_to: {translate_to}")
-            logger.info(f"[DEBUG]   - include_timecodes: {include_timecodes}")
             
             options = {
                 'language': language,
@@ -893,8 +833,6 @@ class TranscriptionWorker:
             
             if translate_to:
                 options['translate_to'] = translate_to
-                
-            logger.info(f"[DEBUG] Final transcription options: {options}")
             
             # Check if transcript already exists in database before processing
             target_language = translate_to if translate_to else language
@@ -987,17 +925,13 @@ class TranscriptionWorker:
                 # Log transcription start
                 import time
                 transcription_start_time = time.time()
-                logger.info(f"[DEBUG] Starting transcription at {transcription_start_time}")
-                logger.info(f"[DEBUG] Audio file: {audio_path}, size: {os.path.getsize(audio_path)/1024/1024:.1f}MB")
-                logger.info(f"[DEBUG] Options: {options}")
-                logger.info(f"[DEBUG] Temp file: {temp_file}")
                 
                 # Perform the actual transcription - NO DATABASE CONNECTION NEEDED
                 result = self.stt.transcribe(audio_path, **options)
                 
                 transcription_end_time = time.time()
                 transcription_duration = transcription_end_time - transcription_start_time
-                logger.info(f"[DEBUG] Transcription completed in {transcription_duration:.1f} seconds")
+                logger.info(f"Transcription completed in {transcription_duration:.1f} seconds")
                 
                 # Save result to temp file
                 with open(temp_file, 'w') as f:
@@ -1021,7 +955,6 @@ class TranscriptionWorker:
                 return False
             
             # Now that transcription is complete, save to database
-            logger.info("[DEBUG] Transcription complete. Now saving to database...")
             
             # Save transcript to database using standalone function
             try:
@@ -1047,14 +980,8 @@ class TranscriptionWorker:
                     logger.warning(f"Transcript is too long ({len(transcript_text)} chars), truncating to 64000 chars")
                     transcript_text = transcript_text[:64000]
                 
-                # Save to database
-                logger.info(f"[DEBUG] About to call save_transcript for space {space_id}")
-                logger.info(f"[DEBUG] Language code: {language_code}, Text length: {len(transcript_text)}")
-                
                 # Use standalone save function
                 transcript_id = save_transcript_to_db(space_id, transcript_text, language_code)
-                
-                logger.info(f"[DEBUG] save_transcript returned: {transcript_id}")
                 
                 if not transcript_id:
                     self.update_job_status(job_id, 'failed', 
@@ -1113,7 +1040,6 @@ class TranscriptionWorker:
                 # Clean up temp file
                 if temp_file.exists():
                     temp_file.unlink()
-                    logger.info("[DEBUG] Cleaned up temp file")
                     
                 return True
                 
@@ -1134,57 +1060,39 @@ class TranscriptionWorker:
             if 'temp_file' in locals() and temp_file.exists():
                 try:
                     temp_file.unlink()
-                    logger.info(f"[DEBUG] Cleaned up temp file: {temp_file}")
                 except Exception as e:
-                    logger.warning(f"[DEBUG] Error deleting temp file: {e}")
+                    logger.warning(f"Error deleting temp file: {e}")
             
             # Note: No database connections to clean up - all database operations
             # use standalone functions that manage their own connections
     
     def run(self):
         """Run the worker loop."""
-        logger.info("[DEBUG] ========== TRANSCRIPTION WORKER STARTING ==========")
-        logger.info(f"[DEBUG] Status directory: {self.status_dir}")
-        logger.info(f"[DEBUG] Status directory exists: {self.status_dir.exists()}")
-        logger.info(f"[DEBUG] Worker running flag: {self.running}")
+        logger.info("Transcription worker starting")
         
-        loop_count = 0
         while self.running:
-            loop_count += 1
-            logger.info(f"[DEBUG] ===== Worker loop iteration {loop_count} =====")
-            
             try:
                 # Get pending jobs
-                logger.info(f"[DEBUG] Checking for pending jobs in {self.status_dir}")
                 pending_jobs = self.get_pending_jobs()
                 
                 if pending_jobs:
-                    logger.info(f"[DEBUG] Found {len(pending_jobs)} pending jobs!")
-                    
                     # Process the first pending job
                     job = pending_jobs[0]
-                    # Handle both 'job_id' and 'id' field names for backward compatibility
                     job_id = job.get('job_id') or job.get('id')
                     space_id = job.get('space_id', 'unknown')
-                    logger.info(f"[DEBUG] Next job to process: {job_id} for space {space_id}")
-                    logger.info(f"[DEBUG] Job status: {job.get('status')}")
+                    logger.info(f"Processing transcription job {job_id} for space {space_id}")
                     
                     # Process the job
-                    logger.info(f"[DEBUG] Calling process_job for job {job_id}")
                     self.process_job(job)
-                else:
-                    logger.info(f"[DEBUG] No pending jobs found")
                 
                 # Wait before checking for more jobs
-                logger.info(f"[DEBUG] Sleeping for 5 seconds before next check...")
                 time.sleep(5)
                 
             except Exception as e:
-                logger.error(f"[DEBUG] ERROR in worker loop: {e}", exc_info=True)
-                logger.error(f"[DEBUG] Sleeping for 10 seconds after error...")
+                logger.error(f"Error in worker loop: {e}")
                 time.sleep(10)  # Wait longer if there was an error
         
-        logger.info("[DEBUG] Worker loop terminated - self.running = False")
+        logger.info("Transcription worker stopped")
 
 def main():
     parser = argparse.ArgumentParser(description='Background transcription worker for XSpace Downloader')

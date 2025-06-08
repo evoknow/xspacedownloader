@@ -133,6 +133,19 @@ class VideoGenerator:
             space_id = job_data['space_id']
             audio_path = job_data['audio_path']
             
+            # Handle relative paths - convert to absolute if needed
+            if not os.path.isabs(audio_path):
+                # If it's a relative path like ./downloads/file.mp3, make it absolute
+                if audio_path.startswith('./'):
+                    audio_path = audio_path[2:]  # Remove ./
+                audio_path = os.path.abspath(audio_path)
+            
+            # Verify the audio file exists
+            if not os.path.exists(audio_path):
+                raise FileNotFoundError(f"Audio file not found: {audio_path}")
+            
+            logger.info(f"Processing audio file: {audio_path}")
+            
             # Update status to processing
             job_data['status'] = 'processing'
             job_data['updated_at'] = datetime.now().isoformat()
@@ -219,6 +232,9 @@ class VideoGenerator:
             with open(job_file, 'w') as f:
                 json.dump(job_data, f, indent=2)
             
+            # Process audio to remove leading silence
+            processed_audio_path = self._remove_leading_silence(audio_path, job_data.get('job_id'))
+            
             # Extract space information
             space_data = job_data.get('space_data', {})
             title = space_data.get('title', 'Audio Space')
@@ -274,7 +290,7 @@ class VideoGenerator:
                 # Add profile picture as second input
                 cmd = [
                     'ffmpeg',
-                    '-i', audio_path,  # Input audio
+                    '-i', processed_audio_path,  # Input audio (with silence removed)
                     '-i', profile_pic_path,  # Profile picture
                     '-filter_complex', filter_complex,
                     '-map', '[v]',     # Video from complex filter
@@ -323,7 +339,7 @@ class VideoGenerator:
                 """
                 cmd = [
                     'ffmpeg',
-                    '-i', audio_path,  # Input audio
+                    '-i', processed_audio_path,  # Input audio (with silence removed)
                     '-filter_complex', filter_complex,
                     '-map', '[v]',     # Video from complex filter
                     '-map', '0:a',     # Audio from input
@@ -359,6 +375,14 @@ class VideoGenerator:
                 with open(job_file, 'w') as f:
                     json.dump(job_data, f, indent=2)
                 
+                # Clean up temporary trimmed audio file if it was created
+                if processed_audio_path != audio_path and os.path.exists(processed_audio_path):
+                    try:
+                        os.remove(processed_audio_path)
+                        logger.debug(f"Cleaned up temporary audio file: {processed_audio_path}")
+                    except Exception as e:
+                        logger.warning(f"Failed to clean up temporary audio: {e}")
+                
                 # Verify file was created and has reasonable size
                 if os.path.exists(video_path) and os.path.getsize(video_path) > 1024:
                     return True
@@ -368,14 +392,164 @@ class VideoGenerator:
             else:
                 logger.error(f"FFmpeg failed with return code {result.returncode}")
                 logger.error(f"FFmpeg stderr: {result.stderr}")
+                
+                # Clean up temporary trimmed audio file on failure too
+                if processed_audio_path != audio_path and os.path.exists(processed_audio_path):
+                    try:
+                        os.remove(processed_audio_path)
+                    except:
+                        pass
+                        
                 return False
                 
         except subprocess.TimeoutExpired:
             logger.error("FFmpeg command timed out")
+            # Clean up temporary trimmed audio file on timeout
+            if 'processed_audio_path' in locals() and processed_audio_path != audio_path and os.path.exists(processed_audio_path):
+                try:
+                    os.remove(processed_audio_path)
+                except:
+                    pass
             return False
         except Exception as e:
             logger.error(f"Error creating video: {e}")
+            # Clean up temporary trimmed audio file on error
+            if 'processed_audio_path' in locals() and processed_audio_path != audio_path and os.path.exists(processed_audio_path):
+                try:
+                    os.remove(processed_audio_path)
+                except:
+                    pass
             return False
+    
+    def _remove_leading_silence(self, audio_path: str, job_id: str) -> str:
+        """
+        Remove leading silence from audio file using ffmpeg.
+        
+        Args:
+            audio_path (str): Input audio file path
+            job_id (str): Job ID for naming temporary file
+            
+        Returns:
+            str: Path to processed audio file
+        """
+        try:
+            # Create output path for processed audio
+            base_name = os.path.basename(audio_path)
+            name, ext = os.path.splitext(base_name)
+            
+            # Determine output codec and extension based on input format
+            # Keep MP3 as MP3, convert others to AAC
+            if ext.lower() == '.mp3':
+                output_codec = 'libmp3lame'
+                output_ext = '.mp3'
+            else:
+                output_codec = 'aac'
+                output_ext = '.m4a'  # Use proper extension for AAC
+            
+            processed_path = os.path.join("temp", f"{name}_trimmed_{job_id}{output_ext}")
+            
+            # First, detect where the actual audio starts using silencedetect
+            # Use very aggressive settings to catch any low-level noise
+            detect_cmd = [
+                'ffmpeg',
+                '-i', audio_path,
+                '-af', 'silencedetect=noise=-60dB:d=0.01',  # Very sensitive: -60dB, 10ms
+                '-f', 'null',
+                '-'
+            ]
+            
+            logger.info(f"Detecting silence in audio: {audio_path}")
+            detect_result = subprocess.run(
+                detect_cmd,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            # Parse the output to find silence_end (where audio starts)
+            start_time = 0
+            if detect_result.returncode == 0:
+                import re
+                # Log the full stderr for debugging
+                logger.debug(f"Silence detection output: {detect_result.stderr}")
+                
+                # Look for first silence_end in stderr (ffmpeg outputs to stderr)
+                silence_end_match = re.search(r'silence_end: ([\d.]+)', detect_result.stderr)
+                if silence_end_match:
+                    start_time = float(silence_end_match.group(1))
+                    # Don't add buffer - we want to cut right where audio starts
+                    logger.info(f"Detected audio starts at {start_time} seconds")
+                else:
+                    logger.info("No silence_end found, checking for continuous silence")
+                    # If no silence_end found, audio might start immediately or have very short silence
+            
+            # Now trim the audio from the detected start point
+            if start_time > 0:
+                trim_cmd = [
+                    'ffmpeg',
+                    '-i', audio_path,
+                    '-ss', str(start_time),  # Start from detected point
+                    '-acodec', output_codec,
+                    '-y',
+                    processed_path
+                ]
+            else:
+                # Fallback to very aggressive silenceremove if no silence detected
+                logger.info("Using aggressive silenceremove filter as fallback")
+                trim_cmd = [
+                    'ffmpeg',
+                    '-i', audio_path,
+                    '-af', 'silenceremove=start_periods=1:start_duration=0.01:start_threshold=-60dB:detection=peak',
+                    '-acodec', output_codec,
+                    '-y',
+                    processed_path
+                ]
+            
+            logger.info(f"Trimming audio with command: {' '.join(trim_cmd)}")
+            
+            result = subprocess.run(
+                trim_cmd,
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            
+            if result.returncode == 0 and os.path.exists(processed_path):
+                # Verify the processed file is not empty
+                original_size = os.path.getsize(audio_path)
+                processed_size = os.path.getsize(processed_path)
+                
+                if processed_size > 1024:  # At least 1KB
+                    logger.info(f"Successfully removed leading silence: {processed_path}")
+                    logger.info(f"Original size: {original_size} bytes, Processed size: {processed_size} bytes")
+                    logger.info(f"Size reduction: {original_size - processed_size} bytes ({((original_size - processed_size) / original_size * 100):.1f}%)")
+                    
+                    # Log duration comparison if possible
+                    try:
+                        # Get durations for comparison
+                        dur_cmd = ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1']
+                        orig_dur = subprocess.run(dur_cmd + [audio_path], capture_output=True, text=True, timeout=5)
+                        proc_dur = subprocess.run(dur_cmd + [processed_path], capture_output=True, text=True, timeout=5)
+                        
+                        if orig_dur.returncode == 0 and proc_dur.returncode == 0:
+                            orig_duration = float(orig_dur.stdout.strip())
+                            proc_duration = float(proc_dur.stdout.strip())
+                            logger.info(f"Duration - Original: {orig_duration:.2f}s, Processed: {proc_duration:.2f}s, Trimmed: {orig_duration - proc_duration:.2f}s")
+                    except:
+                        pass
+                    
+                    return processed_path
+                else:
+                    logger.warning(f"Processed file too small ({processed_size} bytes), using original")
+                    return audio_path
+            else:
+                logger.warning(f"Failed to remove silence, using original audio. Return code: {result.returncode}")
+                logger.warning(f"FFmpeg stderr: {result.stderr}")
+                return audio_path
+                
+        except Exception as e:
+            logger.warning(f"Error removing leading silence: {e}, using original audio")
+            return audio_path
     
     def _escape_ffmpeg_text(self, text: str) -> str:
         """
