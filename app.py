@@ -11,6 +11,8 @@ import subprocess
 import secrets
 import string
 import requests
+import time
+from functools import wraps
 from pathlib import Path
 from flask import Flask, request, render_template, redirect, url_for, flash, jsonify, session, send_file, Response, send_from_directory
 from PIL import Image, ImageDraw, ImageFont
@@ -136,6 +138,86 @@ app.config.update(
 
 # Create download directory if it doesn't exist
 os.makedirs(app.config['DOWNLOAD_DIR'], exist_ok=True)
+
+# Cache for the /spaces endpoint
+spaces_cache = {
+    'data': None,
+    'timestamp': 0,
+    'ttl': 600  # 600 seconds (10 minutes)
+}
+
+# Cache for the index route
+index_cache = {
+    'data': None,
+    'timestamp': 0,
+    'ttl': 600  # 600 seconds (10 minutes)
+}
+
+def invalidate_spaces_cache():
+    """Invalidate the spaces cache."""
+    global spaces_cache
+    spaces_cache['data'] = None
+    spaces_cache['timestamp'] = 0
+    logger.info("Spaces cache invalidated")
+
+def invalidate_index_cache():
+    """Invalidate the index cache."""
+    global index_cache
+    index_cache['data'] = None
+    index_cache['timestamp'] = 0
+    logger.info("Index cache invalidated")
+
+def invalidate_all_caches():
+    """Invalidate all caches."""
+    invalidate_spaces_cache()
+    invalidate_index_cache()
+
+def get_cached_spaces_data():
+    """Get cached spaces data if valid, otherwise return None."""
+    global spaces_cache
+    current_time = time.time()
+    
+    # Check if cache is valid
+    if (spaces_cache['data'] is not None and 
+        current_time - spaces_cache['timestamp'] < spaces_cache['ttl']):
+        logger.info(f"Using cached spaces data (age: {current_time - spaces_cache['timestamp']:.1f}s)")
+        return spaces_cache['data']
+    
+    return None
+
+def get_cached_index_data():
+    """Get cached index data if valid, otherwise return None."""
+    global index_cache
+    current_time = time.time()
+    
+    # Check if cache is valid
+    if (index_cache['data'] is not None and 
+        current_time - index_cache['timestamp'] < index_cache['ttl']):
+        logger.info(f"Using cached index data (age: {current_time - index_cache['timestamp']:.1f}s)")
+        return index_cache['data']
+    
+    return None
+
+def set_spaces_cache(data):
+    """Set the spaces cache with new data."""
+    global spaces_cache
+    spaces_cache['data'] = data
+    spaces_cache['timestamp'] = time.time()
+    logger.info("Spaces cache updated")
+
+def set_index_cache(data):
+    """Set the index cache with new data."""
+    global index_cache
+    index_cache['data'] = data
+    index_cache['timestamp'] = time.time()
+    logger.info("Index cache updated")
+
+# Register cache invalidation callback with Space component
+try:
+    from components.Space import set_cache_invalidation_callback
+    set_cache_invalidation_callback(invalidate_all_caches)
+except ImportError:
+    logger.warning("Could not register cache invalidation callback")
 
 # Template filter for relative time
 @app.template_filter('relative_time')
@@ -397,6 +479,16 @@ def status(job_id):
 def all_spaces():
     """Display all downloaded spaces."""
     try:
+        # Check if we have cached data
+        cached_data = get_cached_spaces_data()
+        if cached_data:
+            return render_template('all_spaces.html', 
+                                 spaces=cached_data['completed_spaces'], 
+                                 popular_tags=cached_data['popular_tags'])
+        
+        # No valid cache, generate fresh data
+        logger.info("Generating fresh spaces data (cache miss or expired)")
+        
         # Get Space component
         space = get_space_component()
         
@@ -490,6 +582,13 @@ def all_spaces():
         
         # Get popular tags (top 20)
         popular_tags = tag_component.get_popular_tags(limit=20)
+        
+        # Cache the data
+        cache_data = {
+            'completed_spaces': completed_spaces,
+            'popular_tags': popular_tags
+        }
+        set_spaces_cache(cache_data)
         
         return render_template('all_spaces.html', spaces=completed_spaces, popular_tags=popular_tags)
         
@@ -662,8 +761,16 @@ def favicon():
 @app.route('/', methods=['GET'])
 def index():
     """Home page with form to submit a space URL."""
-    # Get a list of completed downloads to display
     try:
+        # Check if we have cached data
+        cached_data = get_cached_index_data()
+        if cached_data:
+            return render_template('index.html', completed_spaces=cached_data)
+        
+        # No valid cache, generate fresh data
+        logger.info("Generating fresh index data (cache miss or expired)")
+        
+        # Get a list of completed downloads to display
         space = get_space_component()
         completed_spaces = space.list_download_jobs(status='completed', limit=5)
         
@@ -693,6 +800,9 @@ def index():
                 job['has_summary'] = False
                 job['transcript_count'] = 0
                 job['title'] = ''
+        
+        # Cache the data
+        set_index_cache(completed_spaces)
         
         return render_template('index.html', completed_spaces=completed_spaces)
     except Exception as e:
@@ -5387,6 +5497,72 @@ def admin_update_branding_config():
         
     except Exception as e:
         logger.error(f"Error updating branding config: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/admin/api/spaces/upload', methods=['POST'])
+def admin_upload_space_file():
+    """Upload MP3/MP4 file for a space."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        # Check if file was uploaded
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+        
+        file = request.files['file']
+        space_id = request.form.get('space_id')
+        
+        if not space_id:
+            return jsonify({'success': False, 'error': 'Space ID is required'}), 400
+        
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+        
+        # Validate file type
+        allowed_extensions = {'mp3', 'mp4', 'wav', 'm4a', 'webm', 'ogg'}
+        file_ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+        
+        if file_ext not in allowed_extensions:
+            return jsonify({'success': False, 'error': f'Invalid file type. Allowed: {", ".join(allowed_extensions)}'}), 400
+        
+        # Check if space exists
+        space = get_space_component()
+        space_data = space.get_space(space_id)
+        if not space_data:
+            return jsonify({'success': False, 'error': 'Space not found'}), 404
+        
+        # Generate filename and save path
+        filename = f"{space_id}.{file_ext}"
+        file_path = os.path.join(app.config['DOWNLOAD_DIR'], filename)
+        
+        # Ensure downloads directory exists
+        os.makedirs(app.config['DOWNLOAD_DIR'], exist_ok=True)
+        
+        # Save the uploaded file
+        file.save(file_path)
+        file_size = os.path.getsize(file_path)
+        
+        # Update database with new file info
+        space.update_space(space_id,
+            filename=filename,
+            format=file_ext,
+            status='completed',
+            downloaded_at=datetime.datetime.now()
+        )
+        
+        logger.info(f"Admin uploaded file for space {space_id}: {filename} ({file_size} bytes)")
+        
+        return jsonify({
+            'success': True, 
+            'message': f'File uploaded successfully: {filename}',
+            'filename': filename,
+            'size': file_size,
+            'format': file_ext
+        })
+        
+    except Exception as e:
+        logger.error(f"Error uploading file for space: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/admin/api/stats/<stat_type>')

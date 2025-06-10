@@ -21,6 +21,20 @@ try:
 except ImportError:
     db_manager = None
 
+# Global cache invalidation callback
+_cache_invalidation_callback = None
+
+def set_cache_invalidation_callback(callback):
+    """Set the cache invalidation callback function."""
+    global _cache_invalidation_callback
+    _cache_invalidation_callback = callback
+
+def invalidate_spaces_cache():
+    """Call the cache invalidation callback if set."""
+    global _cache_invalidation_callback
+    if _cache_invalidation_callback:
+        _cache_invalidation_callback()
+
 # Import SpeechToText component if available
 try:
     from components.SpeechToText import SpeechToText
@@ -929,6 +943,10 @@ class Space:
             cursor.execute(query, values)
             self.connection.commit()
             
+            # Invalidate cache if update was successful
+            if cursor.rowcount > 0:
+                invalidate_spaces_cache()
+            
             return cursor.rowcount > 0
             
         except Error as e:
@@ -970,7 +988,12 @@ class Space:
             # if filename and os.path.exists(some_directory + filename):
             #     os.remove(some_directory + filename)
             
-            return cursor.rowcount > 0
+            # Invalidate cache if deletion was successful
+            result = cursor.rowcount > 0
+            if result:
+                invalidate_spaces_cache()
+            
+            return result
             
         except Error as e:
             logger.error(f"Error deleting space: {e}")
@@ -1361,6 +1384,10 @@ class Space:
             ))
             
             self.connection.commit()
+            
+            # Invalidate cache since we added a new space
+            invalidate_spaces_cache()
+            
             return cursor.lastrowid
             
         except Error as e:

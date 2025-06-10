@@ -52,12 +52,57 @@
     .space-rating small {
         font-size: 0.75rem;
     }
+    
+    /* Popular tags styling */
+    .popular-tags-list {
+        max-height: 80vh;
+        overflow-y: auto;
+    }
+    
+    .popular-tags-list .btn {
+        transition: all 0.2s ease;
+        border-radius: 8px;
+    }
+    
+    .popular-tags-list .btn:hover {
+        transform: translateX(5px);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    html[data-bs-theme="dark"] .popular-tags-list .btn:hover {
+        box-shadow: 0 2px 8px rgba(255,255,255,0.1);
+    }
+    
+    .tag-usage-badge {
+        font-size: 0.7rem;
+        min-width: 20px;
+        height: 20px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    /* Mobile responsive adjustments */
+    @media (max-width: 991.98px) {
+        .col-12.col-lg-4 {
+            margin-top: 1.5rem;
+        }
+    }
+    
+    /* Desktop sticky positioning for tags sidebar */
+    @media (min-width: 992px) {
+        .popular-tags-list {
+            position: sticky;
+            top: 20px;
+        }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="row">
-    <div class="col-12">
+    <!-- Left Column - All Downloaded Spaces -->
+    <div class="col-12 col-lg-8">
         <div class="card shadow-sm" id="all-spaces-container">
             <div class="card-header bg-light">
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -80,20 +125,20 @@
                                 <th class="sort" data-sort="space-title" style="cursor: pointer;">
                                     Space <i class="bi bi-arrow-down-up ms-1"></i>
                                 </th>
-                                <th class="d-none d-md-table-cell">Host</th>
-                                <th class="d-none d-md-table-cell sort" data-sort="space-date" style="cursor: pointer;">
+                                <th class="d-none d-xl-table-cell">Host</th>
+                                <th class="d-none d-xl-table-cell sort" data-sort="space-date" style="cursor: pointer;">
                                     Downloaded <i class="bi bi-arrow-down-up ms-1"></i>
                                 </th>
-                                <th class="d-none d-md-table-cell text-center sort" data-sort="space-plays" style="cursor: pointer;">
+                                <th class="d-none d-lg-table-cell text-center sort" data-sort="space-plays" style="cursor: pointer;">
                                     Plays <i class="bi bi-arrow-down-up ms-1"></i>
                                 </th>
-                                <th class="d-none d-md-table-cell text-center sort" data-sort="space-downloads" style="cursor: pointer;">
+                                <th class="d-none d-lg-table-cell text-center sort" data-sort="space-downloads" style="cursor: pointer;">
                                     Downloads <i class="bi bi-arrow-down-up ms-1"></i>
                                 </th>
-                                <th class="d-none d-md-table-cell text-center sort" data-sort="space-rating" style="cursor: pointer;">
+                                <th class="d-none d-xl-table-cell text-center sort" data-sort="space-rating" style="cursor: pointer;">
                                     Rating <i class="bi bi-arrow-down-up ms-1"></i>
                                 </th>
-                                <th class="d-none d-md-table-cell">Features</th>
+                                <th class="d-none d-xl-table-cell">Features</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -124,7 +169,7 @@
                                         {% endif %}
                                     </div>
                                 </td>
-                                <td class="d-none d-md-table-cell">
+                                <td class="d-none d-xl-table-cell">
                                     {% if space.metadata and space.metadata.host_handle %}
                                     <a href="https://x.com/{{ space.metadata.host_handle[1:] if space.metadata.host_handle.startswith('@') else space.metadata.host_handle }}" 
                                        target="_blank" 
@@ -143,19 +188,19 @@
                                     <span class="text-muted">—</span>
                                     {% endif %}
                                 </td>
-                                <td class="d-none d-md-table-cell">
+                                <td class="d-none d-xl-table-cell">
                                     <small class="text-muted relative-time" data-datetime="{{ space.updated_at }}">
                                         <span class="space-date" style="display: none;">{{ space.updated_at }}</span>
                                         <span class="space-date-display">{{ space.updated_at }}</span>
                                     </small>
                                 </td>
-                                <td class="d-none d-md-table-cell text-center">
+                                <td class="d-none d-lg-table-cell text-center">
                                     <span class="space-plays">{{ space.playback_cnt|default(0, true) }}</span>
                                 </td>
-                                <td class="d-none d-md-table-cell text-center">
+                                <td class="d-none d-lg-table-cell text-center">
                                     <span class="space-downloads">{{ space.download_cnt|default(0, true) }}</span>
                                 </td>
-                                <td class="d-none d-md-table-cell text-center">
+                                <td class="d-none d-xl-table-cell text-center">
                                     <span class="space-rating" data-rating="{{ space.average_rating|default(0, true) }}">
                                         {% if space.total_reviews and space.total_reviews > 0 %}
                                             <span class="text-warning">
@@ -176,7 +221,7 @@
                                         {% endif %}
                                     </span>
                                 </td>
-                                <td class="d-none d-md-table-cell">
+                                <td class="d-none d-xl-table-cell">
                                     <div class="d-flex gap-1">
                                         {% if space.has_transcript %}
                                         <span class="badge bg-info" data-bs-toggle="tooltip" data-bs-placement="top" title="Transcript available">
@@ -236,23 +281,49 @@
                 {% endif %}
             </div>
         </div>
-        
+    </div>
+    
+    <!-- Right Column - Popular Tags -->
+    <div class="col-12 col-lg-4">
         {% if popular_tags %}
-        <!-- Popular Tags Section -->
-        <div class="card mt-4 shadow-sm">
+        <div class="card shadow-sm">
             <div class="card-header bg-light">
                 <h5 class="mb-0"><i class="bi bi-tags-fill"></i> Popular Tags</h5>
+                <small class="text-muted">Most used tags ({{ popular_tags|length }} total)</small>
             </div>
-            <div class="card-body">
-                <div class="d-flex flex-wrap gap-2">
+            <div class="card-body p-2">
+                <!-- Desktop: vertical list -->
+                <div class="popular-tags-list d-none d-lg-flex flex-column gap-2">
                     {% for tag in popular_tags %}
                     <a href="{{ url_for('spaces_by_tag', tag_slug=tag.name) }}" 
-                       class="btn btn-sm btn-outline-secondary text-decoration-none">
-                        {{ tag.name }} 
-                        <span class="badge bg-secondary ms-1">{{ tag.usage_count }}</span>
+                       class="btn btn-sm btn-outline-secondary text-decoration-none d-flex justify-content-between align-items-center"
+                       data-bs-toggle="tooltip" 
+                       data-bs-placement="left" 
+                       title="View all spaces tagged with '{{ tag.name }}'">
+                        <span class="fw-medium">{{ tag.name }}</span>
+                        <span class="badge bg-primary tag-usage-badge">{{ tag.usage_count }}</span>
                     </a>
                     {% endfor %}
                 </div>
+                
+                <!-- Mobile: wrapped layout -->
+                <div class="d-flex d-lg-none flex-wrap gap-2">
+                    {% for tag in popular_tags %}
+                    <a href="{{ url_for('spaces_by_tag', tag_slug=tag.name) }}" 
+                       class="btn btn-sm btn-outline-secondary text-decoration-none"
+                       data-bs-toggle="tooltip" 
+                       data-bs-placement="top" 
+                       title="View all spaces tagged with '{{ tag.name }}'">
+                        {{ tag.name }} 
+                        <span class="badge bg-primary ms-1">{{ tag.usage_count }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% if popular_tags|length == 20 %}
+                <div class="text-center mt-3 pt-2 border-top">
+                    <small class="text-muted">Showing top 20 most popular tags</small>
+                </div>
+                {% endif %}
             </div>
         </div>
         {% endif %}

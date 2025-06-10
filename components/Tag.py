@@ -5,6 +5,14 @@ import json
 import mysql.connector
 from mysql.connector import Error
 
+# Import cache invalidation function from Space component
+try:
+    from components.Space import invalidate_spaces_cache
+except ImportError:
+    # If we can't import, create a dummy function
+    def invalidate_spaces_cache():
+        pass
+
 class Tag:
     """
     Class to manage database actions on tags.
@@ -269,6 +277,11 @@ class Tag:
                     pass
             
             self.connection.commit()
+            
+            # Invalidate cache if tags were added
+            if count > 0:
+                invalidate_spaces_cache()
+            
             return count
             
         except Error as e:
@@ -318,7 +331,12 @@ class Tag:
             cursor.execute(query, params)
             self.connection.commit()
             
-            return cursor.rowcount > 0
+            # Invalidate cache if tag was removed
+            result = cursor.rowcount > 0
+            if result:
+                invalidate_spaces_cache()
+            
+            return result
             
         except Error as e:
             import logging
@@ -452,6 +470,10 @@ class Tag:
             query = "DELETE FROM space_tags WHERE space_id = %s"
             cursor.execute(query, (space_id,))
             self.connection.commit()
+            
+            # Invalidate cache if any tags were removed
+            if cursor.rowcount > 0:
+                invalidate_spaces_cache()
             
             return True
             
