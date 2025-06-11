@@ -1,0 +1,69 @@
+{
+  "job_id": "f90f64b4-b35c-4969-9a31-c80a2d16c9c8",
+  "space_id": "1BRJjmXAnPBGw",
+  "audio_path": "/Volumes/KabirArchive1/projects/xspacedownload/downloads/1BRJjmXAnPBGw.mp3",
+  "space_data": {
+    "id": 439,
+    "space_id": "1BRJjmXAnPBGw",
+    "title": "Bangladesh june 2025. hard talk\u26a0\ufe0f",
+    "space_url": "https://x.com/i/spaces/1BRJjmXAnPBGw",
+    "filename": "1BRJjmXAnPBGw.mp3",
+    "format": "mp3",
+    "notes": null,
+    "created_at": "2025-06-10T14:40:07",
+    "downloaded_at": "2025-06-10T14:56:41",
+    "download_cnt": 99,
+    "playback_cnt": 4,
+    "user_id": 933,
+    "cookie_id": null,
+    "browser_id": null,
+    "status": "completed",
+    "updated_at": "2025-06-10T15:13:02",
+    "metadata": {
+      "id": 69,
+      "space_id": "1BRJjmXAnPBGw",
+      "scraped_title": "Bangladesh june 2025. hard talk\u26a0\ufe0f",
+      "host": "imtiaz\ud83c\udde7\ud83c\udde9\ud83c\uddf5\ud83c\uddf8",
+      "host_handle": "@_imtiaz1899",
+      "speakers": [
+        "@Maher5937017603"
+      ],
+      "tags": [],
+      "participants_count": null,
+      "start_time": null,
+      "end_time": null,
+      "duration": null,
+      "description": null,
+      "status": null,
+      "is_recorded": 0,
+      "raw_metadata": {
+        "url": "https://spacesdashboard.com/space/1BRJjmXAnPBGw/",
+        "host": "imtiaz\ud83c\udde7\ud83c\udde9\ud83c\uddf5\ud83c\uddf8",
+        "tags": [],
+        "title": "Bangladesh june 2025. hard talk\u26a0\ufe0f",
+        "status": null,
+        "duration": null,
+        "end_time": null,
+        "space_id": "1BRJjmXAnPBGw",
+        "speakers": [
+          "@Maher5937017603 (Maher)"
+        ],
+        "scraped_at": "2025-06-10T14:55:50.457284",
+        "start_time": null,
+        "description": null,
+        "host_handle": "@_imtiaz1899",
+        "is_recorded": false,
+        "participants_count": null
+      },
+      "scraped_at": "2025-06-10T14:55:50",
+      "updated_at": "2025-06-10T14:55:50"
+    }
+  },
+  "user_id": 933,
+  "status": "completed",
+  "created_at": "2025-06-10T15:13:26.497375",
+  "updated_at": "2025-06-10T15:21:41.617258",
+  "progress": 100,
+  "error": null,
+  "video_path": "/Volumes/KabirArchive1/projects/xspacedownload/downloads/1BRJjmXAnPBGw.mp4"
+}

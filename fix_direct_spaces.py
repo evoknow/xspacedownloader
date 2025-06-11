@@ -193,6 +193,17 @@ def ensure_space_record(space_id: str, file_path: Optional[str] = None) -> bool:
                 logger.info(f"Using dynamic INSERT: {insert_query}")
                 cursor.execute(insert_query, values)
                 conn.commit()
+                
+                # Invalidate cache since we added a new space
+                try:
+                    from app import invalidate_spaces_cache
+                    invalidate_spaces_cache()
+                    logger.info("Invalidated spaces cache after creating space record")
+                except ImportError:
+                    logger.warning("Could not import cache invalidation function")
+                except Exception as cache_err:
+                    logger.warning(f"Error invalidating cache: {cache_err}")
+                
                 logger.info(f"Successfully created space record for {space_id}")
                 return True
                 
@@ -237,6 +248,17 @@ def ensure_space_record(space_id: str, file_path: Optional[str] = None) -> bool:
                         logger.info(f"Using truly minimal query: {minimal_insert} with values {minimal_values}")
                         cursor.execute(minimal_insert, minimal_values)
                         conn.commit()
+                        
+                        # Invalidate cache since we added a new space
+                        try:
+                            from app import invalidate_spaces_cache
+                            invalidate_spaces_cache()
+                            logger.info("Invalidated spaces cache after creating minimal space record")
+                        except ImportError:
+                            logger.warning("Could not import cache invalidation function")
+                        except Exception as cache_err:
+                            logger.warning(f"Error invalidating cache: {cache_err}")
+                        
                         logger.info(f"Successfully created minimal space record for {space_id}")
                         return True
                     except Exception as col_err:
@@ -251,6 +273,17 @@ def ensure_space_record(space_id: str, file_path: Optional[str] = None) -> bool:
                             """
                             cursor.execute(basic_insert, (space_id,))
                             conn.commit()
+                            
+                            # Invalidate cache since we added a new space
+                            try:
+                                from app import invalidate_spaces_cache
+                                invalidate_spaces_cache()
+                                logger.info("Invalidated spaces cache after creating basic space record")
+                            except ImportError:
+                                logger.warning("Could not import cache invalidation function")
+                            except Exception as cache_err:
+                                logger.warning(f"Error invalidating cache: {cache_err}")
+                            
                             logger.info(f"Created most basic space record for {space_id}")
                             return True
                         except Exception as basic_err:

@@ -9,6 +9,7 @@ import signal
 import logging
 import argparse
 import traceback
+import threading
 from pathlib import Path
 from datetime import datetime
 
@@ -588,6 +589,48 @@ class TranscriptionWorker:
         logger.info(f"Received signal {signum}. Shutting down gracefully...")
         self.running = False
     
+    def check_job_cancellation(self, job_id):
+        """
+        Check if a job has been cancelled by reading its status file.
+        
+        Args:
+            job_id (str): The job ID to check
+            
+        Returns:
+            bool: True if job is cancelled, False otherwise
+        """
+        try:
+            job_file = self.status_dir / f"{job_id}.json"
+            if not job_file.exists():
+                return False
+                
+            with open(job_file, 'r') as f:
+                job_data = json.load(f)
+                
+            status = job_data.get('status', '')
+            if status == 'cancelled':
+                logger.info(f"Job {job_id} detected as cancelled")
+                return True
+                
+            # Also check for cancellation signal files created by admin
+            signal_file = Path(f'./temp/cancel_{job_id}.signal')
+            if signal_file.exists():
+                logger.info(f"Job {job_id} cancellation signal file detected")
+                # Update job status to cancelled
+                self.update_job_status(job_id, 'cancelled', error='Job cancelled by admin')
+                # Remove signal file
+                try:
+                    signal_file.unlink()
+                except:
+                    pass
+                return True
+                
+            return False
+            
+        except Exception as e:
+            logger.warning(f"Error checking cancellation for job {job_id}: {e}")
+            return False
+    
     def load_speech_to_text(self, model_name='tiny'):
         """
         Load the SpeechToText component with the specified model.
@@ -771,6 +814,11 @@ class TranscriptionWorker:
             # Update job status to processing
             self.update_job_status(job_id, 'processing', progress=5)
             
+            # Check for cancellation after status update
+            if self.check_job_cancellation(job_id):
+                logger.info(f"Job {job_id} cancelled during setup")
+                return False
+            
             # Note: We no longer need a Space instance during transcription
             # Database operations will be done after transcription completes
             
@@ -926,6 +974,11 @@ class TranscriptionWorker:
                 import time
                 transcription_start_time = time.time()
                 
+                # Final check for cancellation before expensive transcription operation
+                if self.check_job_cancellation(job_id):
+                    logger.info(f"Job {job_id} cancelled before transcription")
+                    return False
+                
                 # Perform the actual transcription - NO DATABASE CONNECTION NEEDED
                 result = self.stt.transcribe(audio_path, **options)
                 
@@ -975,6 +1028,11 @@ class TranscriptionWorker:
                 else:
                     transcript_text = result["text"]
                 
+                # Check for cancellation before database operations
+                if self.check_job_cancellation(job_id):
+                    logger.info(f"Job {job_id} cancelled before saving to database")
+                    return False
+                
                 # Check for maximum text length issues
                 if len(transcript_text) > 64000:  # MySQL TEXT type max is 65535 bytes
                     logger.warning(f"Transcript is too long ({len(transcript_text)} chars), truncating to 64000 chars")
@@ -988,6 +1046,64 @@ class TranscriptionWorker:
                                           error="Failed to save transcript to database",
                                           result={"text_sample": transcript_text[:500] + "..."})
                     return False
+                
+                # Detect language from transcript text if it wasn't explicitly set or detected
+                if language_code == 'unknown' or (not translate_to and not detect_language and not language):
+                    logger.info(f"Detecting language from transcript text for space {space_id}")
+                    try:
+                        # Import SpeechToText to use its language detection
+                        from components.SpeechToText import SpeechToText
+                        stt_detector = SpeechToText()
+                        detected_lang = stt_detector._detect_language_from_text(transcript_text)
+                        
+                        if detected_lang != 'unknown' and detected_lang != language_code:
+                            logger.info(f"AI detected language: {detected_lang} (was: {language_code})")
+                            # Update the language in database
+                            import mysql.connector
+                            connection = None
+                            cursor = None
+                            
+                            try:
+                                # Load database config
+                                with open("db_config.json", 'r') as f:
+                                    config = json.load(f)
+                                
+                                db_config = config["mysql"].copy()
+                                if 'use_ssl' in db_config:
+                                    del db_config['use_ssl']
+                                
+                                connection = mysql.connector.connect(**db_config)
+                                cursor = connection.cursor()
+                                
+                                # Update language for this transcript
+                                update_query = """
+                                UPDATE space_transcripts 
+                                SET language = %s, updated_at = NOW()
+                                WHERE id = %s
+                                """
+                                cursor.execute(update_query, (detected_lang, transcript_id))
+                                connection.commit()
+                                
+                                # Update language_code for the rest of the function
+                                language_code = detected_lang
+                                logger.info(f"Updated transcript language to {detected_lang} in database")
+                                
+                            except Exception as db_err:
+                                logger.error(f"Error updating language in database: {db_err}")
+                            finally:
+                                if cursor:
+                                    try:
+                                        cursor.close()
+                                    except:
+                                        pass
+                                if connection:
+                                    try:
+                                        connection.close()
+                                    except:
+                                        pass
+                                        
+                    except Exception as detect_err:
+                        logger.error(f"Error detecting language: {detect_err}")
                 
                 # Generate and save tags for English transcripts
                 if language_code.startswith('en'):
@@ -1081,6 +1197,11 @@ class TranscriptionWorker:
                     job_id = job.get('job_id') or job.get('id')
                     space_id = job.get('space_id', 'unknown')
                     logger.info(f"Processing transcription job {job_id} for space {space_id}")
+                    
+                    # Check if job was cancelled before processing
+                    if self.check_job_cancellation(job_id):
+                        logger.info(f"Skipping cancelled job {job_id}")
+                        continue
                     
                     # Process the job
                     self.process_job(job)

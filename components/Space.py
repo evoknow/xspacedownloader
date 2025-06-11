@@ -1003,6 +1003,38 @@ class Space:
             if cursor:
                 cursor.close()
     
+    def set_job_priority(self, job_id, priority):
+        """
+        Set the priority of a download job.
+        
+        Args:
+            job_id (int): The job ID
+            priority (int): Priority level (1=highest, 2=high, 3=normal, 4=low, 5=lowest)
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        if priority not in [1, 2, 3, 4, 5]:
+            logger.error(f"Invalid priority value: {priority}. Must be 1-5.")
+            return False
+            
+        return self.update_download_job(job_id, priority=priority)
+    
+    def get_priority_options(self):
+        """
+        Get available priority options.
+        
+        Returns:
+            dict: Dictionary of priority values and labels
+        """
+        return {
+            1: "Highest",
+            2: "High", 
+            3: "Normal",
+            4: "Low",
+            5: "Lowest"
+        }
+    
     def increment_play_count(self, space_id):
         """
         Increment the play count for a space.
@@ -1433,7 +1465,7 @@ class Space:
             'download_dir': download_dir
         }
     
-    def create_download_job(self, space_id, user_id=0, cookie_id=None, file_type='mp3'):
+    def create_download_job(self, space_id, user_id=0, cookie_id=None, file_type='mp3', priority=3):
         """
         Create a new download job.
         
@@ -1442,6 +1474,7 @@ class Space:
             user_id (int, optional): User who created the job
             cookie_id (str, optional): Cookie ID for non-logged-in users
             file_type (str, optional): Audio file type ('mp3', 'm4a', 'wav')
+            priority (int, optional): Job priority (1=highest, 2=high, 3=normal, 4=low, 5=lowest)
             
         Returns:
             int: The job ID if successful, None otherwise
@@ -1481,6 +1514,9 @@ class Space:
                     cursor.execute(space_insert, (space_id, space_url, space_filename, space_format, user_id, cookie_id))
                     self.connection.commit()
                     
+                    # Invalidate cache since we added a new space
+                    invalidate_spaces_cache()
+                    
                     logger.info(f"Created new space record for {space_id}")
                 except Exception as insert_err:
                     logger.error(f"Error creating space record: {insert_err}")
@@ -1502,16 +1538,34 @@ class Space:
                 return job_id
             
             # Create a new download job
-            insert_query = """
-            INSERT INTO space_download_scheduler (
-                space_id, user_id, cookie_id, file_type, status, start_time, created_at, updated_at
-            ) VALUES (
-                %s, %s, %s, %s, 'pending', NOW(), NOW(), NOW()
-            )
-            """
-            cursor.execute(insert_query, (
-                space_id, user_id, cookie_id, file_type
-            ))
+            try:
+                # Try with priority column first
+                insert_query = """
+                INSERT INTO space_download_scheduler (
+                    space_id, user_id, cookie_id, file_type, status, priority, start_time, created_at, updated_at
+                ) VALUES (
+                    %s, %s, %s, %s, 'pending', %s, NOW(), NOW(), NOW()
+                )
+                """
+                cursor.execute(insert_query, (
+                    space_id, user_id, cookie_id, file_type, priority
+                ))
+            except Error as priority_err:
+                if "Unknown column 'priority'" in str(priority_err):
+                    logger.warning("Priority column missing, creating job without priority")
+                    # Fallback to insert without priority
+                    insert_query = """
+                    INSERT INTO space_download_scheduler (
+                        space_id, user_id, cookie_id, file_type, status, start_time, created_at, updated_at
+                    ) VALUES (
+                        %s, %s, %s, %s, 'pending', NOW(), NOW(), NOW()
+                    )
+                    """
+                    cursor.execute(insert_query, (
+                        space_id, user_id, cookie_id, file_type
+                    ))
+                else:
+                    raise priority_err
             
             self.connection.commit()
             job_id = cursor.lastrowid
@@ -1544,7 +1598,7 @@ class Space:
             # Allowed fields to update
             allowed_fields = [
                 'process_id', 'progress_in_size', 'progress_in_percent', 
-                'status', 'error_message'
+                'status', 'error_message', 'priority'
             ]
             
             # Build the update query dynamically based on provided kwargs
@@ -1722,7 +1776,7 @@ class Space:
                 logger.error(f"Error closing cursor: {close_err}")
                 # Continue without raising to avoid further issues
                 
-    def list_download_jobs(self, user_id=None, status=None, limit=10, offset=0):
+    def list_download_jobs(self, user_id=None, status=None, limit=10, offset=0, since=None):
         """
         List download jobs with optional filtering.
         
@@ -1731,6 +1785,7 @@ class Space:
             status (str, optional): Filter by status
             limit (int, optional): Maximum number of results
             offset (int, optional): Pagination offset
+            since (datetime, optional): Only include jobs created/updated after this datetime
             
         Returns:
             list: List of job dictionaries
@@ -1831,12 +1886,22 @@ class Space:
                 else:
                     query += " AND status = %s"
                 params.append(status)
+            
+            # Add since filter for time-based filtering
+            if since is not None:
+                if status == 'completed':
+                    query += " AND sds.end_time >= %s"
+                elif status == 'failed':
+                    query += " AND sds.end_time >= %s"
+                else:
+                    query += " AND created_at >= %s"
+                params.append(since)
                 
-            # Sort by most recent for completed spaces, otherwise by ID
+            # Sort by most recent for completed spaces, otherwise by priority then ID
             if status == 'completed':
                 query += " ORDER BY sds.end_time DESC, popularity_score DESC LIMIT %s OFFSET %s"
             else:
-                query += " ORDER BY id DESC LIMIT %s OFFSET %s"
+                query += " ORDER BY priority ASC, id ASC LIMIT %s OFFSET %s"
             params.extend([limit, offset])
             
             cursor.execute(query, params)
@@ -1845,6 +1910,73 @@ class Space:
             
         except Error as e:
             logger.error(f"Error listing download jobs: {e}")
+            
+            # Check if error is due to missing priority column
+            if "Unknown column 'priority'" in str(e):
+                logger.warning("Priority column missing, using fallback query without priority ordering")
+                try:
+                    # Reset cursor
+                    if cursor:
+                        try:
+                            cursor.close()
+                        except:
+                            pass
+                    cursor = self.connection.cursor(dictionary=True)
+                    
+                    # Rebuild query without priority
+                    if status == 'completed':
+                        query = """
+                            SELECT sds.*, s.playback_cnt, s.download_cnt, s.title,
+                                   (COALESCE(s.playback_cnt, 0) * 1.5 + COALESCE(s.download_cnt, 0)) as popularity_score
+                            FROM space_download_scheduler sds
+                            LEFT JOIN spaces s ON sds.space_id = s.space_id
+                            WHERE 1=1
+                        """
+                    else:
+                        query = "SELECT * FROM space_download_scheduler WHERE 1=1"
+                    
+                    params = []
+                    
+                    if user_id is not None:
+                        query += " AND user_id = %s"
+                        params.append(user_id)
+                        
+                    if status is not None:
+                        if status == 'completed':
+                            query += " AND sds.status = %s"
+                        else:
+                            query += " AND status = %s"
+                        params.append(status)
+                    
+                    if since is not None:
+                        if status == 'completed':
+                            query += " AND sds.end_time >= %s"
+                        elif status == 'failed':
+                            query += " AND sds.end_time >= %s"
+                        else:
+                            query += " AND created_at >= %s"
+                        params.append(since)
+                        
+                    # Sort without priority column
+                    if status == 'completed':
+                        query += " ORDER BY sds.end_time DESC LIMIT %s OFFSET %s"
+                    else:
+                        query += " ORDER BY id ASC LIMIT %s OFFSET %s"  # Fallback to ID ordering
+                    params.extend([limit, offset])
+                    
+                    cursor.execute(query, params)
+                    results = cursor.fetchall()
+                    
+                    # Add default priority value to results
+                    for result in results:
+                        result['priority'] = 3  # Default normal priority
+                        result['priority_label'] = 'Normal'
+                    
+                    return results
+                except Exception as fallback_err:
+                    logger.error(f"Fallback query also failed: {fallback_err}")
+                    return []
+            
             # Try to reconnect and retry once with simplified query
             try:
                 if cursor:

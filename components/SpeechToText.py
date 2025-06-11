@@ -302,9 +302,12 @@ class SpeechToText:
                                     "text": sentence.strip()
                                 })
                 
+                # For gpt-4o-mini-transcribe, we need to detect language ourselves since it doesn't return it
+                detected_language = language if language else self._detect_language_from_text(raw_text)
+                
                 result = {
                     "text": raw_text,
-                    "language": language if language else "unknown",  # Model doesn't return language in json format
+                    "language": detected_language,
                     "duration": audio_duration,
                     "segments": segments
                 }
@@ -426,6 +429,7 @@ class SpeechToText:
             # Transcribe each chunk
             all_text = []
             all_segments = []
+            detected_language = language if language else "unknown"  # Track detected language
             import tempfile
             
             for i, chunk_info in enumerate(chunks):
@@ -458,7 +462,10 @@ class SpeechToText:
                     # Process response based on format
                     if response_format == "json":
                         chunk_text = getattr(response, "text", "")
-                        chunk_language = language if language else "unknown"
+                        # Detect language from the first chunk's text if no language specified
+                        if i == 0 and not language and chunk_text.strip():
+                            detected_language = self._detect_language_from_text(chunk_text)
+                        chunk_language = detected_language
                         chunk_segments = []
                         
                         # For JSON format (gpt-4o-mini-transcribe), create artificial segments
@@ -528,7 +535,7 @@ class SpeechToText:
             # Create final result
             result = {
                 "text": combined_text,
-                "language": chunk_language if 'chunk_language' in locals() else (language if language else "unknown"),
+                "language": detected_language,
                 "duration": total_duration,
                 "segments": all_segments
             }
@@ -852,34 +859,19 @@ Return ONLY the corrected transcript text without any additional commentary, for
                 # Apply corrective filter to improve transcript accuracy
                 raw_text = result["text"]
                 
-                # Handle corrective filtering differently based on whether we have segments
+                # Apply corrective filter to the full text once (much more efficient than per-segment)
+                corrected_text = self._apply_corrective_filter(raw_text, result["language"])
+                logger.info("[CORRECTIVE_FILTER] Applied to full text (1 API call) instead of per-segment (avoiding %d API calls)", 
+                           len(result.get("segments", [])))
+                
+                # Update the result with corrected text
                 if include_timecodes and "segments" in result and result["segments"]:
-                    # For timecoded transcripts, apply corrective filter to each segment
-                    # to maintain timing while improving text quality
-                    corrected_segments = []
-                    for segment in result["segments"]:
-                        segment_text = segment.get("text", "")
-                        if segment_text.strip():
-                            corrected_segment_text = self._apply_corrective_filter(segment_text, result["language"])
-                            corrected_segment = segment.copy()
-                            corrected_segment["text"] = corrected_segment_text
-                            corrected_segments.append(corrected_segment)
-                        else:
-                            corrected_segments.append(segment)
-                    
-                    # Update segments with corrected text
-                    result["segments"] = corrected_segments
-                    
-                    # Create corrected full text from segments
-                    corrected_text = " ".join([seg.get("text", "") for seg in corrected_segments if seg.get("text", "").strip()])
-                    result["text"] = corrected_text
-                    
-                    # Apply timecode formatting
-                    result["text"] = self._format_transcript_with_timecodes(corrected_segments)
-                    
+                    # For timecoded transcripts, format with timecodes but use corrected content
+                    # We'll use the original segments for timing but note that text has been corrected
+                    result["text"] = self._format_transcript_with_timecodes(result["segments"])
+                    result["corrected_text"] = corrected_text  # Store the corrected version too
                 else:
-                    # For non-timecoded transcripts, apply normal corrective filtering
-                    corrected_text = self._apply_corrective_filter(raw_text, result["language"])
+                    # For non-timecoded transcripts, use the corrected text directly
                     result["text"] = corrected_text
                 
                 # Store both versions for reference
@@ -1227,6 +1219,135 @@ Return ONLY the corrected transcript text without any additional commentary, for
         except Exception as e:
             logger.error(f"Error transcribing audio file: {e}")
             return None
+    
+    def _detect_language_from_text(self, text):
+        """
+        Detect language from transcribed text using AI.
+        
+        Args:
+            text (str): The transcribed text to analyze
+            
+        Returns:
+            str: Detected language code (e.g., 'en', 'bn', 'hi', etc.)
+        """
+        if not text or not text.strip():
+            return "unknown"
+        
+        # Use AI to detect language accurately
+        try:
+            # Check if OpenAI API is available for language detection
+            if not OPENAI_AVAILABLE or not self.config.get('openai_api_key'):
+                logger.warning("OpenAI API not available for language detection, using fallback")
+                return self._detect_language_fallback(text)
+            
+            from openai import OpenAI
+            client = OpenAI(api_key=self.config.get('openai_api_key'))
+            
+            # Take a sample of the text for analysis (first 500 characters)
+            sample_text = text[:500].strip()
+            
+            # Create prompt for language detection
+            prompt = f"""Analyze the following text and identify its language. Return ONLY the ISO 639-1 language code (2 letters).
+
+Common language codes:
+- en: English
+- bn: Bengali/Bangla
+- hi: Hindi
+- ar: Arabic
+- ur: Urdu
+- es: Spanish
+- fr: French
+- de: German
+- ja: Japanese
+- ko: Korean
+- zh: Chinese
+- pt: Portuguese
+- it: Italian
+- ru: Russian
+- tr: Turkish
+- fa: Persian/Farsi
+
+Text to analyze:
+"{sample_text}"
+
+Language code:"""
+            
+            logger.info(f"[LANGUAGE_DETECTION] Analyzing {len(sample_text)} characters with AI")
+            
+            response = client.chat.completions.create(
+                model=self.config.get('correction_model', 'gpt-4o-mini'),
+                messages=[
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.1,  # Low temperature for consistent results
+                max_tokens=10  # We only need a 2-letter code
+            )
+            
+            detected_code = response.choices[0].message.content.strip().lower()
+            
+            # Validate the response is a proper language code
+            valid_codes = {
+                'en', 'bn', 'hi', 'ar', 'ur', 'es', 'fr', 'de', 'ja', 'ko', 
+                'zh', 'pt', 'it', 'ru', 'tr', 'fa', 'nl', 'sv', 'no', 'da'
+            }
+            
+            if detected_code in valid_codes:
+                logger.info(f"[LANGUAGE_DETECTION] AI detected language: {detected_code}")
+                return detected_code
+            else:
+                logger.warning(f"[LANGUAGE_DETECTION] AI returned invalid code: {detected_code}, using fallback")
+                return self._detect_language_fallback(text)
+                
+        except Exception as e:
+            logger.error(f"[LANGUAGE_DETECTION] AI detection failed: {e}, using fallback")
+            return self._detect_language_fallback(text)
+    
+    def _detect_language_fallback(self, text):
+        """
+        Fallback language detection using character script analysis.
+        
+        Args:
+            text (str): The transcribed text to analyze
+            
+        Returns:
+            str: Detected language code
+        """
+        if not text or not text.strip():
+            return "unknown"
+        
+        # Character-based detection for scripts (most reliable)
+        def has_bengali_chars(text):
+            bengali_range = range(0x0980, 0x09FF + 1)
+            return any(ord(char) in bengali_range for char in text)
+        
+        def has_arabic_chars(text):
+            arabic_range = range(0x0600, 0x06FF + 1)
+            return any(ord(char) in arabic_range for char in text)
+        
+        def has_devanagari_chars(text):
+            devanagari_range = range(0x0900, 0x097F + 1)
+            return any(ord(char) in devanagari_range for char in text)
+        
+        def has_chinese_chars(text):
+            # CJK Unified Ideographs
+            cjk_range = range(0x4E00, 0x9FFF + 1)
+            return any(ord(char) in cjk_range for char in text)
+        
+        # Check character scripts first
+        if has_bengali_chars(text):
+            return 'bn'
+        elif has_devanagari_chars(text):
+            return 'hi'
+        elif has_arabic_chars(text):
+            return 'ar'  # Could be Arabic or Urdu, default to Arabic
+        elif has_chinese_chars(text):
+            return 'zh'
+        
+        # For Latin scripts, default to English
+        if any(c.isascii() and c.isalpha() for c in text):
+            return 'en'
+        
+        return 'unknown'
             
     def _save_output(self, result, output_file, output_format):
         """

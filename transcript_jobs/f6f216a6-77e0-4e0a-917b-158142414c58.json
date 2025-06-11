@@ -1,1 +1,22 @@
-{"id": "f6f216a6-77e0-4e0a-917b-158142414c58", "space_id": "1YpKkgVgMQAKj", "file_path": "/Volumes/KabirArchive1/projects/xspacedownload/downloads/1YpKkgVgMQAKj.mp3", "language": "en", "options": {"model": "base", "detect_language": false, "translate_to": null, "overwrite": true, "include_timecodes": true}, "status": "pending", "progress": 0, "created_at": "2025-06-08T14:16:53.778489", "updated_at": "2025-06-08T14:16:53.778496"}
+{
+    "id": "f6f216a6-77e0-4e0a-917b-158142414c58",
+    "space_id": "1YpKkgVgMQAKj",
+    "file_path": "/Volumes/KabirArchive1/projects/xspacedownload/downloads/1YpKkgVgMQAKj.mp3",
+    "language": "en",
+    "options": {
+        "model": "base",
+        "detect_language": false,
+        "translate_to": null,
+        "overwrite": true,
+        "include_timecodes": true
+    },
+    "status": "cancelled",
+    "progress": 17,
+    "created_at": "2025-06-08T14:16:53.778489",
+    "updated_at": "2025-06-11T14:45:25.575035",
+    "result": {
+        "estimated_audio_minutes": 103.79251003265381,
+        "processing_elapsed_seconds": 270.0723669528961
+    },
+    "error": "Cancelled by admin"
+}

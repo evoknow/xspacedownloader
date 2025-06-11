@@ -631,6 +631,18 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                         cursor.execute(update_job_query, (file_size, job_id))
                         
                         conn.commit()
+                        
+                        # Trigger cache invalidation since we updated/created a space
+                        try:
+                            trigger_file = Path('./temp/cache_invalidate.trigger')
+                            trigger_file.parent.mkdir(exist_ok=True)
+                            trigger_file.touch()
+                            with open(log_file, 'a') as f:
+                                f.write(f"Triggered cache invalidation after space update\n")
+                        except Exception as cache_err:
+                            with open(log_file, 'a') as f:
+                                f.write(f"Warning: Could not trigger cache invalidation: {cache_err}\n")
+                        
                         cursor.close()
                         conn.close()
                         
@@ -742,6 +754,16 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                                     filename = f"{space_id}.{file_type}"
                                     cursor.execute(insert_query, (space_id, space_url, filename))
                                     conn.commit()
+                                    
+                                    # Trigger cache invalidation since we created a new space
+                                    try:
+                                        trigger_file = Path('./temp/cache_invalidate.trigger')
+                                        trigger_file.parent.mkdir(exist_ok=True)
+                                        trigger_file.touch()
+                                        print(f"Triggered cache invalidation after creating space {space_id}")
+                                    except Exception as cache_err:
+                                        print(f"Warning: Could not trigger cache invalidation: {cache_err}")
+                                    
                                     print(f"Added minimal space record to database for {space_id}")
                                 
                                 cursor.close()
@@ -2205,6 +2227,16 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                                     cursor.execute(insert_query, (space_id, space_url, filename, file_type))
                                 
                                 conn.commit()
+                                
+                                # Trigger cache invalidation since we created/updated a space
+                                try:
+                                    trigger_file = Path('./temp/cache_invalidate.trigger')
+                                    trigger_file.parent.mkdir(exist_ok=True)
+                                    trigger_file.touch()
+                                    print(f"Triggered cache invalidation after space completion")
+                                except Exception as cache_err:
+                                    print(f"Warning: Could not trigger cache invalidation: {cache_err}")
+                                
                                 cursor.close()
                                 conn.close()
                                 print(f"Added/updated space record in spaces table with status 'completed'")

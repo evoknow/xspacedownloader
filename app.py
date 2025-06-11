@@ -160,6 +160,29 @@ def invalidate_spaces_cache():
     spaces_cache['timestamp'] = 0
     logger.info("Spaces cache invalidated")
 
+def trigger_cache_invalidation():
+    """Create a trigger file to signal cache invalidation from background processes."""
+    try:
+        trigger_file = Path('./temp/cache_invalidate.trigger')
+        trigger_file.parent.mkdir(exist_ok=True)
+        trigger_file.touch()
+        logger.info("Created cache invalidation trigger file")
+    except Exception as e:
+        logger.warning(f"Could not create cache invalidation trigger: {e}")
+
+def check_cache_invalidation_trigger():
+    """Check if background processes have signaled cache invalidation."""
+    trigger_file = Path('./temp/cache_invalidate.trigger')
+    if trigger_file.exists():
+        try:
+            invalidate_spaces_cache()
+            trigger_file.unlink()  # Remove the trigger file
+            logger.info("Processed cache invalidation trigger from background process")
+            return True
+        except Exception as e:
+            logger.warning(f"Error processing cache invalidation trigger: {e}")
+    return False
+
 def invalidate_index_cache():
     """Invalidate the index cache."""
     global index_cache
@@ -176,6 +199,9 @@ def get_cached_spaces_data():
     """Get cached spaces data if valid, otherwise return None."""
     global spaces_cache
     current_time = time.time()
+    
+    # Check for cache invalidation trigger from background processes
+    check_cache_invalidation_trigger()
     
     # Check if cache is valid
     if (spaces_cache['data'] is not None and 
@@ -6077,6 +6103,885 @@ def admin_dev_clear_non_admin_users():
 def faq():
     """Display the FAQ page."""
     return render_template('faq.html')
+
+@app.route('/admin/api/jobs/<int:job_id>/priority', methods=['PUT'])
+def admin_set_job_priority(job_id):
+    """Set job priority (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        data = request.get_json()
+        priority = data.get('priority')
+        
+        if not priority or priority not in [1, 2, 3, 4, 5]:
+            return jsonify({'error': 'Invalid priority. Must be 1-5'}), 400
+        
+        space = get_space_component()
+        success = space.set_job_priority(job_id, priority)
+        
+        if success:
+            # Invalidate caches since queue order might change
+            invalidate_all_caches()
+            return jsonify({'success': True, 'message': 'Priority updated successfully'})
+        else:
+            return jsonify({'error': 'Failed to update priority'}), 400
+            
+    except Exception as e:
+        logger.error(f"Error setting job priority: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/jobs/priorities')
+def admin_get_priority_options():
+    """Get available priority options (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        space = get_space_component()
+        priorities = space.get_priority_options()
+        return jsonify({'priorities': priorities})
+        
+    except Exception as e:
+        logger.error(f"Error getting priority options: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/queue')
+def admin_get_queue():
+    """Get download queue with priority information (admin only) - backward compatibility."""
+    return admin_get_download_queue()
+
+@app.route('/admin/api/queue/download')
+def admin_get_download_queue():
+    """Get download queue with priority information (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        space = get_space_component()
+        
+        # Get pending and in-progress jobs
+        pending_jobs = space.list_download_jobs(status='pending', limit=100)
+        in_progress_jobs = space.list_download_jobs(status='downloading', limit=50)
+        
+        # Get completed and failed jobs from last 24 hours
+        from datetime import datetime, timedelta
+        yesterday = datetime.now() - timedelta(days=1)
+        completed_jobs = space.list_download_jobs(status='completed', limit=50, since=yesterday)
+        failed_jobs = space.list_download_jobs(status='failed', limit=20, since=yesterday)
+        
+        # Add priority labels
+        priorities = space.get_priority_options()
+        for job in pending_jobs + in_progress_jobs + completed_jobs + failed_jobs:
+            job['priority_label'] = priorities.get(job.get('priority', 3), 'Normal')
+        
+        return jsonify({
+            'pending': pending_jobs,
+            'in_progress': in_progress_jobs,
+            'completed': completed_jobs,
+            'failed': failed_jobs,
+            'priorities': priorities
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting download queue: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/queue/transcription')
+def admin_get_transcription_queue():
+    """Get transcription queue status (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        import os
+        import json
+        from pathlib import Path
+        from datetime import datetime, timedelta
+        
+        transcript_jobs_dir = Path('./transcript_jobs')
+        if not transcript_jobs_dir.exists():
+            return jsonify({
+                'pending': [],
+                'processing': [],
+                'completed': [],
+                'failed': []
+            })
+        
+        yesterday = datetime.now() - timedelta(days=1)
+        
+        pending_jobs = []
+        processing_jobs = []
+        completed_jobs = []
+        failed_jobs = []
+        
+        # Read all job files
+        for job_file in transcript_jobs_dir.glob('*.json'):
+            try:
+                with open(job_file, 'r') as f:
+                    job_data = json.load(f)
+                
+                # Skip video jobs (they have '_video' in filename)
+                if '_video' in job_file.name:
+                    continue
+                    
+                status = job_data.get('status', 'unknown')
+                created_at = datetime.fromisoformat(job_data.get('created_at', '2020-01-01'))
+                
+                # Only include recent completed/failed jobs
+                if status in ['completed', 'failed'] and created_at < yesterday:
+                    continue
+                
+                job_info = {
+                    'job_id': job_data.get('job_id', job_data.get('id')),
+                    'space_id': job_data.get('space_id'),
+                    'status': status,
+                    'progress': job_data.get('progress', 0),
+                    'created_at': job_data.get('created_at'),
+                    'updated_at': job_data.get('updated_at'),
+                    'model': job_data.get('model'),
+                    'language': job_data.get('language'),
+                    'options': job_data.get('options', {}),
+                    'error': job_data.get('error')
+                }
+                
+                if status == 'pending':
+                    pending_jobs.append(job_info)
+                elif status == 'processing':
+                    processing_jobs.append(job_info)
+                elif status == 'completed':
+                    completed_jobs.append(job_info)
+                elif status == 'failed':
+                    failed_jobs.append(job_info)
+                    
+            except Exception as e:
+                logger.warning(f"Error reading transcription job file {job_file}: {e}")
+                continue
+        
+        return jsonify({
+            'pending': sorted(pending_jobs, key=lambda x: x.get('created_at', '')),
+            'processing': sorted(processing_jobs, key=lambda x: x.get('created_at', '')),
+            'completed': sorted(completed_jobs, key=lambda x: x.get('updated_at', ''), reverse=True)[:10],
+            'failed': sorted(failed_jobs, key=lambda x: x.get('updated_at', ''), reverse=True)[:5]
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting transcription queue: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/queue/translation')
+def admin_get_translation_queue():
+    """Get translation queue status (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        import os
+        import json
+        from pathlib import Path
+        from datetime import datetime, timedelta
+        
+        # Translation jobs are part of transcription jobs with translate_to option
+        transcript_jobs_dir = Path('./transcript_jobs')
+        if not transcript_jobs_dir.exists():
+            return jsonify({
+                'pending': [],
+                'processing': [],
+                'completed': []
+            })
+        
+        yesterday = datetime.now() - timedelta(days=1)
+        
+        pending_jobs = []
+        processing_jobs = []
+        completed_jobs = []
+        
+        # Read all job files and filter for translation jobs
+        for job_file in transcript_jobs_dir.glob('*.json'):
+            try:
+                with open(job_file, 'r') as f:
+                    job_data = json.load(f)
+                
+                # Skip video jobs and non-translation jobs
+                if '_video' in job_file.name:
+                    continue
+                
+                options = job_data.get('options', {})
+                if not options.get('translate_to'):
+                    continue
+                    
+                status = job_data.get('status', 'unknown')
+                created_at = datetime.fromisoformat(job_data.get('created_at', '2020-01-01'))
+                
+                # Only include recent completed jobs
+                if status == 'completed' and created_at < yesterday:
+                    continue
+                
+                job_info = {
+                    'job_id': job_data.get('job_id', job_data.get('id')),
+                    'space_id': job_data.get('space_id'),
+                    'status': status,
+                    'progress': job_data.get('progress', 0),
+                    'created_at': job_data.get('created_at'),
+                    'updated_at': job_data.get('updated_at'),
+                    'source_language': job_data.get('language', 'auto'),
+                    'target_language': options.get('translate_to'),
+                    'options': options,
+                    'error': job_data.get('error')
+                }
+                
+                if status == 'pending':
+                    pending_jobs.append(job_info)
+                elif status == 'processing':
+                    processing_jobs.append(job_info)
+                elif status == 'completed':
+                    completed_jobs.append(job_info)
+                    
+            except Exception as e:
+                logger.warning(f"Error reading translation job file {job_file}: {e}")
+                continue
+        
+        return jsonify({
+            'pending': sorted(pending_jobs, key=lambda x: x.get('created_at', '')),
+            'processing': sorted(processing_jobs, key=lambda x: x.get('created_at', '')),
+            'completed': sorted(completed_jobs, key=lambda x: x.get('updated_at', ''), reverse=True)[:10]
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting translation queue: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/queue/video')
+def admin_get_video_queue():
+    """Get video generation queue status (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        import os
+        import json
+        from pathlib import Path
+        from datetime import datetime, timedelta
+        
+        transcript_jobs_dir = Path('./transcript_jobs')
+        if not transcript_jobs_dir.exists():
+            return jsonify({
+                'pending': [],
+                'processing': [],
+                'completed': []
+            })
+        
+        yesterday = datetime.now() - timedelta(days=1)
+        
+        pending_jobs = []
+        processing_jobs = []
+        completed_jobs = []
+        
+        # Read all video job files
+        for job_file in transcript_jobs_dir.glob('*_video.json'):
+            try:
+                with open(job_file, 'r') as f:
+                    job_data = json.load(f)
+                    
+                status = job_data.get('status', 'unknown')
+                created_at = datetime.fromisoformat(job_data.get('created_at', '2020-01-01'))
+                
+                # Only include recent completed jobs
+                if status == 'completed' and created_at < yesterday:
+                    continue
+                
+                job_info = {
+                    'job_id': job_data.get('job_id', job_data.get('id')),
+                    'space_id': job_data.get('space_id'),
+                    'user_id': job_data.get('user_id'),
+                    'status': status,
+                    'progress': job_data.get('progress', 0),
+                    'created_at': job_data.get('created_at'),
+                    'updated_at': job_data.get('updated_at'),
+                    'video_path': job_data.get('video_path'),
+                    'error': job_data.get('error')
+                }
+                
+                if status == 'pending':
+                    pending_jobs.append(job_info)
+                elif status == 'processing':
+                    processing_jobs.append(job_info)
+                elif status == 'completed':
+                    completed_jobs.append(job_info)
+                    
+            except Exception as e:
+                logger.warning(f"Error reading video job file {job_file}: {e}")
+                continue
+        
+        return jsonify({
+            'pending': sorted(pending_jobs, key=lambda x: x.get('created_at', '')),
+            'processing': sorted(processing_jobs, key=lambda x: x.get('created_at', '')),
+            'completed': sorted(completed_jobs, key=lambda x: x.get('updated_at', ''), reverse=True)[:10]
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting video queue: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/cache/status')
+def admin_cache_status():
+    """Get cache status information (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        current_time = time.time()
+        
+        # Calculate cache ages and time until expiration
+        spaces_cache_age = current_time - spaces_cache['timestamp'] if spaces_cache['timestamp'] > 0 else None
+        spaces_cache_expires = spaces_cache['ttl'] - spaces_cache_age if spaces_cache_age is not None else None
+        
+        index_cache_age = current_time - index_cache['timestamp'] if index_cache['timestamp'] > 0 else None
+        index_cache_expires = index_cache['ttl'] - index_cache_age if index_cache_age is not None else None
+        
+        return jsonify({
+            'spaces_cache': {
+                'active': spaces_cache['data'] is not None,
+                'age_seconds': round(spaces_cache_age, 1) if spaces_cache_age else None,
+                'expires_in_seconds': round(spaces_cache_expires, 1) if spaces_cache_expires and spaces_cache_expires > 0 else None,
+                'ttl': spaces_cache['ttl']
+            },
+            'index_cache': {
+                'active': index_cache['data'] is not None,
+                'age_seconds': round(index_cache_age, 1) if index_cache_age else None,
+                'expires_in_seconds': round(index_cache_expires, 1) if index_cache_expires and index_cache_expires > 0 else None,
+                'ttl': index_cache['ttl']
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting cache status: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/transcription/<job_id>')
+def admin_get_transcription_job(job_id):
+    """Get transcription job details (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        import os
+        import json
+        from pathlib import Path
+        
+        transcript_jobs_dir = Path('./transcript_jobs')
+        job_file = transcript_jobs_dir / f"{job_id}.json"
+        
+        if not job_file.exists():
+            return jsonify({'error': 'Job not found'}), 404
+        
+        with open(job_file, 'r') as f:
+            job_data = json.load(f)
+        
+        return jsonify({
+            'success': True,
+            'job': job_data
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting transcription job {job_id}: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/transcription/<job_id>/cancel', methods=['DELETE'])
+def admin_cancel_transcription_job(job_id):
+    """Cancel a transcription job (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        import os
+        import json
+        from pathlib import Path
+        
+        transcript_jobs_dir = Path('./transcript_jobs')
+        job_file = transcript_jobs_dir / f"{job_id}.json"
+        
+        if not job_file.exists():
+            return jsonify({'error': 'Job not found'}), 404
+        
+        # Load job data
+        with open(job_file, 'r') as f:
+            job_data = json.load(f)
+        
+        # Check if job can be cancelled
+        if job_data.get('status') not in ['pending', 'processing']:
+            return jsonify({'error': 'Job cannot be cancelled in its current state'}), 400
+        
+        # Update job status to cancelled
+        from datetime import datetime
+        job_data['status'] = 'cancelled'
+        job_data['updated_at'] = datetime.now().isoformat()
+        job_data['error'] = 'Cancelled by admin'
+        
+        # Save updated job data
+        with open(job_file, 'w') as f:
+            json.dump(job_data, f, indent=4)
+        
+        # Create a signal file for background processes to check
+        signal_file = Path(f'./temp/cancel_{job_id}.signal')
+        signal_file.parent.mkdir(exist_ok=True)
+        signal_file.touch()
+        
+        logger.info(f"Admin user {session.get('user_id')} cancelled transcription job {job_id}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Job cancelled successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error cancelling transcription job {job_id}: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/translation/<job_id>')
+def admin_get_translation_job(job_id):
+    """Get translation job details (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        import os
+        import json
+        from pathlib import Path
+        
+        transcript_jobs_dir = Path('./transcript_jobs')
+        job_file = transcript_jobs_dir / f"{job_id}.json"
+        
+        if not job_file.exists():
+            return jsonify({'error': 'Job not found'}), 404
+        
+        with open(job_file, 'r') as f:
+            job_data = json.load(f)
+        
+        # Check if this is actually a translation job
+        options = job_data.get('options', {})
+        if not options.get('translate_to'):
+            return jsonify({'error': 'Not a translation job'}), 400
+        
+        return jsonify({
+            'success': True,
+            'job': job_data
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting translation job {job_id}: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/video/<job_id>')
+def admin_get_video_job(job_id):
+    """Get video generation job details (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        import os
+        import json
+        from pathlib import Path
+        
+        transcript_jobs_dir = Path('./transcript_jobs')
+        job_file = transcript_jobs_dir / f"{job_id}_video.json"
+        
+        if not job_file.exists():
+            return jsonify({'error': 'Job not found'}), 404
+        
+        with open(job_file, 'r') as f:
+            job_data = json.load(f)
+        
+        return jsonify({
+            'success': True,
+            'job': job_data
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting video job {job_id}: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/translation/<job_id>/cancel', methods=['DELETE'])
+def admin_cancel_translation_job(job_id):
+    """Cancel a translation job (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        import os
+        import json
+        from pathlib import Path
+        
+        transcript_jobs_dir = Path('./transcript_jobs')
+        job_file = transcript_jobs_dir / f"{job_id}.json"
+        
+        if not job_file.exists():
+            return jsonify({'error': 'Translation job not found'}), 404
+        
+        with open(job_file, 'r') as f:
+            job_data = json.load(f)
+        
+        # Verify this is a translation job
+        if not job_data.get('options', {}).get('translate_to'):
+            return jsonify({'error': 'This is not a translation job'}), 400
+        
+        # Check if job can be cancelled
+        current_status = job_data.get('status', '')
+        if current_status not in ['pending', 'processing']:
+            return jsonify({'error': f'Cannot cancel job with status: {current_status}'}), 400
+        
+        # Update job status to cancelled
+        job_data['status'] = 'cancelled'
+        job_data['updated_at'] = datetime.datetime.now().isoformat()
+        job_data['error'] = 'Job cancelled by admin'
+        
+        with open(job_file, 'w') as f:
+            json.dump(job_data, f, indent=2)
+        
+        # Create a signal file for background processes to check
+        signal_file = Path(f'./temp/cancel_{job_id}.signal')
+        signal_file.parent.mkdir(exist_ok=True)
+        signal_file.touch()
+        
+        logger.info(f"Translation job {job_id} cancelled by admin")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Translation job cancelled successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error cancelling translation job {job_id}: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/video/<job_id>/cancel', methods=['DELETE'])
+def admin_cancel_video_job(job_id):
+    """Cancel a video generation job (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        import os
+        import json
+        from pathlib import Path
+        
+        transcript_jobs_dir = Path('./transcript_jobs')
+        job_file = transcript_jobs_dir / f"{job_id}_video.json"
+        
+        if not job_file.exists():
+            return jsonify({'error': 'Video job not found'}), 404
+        
+        with open(job_file, 'r') as f:
+            job_data = json.load(f)
+        
+        # Check if job can be cancelled
+        current_status = job_data.get('status', '')
+        if current_status not in ['pending', 'processing']:
+            return jsonify({'error': f'Cannot cancel job with status: {current_status}'}), 400
+        
+        # Update job status to cancelled
+        job_data['status'] = 'cancelled'
+        job_data['updated_at'] = datetime.datetime.now().isoformat()
+        job_data['error'] = 'Job cancelled by admin'
+        
+        with open(job_file, 'w') as f:
+            json.dump(job_data, f, indent=2)
+        
+        # Create a signal file for background processes to check
+        signal_file = Path(f'./temp/cancel_{job_id}.signal')
+        signal_file.parent.mkdir(exist_ok=True)
+        signal_file.touch()
+        
+        logger.info(f"Video job {job_id} cancelled by admin")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Video job cancelled successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error cancelling video job {job_id}: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/download/<int:job_id>/cancel', methods=['DELETE'])
+def admin_cancel_download_job(job_id):
+    """Cancel a download job (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        import os
+        import signal
+        import time
+        
+        # Get Space component to access download job methods
+        space = get_space_component()
+        
+        # Get job details first
+        cursor = space.connection.cursor(dictionary=True)
+        query = "SELECT * FROM space_download_scheduler WHERE id = %s"
+        cursor.execute(query, (job_id,))
+        job = cursor.fetchone()
+        cursor.close()
+        
+        if not job:
+            return jsonify({'error': 'Download job not found'}), 404
+        
+        # Check if job can be cancelled
+        if job['status'] in ['completed', 'failed']:
+            return jsonify({'error': f'Cannot cancel job with status: {job["status"]}'}), 400
+        
+        # Try to terminate the process if it's running
+        process_killed = False
+        if job['process_id']:
+            try:
+                # Send SIGTERM first (graceful termination)
+                os.kill(job['process_id'], signal.SIGTERM)
+                logger.info(f"Sent SIGTERM to process {job['process_id']} for job {job_id}")
+                
+                # Wait a bit for graceful termination
+                time.sleep(1.0)
+                
+                # Check if process is still running
+                try:
+                    os.kill(job['process_id'], 0)  # Check if process exists
+                    # Process still running, force kill
+                    os.kill(job['process_id'], signal.SIGKILL)
+                    logger.info(f"Sent SIGKILL to process {job['process_id']} for job {job_id}")
+                    process_killed = True
+                except OSError:
+                    # Process already terminated
+                    process_killed = True
+                    logger.info(f"Process {job['process_id']} for job {job_id} already terminated")
+                    
+            except OSError as e:
+                # Process doesn't exist or can't be killed
+                logger.warning(f"Could not kill process {job['process_id']} for job {job_id}: {e}")
+        
+        # Update job status to cancelled in database
+        cursor = space.connection.cursor()
+        update_query = """
+            UPDATE space_download_scheduler 
+            SET status = 'failed', 
+                error_message = 'Job cancelled by admin',
+                end_time = NOW(),
+                updated_at = NOW()
+            WHERE id = %s
+        """
+        cursor.execute(update_query, (job_id,))
+        space.connection.commit()
+        cursor.close()
+        
+        # Create a signal file for background processes to check
+        signal_file = Path(f'./temp/cancel_{job_id}.signal')
+        signal_file.parent.mkdir(exist_ok=True)
+        signal_file.touch()
+        
+        logger.info(f"Download job {job_id} cancelled by admin (process_killed: {process_killed})")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Download job cancelled successfully',
+            'process_killed': process_killed
+        })
+        
+    except Exception as e:
+        logger.error(f"Error cancelling download job {job_id}: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/download/<int:job_id>/remove', methods=['DELETE'])
+def admin_remove_download_job(job_id):
+    """Remove a completed download job record (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        # Get Space component
+        space = get_space_component()
+        
+        # Get job details first to check status
+        cursor = space.connection.cursor(dictionary=True)
+        query = "SELECT * FROM space_download_scheduler WHERE id = %s"
+        cursor.execute(query, (job_id,))
+        job = cursor.fetchone()
+        cursor.close()
+        
+        if not job:
+            return jsonify({'error': 'Download job not found'}), 404
+        
+        # Only allow removal of completed or failed jobs
+        if job['status'] not in ['completed', 'failed']:
+            return jsonify({'error': 'Can only remove completed or failed jobs'}), 400
+        
+        # Delete the job record
+        cursor = space.connection.cursor()
+        delete_query = "DELETE FROM space_download_scheduler WHERE id = %s"
+        cursor.execute(delete_query, (job_id,))
+        space.connection.commit()
+        cursor.close()
+        
+        logger.info(f"Download job {job_id} removed by admin")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Download job record removed successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error removing download job {job_id}: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/transcription/<job_id>/remove', methods=['DELETE'])
+def admin_remove_transcription_job(job_id):
+    """Remove a completed transcription job record (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        import os
+        import json
+        from pathlib import Path
+        
+        transcript_jobs_dir = Path('./transcript_jobs')
+        job_file = transcript_jobs_dir / f"{job_id}.json"
+        
+        if not job_file.exists():
+            return jsonify({'error': 'Transcription job not found'}), 404
+        
+        # Read job data to check status
+        with open(job_file, 'r') as f:
+            job_data = json.load(f)
+        
+        # Only allow removal of completed, failed, or cancelled jobs
+        if job_data.get('status') not in ['completed', 'failed', 'cancelled']:
+            return jsonify({'error': 'Can only remove completed, failed, or cancelled jobs'}), 400
+        
+        # Remove the job file
+        job_file.unlink()
+        
+        # Also remove any associated video job file if it exists
+        video_job_file = transcript_jobs_dir / f"{job_id}_video.json"
+        if video_job_file.exists():
+            video_job_file.unlink()
+        
+        logger.info(f"Transcription job {job_id} removed by admin")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Transcription job record removed successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error removing transcription job {job_id}: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/translation/<job_id>/remove', methods=['DELETE'])
+def admin_remove_translation_job(job_id):
+    """Remove a completed translation job record (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        import os
+        import json
+        from pathlib import Path
+        
+        transcript_jobs_dir = Path('./transcript_jobs')
+        job_file = transcript_jobs_dir / f"{job_id}.json"
+        
+        if not job_file.exists():
+            return jsonify({'error': 'Translation job not found'}), 404
+        
+        # Read job data to verify it's a translation job and check status
+        with open(job_file, 'r') as f:
+            job_data = json.load(f)
+        
+        # Verify this is a translation job
+        if not job_data.get('options', {}).get('translate_to'):
+            return jsonify({'error': 'This is not a translation job'}), 400
+        
+        # Only allow removal of completed, failed, or cancelled jobs
+        if job_data.get('status') not in ['completed', 'failed', 'cancelled']:
+            return jsonify({'error': 'Can only remove completed, failed, or cancelled jobs'}), 400
+        
+        # Remove the job file
+        job_file.unlink()
+        
+        logger.info(f"Translation job {job_id} removed by admin")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Translation job record removed successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error removing translation job {job_id}: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/video/<job_id>/remove', methods=['DELETE'])
+def admin_remove_video_job(job_id):
+    """Remove a completed video job record (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        import os
+        import json
+        from pathlib import Path
+        
+        transcript_jobs_dir = Path('./transcript_jobs')
+        job_file = transcript_jobs_dir / f"{job_id}_video.json"
+        
+        if not job_file.exists():
+            return jsonify({'error': 'Video job not found'}), 404
+        
+        # Read job data to check status
+        with open(job_file, 'r') as f:
+            job_data = json.load(f)
+        
+        # Only allow removal of completed, failed, or cancelled jobs
+        if job_data.get('status') not in ['completed', 'failed', 'cancelled']:
+            return jsonify({'error': 'Can only remove completed, failed, or cancelled jobs'}), 400
+        
+        # Remove the job file
+        job_file.unlink()
+        
+        logger.info(f"Video job {job_id} removed by admin")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Video job record removed successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error removing video job {job_id}: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/cache/clear', methods=['POST'])
+def admin_clear_cache():
+    """Clear all caches (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        # Clear all caches
+        invalidate_all_caches()
+        
+        # Also remove any trigger files
+        trigger_file = Path('./temp/cache_invalidate.trigger')
+        if trigger_file.exists():
+            trigger_file.unlink()
+        
+        logger.info(f"Admin user {session.get('user_id')} cleared all caches")
+        
+        return jsonify({
+            'success': True,
+            'message': 'All caches have been cleared successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error clearing caches: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 # Route for About page
 @app.route('/about')

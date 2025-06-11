@@ -154,6 +154,11 @@
             </button>
         </li>
         <li class="nav-item" role="presentation">
+            <button class="nav-link" id="queue-tab" data-bs-toggle="tab" data-bs-target="#queue" type="button" role="tab">
+                <i class="bi bi-list-ol"></i> Queue
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
             <button class="nav-link" id="stats-tab" data-bs-toggle="tab" data-bs-target="#stats" type="button" role="tab">
                 <i class="bi bi-graph-up"></i> Statistics
             </button>
@@ -273,6 +278,403 @@
             </div>
         </div>
         
+        <!-- Queue Management Tab -->
+        <div class="tab-pane fade" id="queue" role="tabpanel">
+            <div class="card mt-3">
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <h5 class="card-title">
+                                <i class="bi bi-list-task"></i> Queue Management
+                            </h5>
+                            <p class="text-muted">Manage all queue types: downloads, transcriptions, translations, and video generation</p>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <button class="btn btn-outline-primary" onclick="refreshAllQueues()">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh All
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Queue Type Tabs -->
+                    <ul class="nav nav-pills mb-4" id="queueTypeTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="download-queue-tab" data-bs-toggle="pill" 
+                                    data-bs-target="#download-queue" type="button" role="tab">
+                                <i class="bi bi-download"></i> Downloads
+                                <span class="badge bg-secondary ms-1" id="downloadQueueBadge">0</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="transcription-queue-tab" data-bs-toggle="pill" 
+                                    data-bs-target="#transcription-queue" type="button" role="tab">
+                                <i class="bi bi-mic"></i> Transcriptions
+                                <span class="badge bg-secondary ms-1" id="transcriptionQueueBadge">0</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="translation-queue-tab" data-bs-toggle="pill" 
+                                    data-bs-target="#translation-queue" type="button" role="tab">
+                                <i class="bi bi-translate"></i> Translations
+                                <span class="badge bg-secondary ms-1" id="translationQueueBadge">0</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="video-queue-tab" data-bs-toggle="pill" 
+                                    data-bs-target="#video-queue" type="button" role="tab">
+                                <i class="bi bi-camera-video"></i> Videos
+                                <span class="badge bg-secondary ms-1" id="videoQueueBadge">0</span>
+                            </button>
+                        </li>
+                    </ul>
+                    
+                    <div class="tab-content" id="queueTypeTabContent">
+                        
+                        <!-- Download Queue Tab -->
+                        <div class="tab-pane fade show active" id="download-queue" role="tabpanel">
+                            <!-- Queue Status -->
+                            <div class="row mb-4">
+                                <div class="col-md-3">
+                                    <div class="card bg-warning text-dark">
+                                        <div class="card-body">
+                                            <h6 class="card-title">
+                                                <i class="bi bi-clock"></i> Pending
+                                            </h6>
+                                            <h3 class="mb-0" id="downloadPendingCount">-</h3>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="card bg-info text-white">
+                                        <div class="card-body">
+                                            <h6 class="card-title">
+                                                <i class="bi bi-download"></i> In Progress
+                                            </h6>
+                                            <h3 class="mb-0" id="downloadProgressCount">-</h3>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="card bg-success text-white">
+                                        <div class="card-body">
+                                            <h6 class="card-title">
+                                                <i class="bi bi-check-circle"></i> Completed (24h)
+                                            </h6>
+                                            <h3 class="mb-0" id="downloadCompletedCount">-</h3>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="card bg-danger text-white">
+                                        <div class="card-body">
+                                            <h6 class="card-title">
+                                                <i class="bi bi-x-circle"></i> Failed (24h)
+                                            </h6>
+                                            <h3 class="mb-0" id="downloadFailedCount">-</h3>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Pending Jobs -->
+                            <div class="mb-4">
+                                <h6>Pending Jobs (ordered by priority)</h6>
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Space ID</th>
+                                                <th>User</th>
+                                                <th>Priority</th>
+                                                <th>Created</th>
+                                                <th>File Type</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="downloadPendingList">
+                                            <tr>
+                                                <td colspan="6" class="text-center">Loading pending jobs...</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            
+                            <!-- In Progress Jobs -->
+                            <div>
+                                <h6>Jobs In Progress</h6>
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Space ID</th>
+                                                <th>User</th>
+                                                <th>Priority</th>
+                                                <th>Progress</th>
+                                                <th>Started</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="downloadProgressList">
+                                            <tr>
+                                                <td colspan="6" class="text-center">Loading in-progress jobs...</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            
+                            <!-- Completed Downloads -->
+                            <div class="card">
+                                <div class="card-header bg-success text-white">
+                                    <h5 class="mb-0">
+                                        <i class="bi bi-check-circle me-2"></i>Completed Downloads (Last 10)
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <table class="table table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>Job ID</th>
+                                                <th>Space ID</th>
+                                                <th>Start Time</th>
+                                                <th>End Time</th>
+                                                <th>File Type</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="downloadCompletedList">
+                                            <tr>
+                                                <td colspan="6" class="text-center">Loading completed jobs...</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            
+                            <!-- Failed Downloads -->
+                            <div class="card mt-3">
+                                <div class="card-header bg-danger text-white">
+                                    <h5 class="mb-0">
+                                        <i class="bi bi-x-circle me-2"></i>Failed Downloads (Last 10)
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <table class="table table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>Job ID</th>
+                                                <th>Space ID</th>
+                                                <th>Start Time</th>
+                                                <th>Error</th>
+                                                <th>File Type</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="downloadFailedList">
+                                            <tr>
+                                                <td colspan="6" class="text-center">Loading failed jobs...</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Transcription Queue Tab -->
+                        <div class="tab-pane fade" id="transcription-queue" role="tabpanel">
+                            <!-- Queue Status -->
+                            <div class="row mb-4">
+                                <div class="col-md-3">
+                                    <div class="card bg-warning text-dark">
+                                        <div class="card-body">
+                                            <h6 class="card-title">
+                                                <i class="bi bi-clock"></i> Pending
+                                            </h6>
+                                            <h3 class="mb-0" id="transcriptionPendingCount">-</h3>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="card bg-info text-white">
+                                        <div class="card-body">
+                                            <h6 class="card-title">
+                                                <i class="bi bi-mic"></i> Processing
+                                            </h6>
+                                            <h3 class="mb-0" id="transcriptionProgressCount">-</h3>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="card bg-success text-white">
+                                        <div class="card-body">
+                                            <h6 class="card-title">
+                                                <i class="bi bi-check-circle"></i> Completed (24h)
+                                            </h6>
+                                            <h3 class="mb-0" id="transcriptionCompletedCount">-</h3>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="card bg-danger text-white">
+                                        <div class="card-body">
+                                            <h6 class="card-title">
+                                                <i class="bi bi-x-circle"></i> Failed (24h)
+                                            </h6>
+                                            <h3 class="mb-0" id="transcriptionFailedCount">-</h3>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Transcription Jobs -->
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Job ID</th>
+                                            <th>Space ID</th>
+                                            <th>Model</th>
+                                            <th>Language</th>
+                                            <th>Status</th>
+                                            <th>Progress</th>
+                                            <th>Created</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="transcriptionJobsList">
+                                        <tr>
+                                            <td colspan="8" class="text-center">Loading transcription jobs...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <!-- Translation Queue Tab -->
+                        <div class="tab-pane fade" id="translation-queue" role="tabpanel">
+                            <!-- Queue Status -->
+                            <div class="row mb-4">
+                                <div class="col-md-4">
+                                    <div class="card bg-warning text-dark">
+                                        <div class="card-body">
+                                            <h6 class="card-title">
+                                                <i class="bi bi-clock"></i> Pending
+                                            </h6>
+                                            <h3 class="mb-0" id="translationPendingCount">-</h3>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card bg-info text-white">
+                                        <div class="card-body">
+                                            <h6 class="card-title">
+                                                <i class="bi bi-translate"></i> Processing
+                                            </h6>
+                                            <h3 class="mb-0" id="translationProgressCount">-</h3>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card bg-success text-white">
+                                        <div class="card-body">
+                                            <h6 class="card-title">
+                                                <i class="bi bi-check-circle"></i> Completed (24h)
+                                            </h6>
+                                            <h3 class="mb-0" id="translationCompletedCount">-</h3>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Translation Jobs -->
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Job ID</th>
+                                            <th>Space ID</th>
+                                            <th>From Language</th>
+                                            <th>To Language</th>
+                                            <th>Status</th>
+                                            <th>Progress</th>
+                                            <th>Created</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="translationJobsList">
+                                        <tr>
+                                            <td colspan="8" class="text-center">Loading translation jobs...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <!-- Video Generation Queue Tab -->
+                        <div class="tab-pane fade" id="video-queue" role="tabpanel">
+                            <!-- Queue Status -->
+                            <div class="row mb-4">
+                                <div class="col-md-4">
+                                    <div class="card bg-warning text-dark">
+                                        <div class="card-body">
+                                            <h6 class="card-title">
+                                                <i class="bi bi-clock"></i> Pending
+                                            </h6>
+                                            <h3 class="mb-0" id="videoPendingCount">-</h3>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card bg-info text-white">
+                                        <div class="card-body">
+                                            <h6 class="card-title">
+                                                <i class="bi bi-camera-video"></i> Generating
+                                            </h6>
+                                            <h3 class="mb-0" id="videoProgressCount">-</h3>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card bg-success text-white">
+                                        <div class="card-body">
+                                            <h6 class="card-title">
+                                                <i class="bi bi-check-circle"></i> Completed (24h)
+                                            </h6>
+                                            <h3 class="mb-0" id="videoCompletedCount">-</h3>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Video Generation Jobs -->
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Job ID</th>
+                                            <th>Space ID</th>
+                                            <th>User</th>
+                                            <th>Status</th>
+                                            <th>Progress</th>
+                                            <th>Created</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="videoJobsList">
+                                        <tr>
+                                            <td colspan="7" class="text-center">Loading video generation jobs...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <!-- Statistics Tab -->
         <div class="tab-pane fade" id="stats" role="tabpanel">
             <div class="card mt-3">
@@ -368,6 +770,47 @@
             <div class="card mt-3">
                 <div class="card-body">
                     <h5 class="card-title">System Settings</h5>
+                    
+                    <!-- Cache Management Section -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h6 class="mb-0"><i class="bi bi-arrow-clockwise"></i> Cache Management</h6>
+                        </div>
+                        <div class="card-body">
+                            <p class="mb-3">Manage application caches to ensure fresh data is displayed.</p>
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="card bg-light">
+                                        <div class="card-body">
+                                            <h6 class="card-subtitle mb-2">Current Cache Status</h6>
+                                            <div id="cacheStatusInfo">
+                                                <div class="text-center">
+                                                    <div class="spinner-border spinner-border-sm" role="status">
+                                                        <span class="visually-hidden">Loading...</span>
+                                                    </div>
+                                                    Loading cache status...
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card bg-light">
+                                        <div class="card-body">
+                                            <h6 class="card-subtitle mb-2">Cache Actions</h6>
+                                            <p class="mb-3">Clear all caches to force reload of fresh data from the database.</p>
+                                            <button type="button" class="btn btn-warning" onclick="clearAllCaches()">
+                                                <i class="bi bi-trash"></i> Clear All Caches
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="alert alert-info mt-3" style="display: none;" id="cacheMessage"></div>
+                        </div>
+                    </div>
                     
                     <!-- Rate Limiting Section -->
                     <div class="card mb-4">
@@ -918,6 +1361,86 @@
     </div>
 </div>
 
+<!-- Upload Modal -->
+<div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="uploadModalLabel">
+                    <i class="bi bi-cloud-upload"></i> Upload Audio/Video File
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="uploadForm" enctype="multipart/form-data">
+                    <input type="hidden" id="uploadSpaceId" name="space_id">
+                    
+                    <div class="mb-3">
+                        <label for="uploadFile" class="form-label">
+                            <i class="bi bi-file-earmark-music"></i> Select Audio/Video File
+                        </label>
+                        <input type="file" class="form-control" id="uploadFile" name="file" 
+                               accept=".mp3,.mp4,.wav,.m4a,.webm,.ogg" required>
+                        <div class="form-text">
+                            Supported formats: MP3, MP4, WAV, M4A, WebM, OGG (Max size: 2GB)
+                        </div>
+                    </div>
+                    
+                    <!-- File Preview -->
+                    <div id="filePreview" class="mb-3" style="display: none;">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="bi bi-info-circle"></i> File Details
+                                </h6>
+                                <div class="row">
+                                    <div class="col-6">
+                                        <small class="text-muted">File Name:</small>
+                                        <div id="fileName" class="fw-bold"></div>
+                                    </div>
+                                    <div class="col-3">
+                                        <small class="text-muted">Size:</small>
+                                        <div id="fileSize" class="fw-bold"></div>
+                                    </div>
+                                    <div class="col-3">
+                                        <small class="text-muted">Type:</small>
+                                        <div id="fileType" class="fw-bold"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Upload Progress -->
+                    <div id="uploadProgress" class="mb-3" style="display: none;">
+                        <label class="form-label">Upload Progress</label>
+                        <div class="progress">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" id="uploadProgressBar" style="width: 0%">
+                                0%
+                            </div>
+                        </div>
+                        <small class="text-muted" id="uploadStatus">Preparing upload...</small>
+                    </div>
+                    
+                    <!-- Upload Result -->
+                    <div id="uploadResult" class="alert" style="display: none;">
+                        <div id="uploadResultContent"></div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="uploadCancelBtn">
+                    <i class="bi bi-x-circle"></i> Cancel
+                </button>
+                <button type="button" class="btn btn-success" id="uploadSubmitBtn" onclick="startUpload()">
+                    <i class="bi bi-cloud-upload"></i> Upload
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Include Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -1112,6 +1635,9 @@ function displaySpaces(spaces) {
                     <button class="btn btn-warning btn-sm" onclick="reTranscribe('${space.space_id}')" title="Re-transcribe with base model">
                         <i class="bi bi-mic"></i> Base
                     </button>
+                    <button class="btn btn-success btn-sm" onclick="showUploadModal('${space.space_id}')" title="Upload new audio/video file">
+                        <i class="bi bi-cloud-upload"></i>
+                    </button>
                     <button class="btn btn-danger btn-sm" onclick="deleteSpace('${space.space_id}')" title="Delete space">
                         <i class="bi bi-trash"></i>
                     </button>
@@ -1215,6 +1741,227 @@ function reTranscribe(spaceId) {
             button.disabled = false;
         });
 }
+
+// Upload Functions
+let uploadAbortController = null;
+
+function showUploadModal(spaceId) {
+    document.getElementById('uploadSpaceId').value = spaceId;
+    
+    // Reset modal state
+    resetUploadModal();
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('uploadModal'));
+    modal.show();
+}
+
+function resetUploadModal() {
+    // Clear file input
+    document.getElementById('uploadFile').value = '';
+    
+    // Hide all dynamic sections
+    document.getElementById('filePreview').style.display = 'none';
+    document.getElementById('uploadProgress').style.display = 'none';
+    document.getElementById('uploadResult').style.display = 'none';
+    
+    // Reset progress bar
+    const progressBar = document.getElementById('uploadProgressBar');
+    progressBar.style.width = '0%';
+    progressBar.textContent = '0%';
+    progressBar.className = 'progress-bar progress-bar-striped progress-bar-animated';
+    
+    // Reset buttons
+    document.getElementById('uploadSubmitBtn').style.display = 'inline-block';
+    document.getElementById('uploadCancelBtn').textContent = 'Cancel';
+    document.getElementById('uploadCancelBtn').innerHTML = '<i class="bi bi-x-circle"></i> Cancel';
+    
+    // Clear any existing abort controller
+    if (uploadAbortController) {
+        uploadAbortController.abort();
+        uploadAbortController = null;
+    }
+}
+
+// File selection handler
+document.getElementById('uploadFile').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        showFilePreview(file);
+    } else {
+        document.getElementById('filePreview').style.display = 'none';
+    }
+});
+
+function showFilePreview(file) {
+    const preview = document.getElementById('filePreview');
+    const fileName = document.getElementById('fileName');
+    const fileSize = document.getElementById('fileSize');
+    const fileType = document.getElementById('fileType');
+    
+    fileName.textContent = file.name;
+    fileSize.textContent = formatFileSize(file.size);
+    fileType.textContent = file.type || 'Unknown';
+    
+    preview.style.display = 'block';
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function validateFile(file) {
+    const maxSize = 2 * 1024 * 1024 * 1024; // 2GB
+    const allowedTypes = ['audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-wav', 'audio/webm', 'audio/ogg', 
+                         'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo'];
+    const allowedExtensions = ['.mp3', '.mp4', '.wav', '.m4a', '.webm', '.ogg', '.avi', '.mov'];
+    
+    // Check file size
+    if (file.size > maxSize) {
+        return 'File size too large. Maximum allowed size is 2GB.';
+    }
+    
+    // Check file extension
+    const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+    if (!allowedExtensions.includes(fileExtension)) {
+        return 'Invalid file type. Supported formats: MP3, MP4, WAV, M4A, WebM, OGG.';
+    }
+    
+    return null; // No error
+}
+
+function startUpload() {
+    const fileInput = document.getElementById('uploadFile');
+    const spaceId = document.getElementById('uploadSpaceId').value;
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        alert('Please select a file to upload.');
+        return;
+    }
+    
+    // Validate file
+    const validationError = validateFile(file);
+    if (validationError) {
+        showUploadResult(false, validationError);
+        return;
+    }
+    
+    // Show progress section
+    document.getElementById('uploadProgress').style.display = 'block';
+    document.getElementById('uploadResult').style.display = 'none';
+    
+    // Disable upload button and change cancel button
+    document.getElementById('uploadSubmitBtn').style.display = 'none';
+    document.getElementById('uploadCancelBtn').innerHTML = '<i class="bi bi-x-circle"></i> Abort Upload';
+    
+    // Create FormData
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('space_id', spaceId);
+    
+    // Create abort controller
+    uploadAbortController = new AbortController();
+    
+    // Create XMLHttpRequest for progress tracking
+    const xhr = new XMLHttpRequest();
+    
+    // Track upload progress
+    xhr.upload.addEventListener('progress', function(e) {
+        if (e.lengthComputable) {
+            const percentComplete = (e.loaded / e.total) * 100;
+            updateUploadProgress(percentComplete, 'Uploading...');
+        }
+    });
+    
+    // Handle successful response
+    xhr.addEventListener('load', function() {
+        if (xhr.status === 200) {
+            try {
+                const response = JSON.parse(xhr.responseText);
+                if (response.success) {
+                    showUploadResult(true, response.message || 'File uploaded successfully!');
+                    // Refresh spaces table after successful upload
+                    setTimeout(() => {
+                        loadSpaces(currentSpacesPage);
+                    }, 1500);
+                } else {
+                    showUploadResult(false, response.error || 'Upload failed');
+                }
+            } catch (e) {
+                showUploadResult(false, 'Invalid server response');
+            }
+        } else {
+            showUploadResult(false, `Upload failed with status: ${xhr.status}`);
+        }
+    });
+    
+    // Handle errors
+    xhr.addEventListener('error', function() {
+        showUploadResult(false, 'Upload failed due to network error');
+    });
+    
+    // Handle abort
+    xhr.addEventListener('abort', function() {
+        showUploadResult(false, 'Upload was cancelled');
+    });
+    
+    // Setup abort controller
+    uploadAbortController.signal.addEventListener('abort', function() {
+        xhr.abort();
+    });
+    
+    // Start upload
+    xhr.open('POST', '/admin/api/spaces/upload');
+    xhr.send(formData);
+    
+    updateUploadProgress(0, 'Starting upload...');
+}
+
+function updateUploadProgress(percent, status) {
+    const progressBar = document.getElementById('uploadProgressBar');
+    const statusText = document.getElementById('uploadStatus');
+    
+    progressBar.style.width = percent + '%';
+    progressBar.textContent = Math.round(percent) + '%';
+    statusText.textContent = status;
+    
+    if (percent >= 100) {
+        progressBar.className = 'progress-bar bg-success';
+        statusText.textContent = 'Processing upload...';
+    }
+}
+
+function showUploadResult(success, message) {
+    const resultDiv = document.getElementById('uploadResult');
+    const resultContent = document.getElementById('uploadResultContent');
+    
+    resultDiv.className = success ? 'alert alert-success' : 'alert alert-danger';
+    resultContent.innerHTML = `<i class="bi bi-${success ? 'check-circle' : 'exclamation-triangle'}"></i> ${message}`;
+    resultDiv.style.display = 'block';
+    
+    // Hide progress section
+    document.getElementById('uploadProgress').style.display = 'none';
+    
+    // Reset buttons
+    document.getElementById('uploadSubmitBtn').style.display = 'inline-block';
+    document.getElementById('uploadCancelBtn').innerHTML = '<i class="bi bi-x-circle"></i> Close';
+    
+    // Clear abort controller
+    uploadAbortController = null;
+}
+
+// Handle cancel/abort button
+document.getElementById('uploadCancelBtn').addEventListener('click', function() {
+    if (uploadAbortController) {
+        // Currently uploading, abort it
+        uploadAbortController.abort();
+    }
+});
 
 // Statistics Functions
 function changePeriod(period) {
@@ -2277,6 +3024,908 @@ function resetBrandingDefaults() {
     
     updateBrandingPreview();
 }
+
+// Queue Management Functions
+let allQueueData = {
+    download: { pending: [], in_progress: [], completed: [], failed: [], priorities: {} },
+    transcription: { pending: [], processing: [], completed: [], failed: [] },
+    translation: { pending: [], processing: [], completed: [] },
+    video: { pending: [], processing: [], completed: [] }
+};
+
+function refreshAllQueues() {
+    loadDownloadQueue();
+    loadTranscriptionQueue();
+    loadTranslationQueue();
+    loadVideoQueue();
+}
+
+function refreshQueue() {
+    // Backward compatibility
+    refreshAllQueues();
+}
+
+function loadDownloadQueue() {
+    fetch('/admin/api/queue/download')
+        .then(response => response.json())
+        .then(data => {
+            allQueueData.download = data;
+            displayDownloadQueue();
+            updateQueueBadges();
+        })
+        .catch(error => {
+            console.error('Error loading download queue:', error);
+            showQueueError('downloadPendingList', 'Error loading download queue');
+            showQueueError('downloadProgressList', 'Error loading download queue');
+        });
+}
+
+function loadTranscriptionQueue() {
+    fetch('/admin/api/queue/transcription')
+        .then(response => response.json())
+        .then(data => {
+            allQueueData.transcription = data;
+            displayTranscriptionQueue();
+            updateQueueBadges();
+        })
+        .catch(error => {
+            console.error('Error loading transcription queue:', error);
+            showQueueError('transcriptionJobsList', 'Error loading transcription queue');
+        });
+}
+
+function loadTranslationQueue() {
+    fetch('/admin/api/queue/translation')
+        .then(response => response.json())
+        .then(data => {
+            allQueueData.translation = data;
+            displayTranslationQueue();
+            updateQueueBadges();
+        })
+        .catch(error => {
+            console.error('Error loading translation queue:', error);
+            showQueueError('translationJobsList', 'Error loading translation queue');
+        });
+}
+
+function loadVideoQueue() {
+    fetch('/admin/api/queue/video')
+        .then(response => response.json())
+        .then(data => {
+            allQueueData.video = data;
+            displayVideoQueue();
+            updateQueueBadges();
+        })
+        .catch(error => {
+            console.error('Error loading video queue:', error);
+            showQueueError('videoJobsList', 'Error loading video queue');
+        });
+}
+
+function showQueueError(elementId, message) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        const colspan = element.closest('table').querySelectorAll('thead th').length;
+        element.innerHTML = `<tr><td colspan="${colspan}" class="text-danger text-center">${message}</td></tr>`;
+    }
+}
+
+function updateQueueBadges() {
+    // Update tab badges with queue counts
+    const downloadTotal = (allQueueData.download.pending?.length || 0) + (allQueueData.download.in_progress?.length || 0);
+    const transcriptionTotal = (allQueueData.transcription.pending?.length || 0) + (allQueueData.transcription.processing?.length || 0);
+    const translationTotal = (allQueueData.translation.pending?.length || 0) + (allQueueData.translation.processing?.length || 0);
+    const videoTotal = (allQueueData.video.pending?.length || 0) + (allQueueData.video.processing?.length || 0);
+    
+    document.getElementById('downloadQueueBadge').textContent = downloadTotal;
+    document.getElementById('transcriptionQueueBadge').textContent = transcriptionTotal;
+    document.getElementById('translationQueueBadge').textContent = translationTotal;
+    document.getElementById('videoQueueBadge').textContent = videoTotal;
+    
+    // Update badge colors based on queue status
+    updateBadgeColor('downloadQueueBadge', downloadTotal);
+    updateBadgeColor('transcriptionQueueBadge', transcriptionTotal);
+    updateBadgeColor('translationQueueBadge', translationTotal);
+    updateBadgeColor('videoQueueBadge', videoTotal);
+}
+
+function updateBadgeColor(badgeId, count) {
+    const badge = document.getElementById(badgeId);
+    if (badge) {
+        badge.className = count > 0 ? 'badge bg-warning ms-1' : 'badge bg-secondary ms-1';
+    }
+}
+
+function loadQueue() {
+    // Backward compatibility - load download queue
+    loadDownloadQueue();
+}
+
+function displayDownloadQueue() {
+    const data = allQueueData.download;
+    
+    // Update counts
+    document.getElementById('downloadPendingCount').textContent = data.pending?.length || 0;
+    document.getElementById('downloadProgressCount').textContent = data.in_progress?.length || 0;
+    document.getElementById('downloadCompletedCount').textContent = data.completed?.length || 0;
+    document.getElementById('downloadFailedCount').textContent = data.failed?.length || 0;
+    
+    // Display pending jobs
+    const pendingTbody = document.getElementById('downloadPendingList');
+    if (!data.pending || data.pending.length === 0) {
+        pendingTbody.innerHTML = '<tr><td colspan="6" class="text-center">No pending jobs</td></tr>';
+    } else {
+        pendingTbody.innerHTML = data.pending.map(job => `
+            <tr>
+                <td><code>${job.space_id}</code></td>
+                <td>${job.user_id || 'Anonymous'}</td>
+                <td>
+                    <select class="form-select form-select-sm" onchange="updateJobPriority(${job.id}, this.value)" style="width: auto;">
+                        ${Object.entries(data.priorities || {}).map(([value, label]) => 
+                            `<option value="${value}" ${job.priority == value ? 'selected' : ''}>${label}</option>`
+                        ).join('')}
+                    </select>
+                    <span class="badge ${getPriorityBadgeClass(job.priority)} ms-2">${job.priority_label}</span>
+                </td>
+                <td><small class="text-muted">${formatDate(job.created_at)}</small></td>
+                <td><span class="badge bg-secondary">${job.file_type || 'mp3'}</span></td>
+                <td>
+                    <button class="btn btn-sm btn-outline-danger me-1" onclick="cancelDownloadJob(${job.id})" title="Cancel Job">
+                        <i class="bi bi-x-circle"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-info" onclick="viewJobDetails(${job.id})" title="View Details">
+                        <i class="bi bi-info-circle"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    }
+    
+    // Display in-progress jobs
+    const progressTbody = document.getElementById('downloadProgressList');
+    if (!data.in_progress || data.in_progress.length === 0) {
+        progressTbody.innerHTML = '<tr><td colspan="6" class="text-center">No jobs in progress</td></tr>';
+    } else {
+        progressTbody.innerHTML = data.in_progress.map(job => `
+            <tr>
+                <td><code>${job.space_id}</code></td>
+                <td>${job.user_id || 'Anonymous'}</td>
+                <td><span class="badge ${getPriorityBadgeClass(job.priority)}">${job.priority_label}</span></td>
+                <td>
+                    <div class="progress" style="width: 100px;">
+                        <div class="progress-bar" role="progressbar" 
+                             style="width: ${job.progress_in_percent || 0}%" 
+                             title="${job.progress_in_percent || 0}%">
+                            ${job.progress_in_percent || 0}%
+                        </div>
+                    </div>
+                </td>
+                <td><small class="text-muted">${formatDate(job.start_time)}</small></td>
+                <td>
+                    <button class="btn btn-sm btn-outline-danger me-1" onclick="cancelDownloadJob(${job.id})" title="Cancel Download">
+                        <i class="bi bi-x-circle"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-info" onclick="viewJobDetails(${job.id})" title="View Details">
+                        <i class="bi bi-info-circle"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    }
+    
+    // Display completed jobs (limit to 10 most recent)
+    const completedTbody = document.getElementById('downloadCompletedList');
+    if (!data.completed || data.completed.length === 0) {
+        completedTbody.innerHTML = '<tr><td colspan="6" class="text-center">No completed jobs</td></tr>';
+    } else {
+        const recentCompleted = data.completed.slice(0, 10);
+        completedTbody.innerHTML = recentCompleted.map(job => `
+            <tr>
+                <td><small>${job.id}</small></td>
+                <td><code>${job.space_id}</code></td>
+                <td><small class="text-muted">${formatDate(job.start_time)}</small></td>
+                <td><small class="text-muted">${formatDate(job.end_time)}</small></td>
+                <td><span class="badge bg-secondary">${job.file_type || 'mp3'}</span></td>
+                <td>
+                    <button class="btn btn-sm btn-outline-warning me-1" onclick="removeDownloadJob(${job.id})" title="Remove Record">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-info" onclick="viewJobDetails(${job.id})" title="View Details">
+                        <i class="bi bi-info-circle"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    }
+    
+    // Display failed jobs (limit to 10 most recent)
+    const failedTbody = document.getElementById('downloadFailedList');
+    if (!data.failed || data.failed.length === 0) {
+        failedTbody.innerHTML = '<tr><td colspan="6" class="text-center">No failed jobs</td></tr>';
+    } else {
+        const recentFailed = data.failed.slice(0, 10);
+        failedTbody.innerHTML = recentFailed.map(job => `
+            <tr>
+                <td><small>${job.id}</small></td>
+                <td><code>${job.space_id}</code></td>
+                <td><small class="text-muted">${formatDate(job.start_time)}</small></td>
+                <td><small class="text-danger" title="${job.error_message || ''}">${(job.error_message || 'Unknown error').substring(0, 50)}${job.error_message && job.error_message.length > 50 ? '...' : ''}</small></td>
+                <td><span class="badge bg-secondary">${job.file_type || 'mp3'}</span></td>
+                <td>
+                    <button class="btn btn-sm btn-outline-warning me-1" onclick="removeDownloadJob(${job.id})" title="Remove Record">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-info" onclick="viewJobDetails(${job.id})" title="View Details">
+                        <i class="bi bi-info-circle"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    }
+}
+
+function displayTranscriptionQueue() {
+    const data = allQueueData.transcription;
+    
+    // Update counts
+    document.getElementById('transcriptionPendingCount').textContent = data.pending?.length || 0;
+    document.getElementById('transcriptionProgressCount').textContent = data.processing?.length || 0;
+    document.getElementById('transcriptionCompletedCount').textContent = data.completed?.length || 0;
+    document.getElementById('transcriptionFailedCount').textContent = data.failed?.length || 0;
+    
+    // Combine all jobs for display
+    const allJobs = [
+        ...(data.pending || []).map(job => ({...job, status: 'pending'})),
+        ...(data.processing || []).map(job => ({...job, status: 'processing'})),
+        ...(data.completed || []).slice(0, 10).map(job => ({...job, status: 'completed'})),
+        ...(data.failed || []).slice(0, 5).map(job => ({...job, status: 'failed'}))
+    ];
+    
+    const tbody = document.getElementById('transcriptionJobsList');
+    if (allJobs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center">No transcription jobs</td></tr>';
+    } else {
+        tbody.innerHTML = allJobs.map(job => `
+            <tr>
+                <td><code>${job.job_id || job.id}</code></td>
+                <td><code>${job.space_id}</code></td>
+                <td><span class="badge bg-info">${job.model || job.options?.model || 'Unknown'}</span></td>
+                <td><span class="badge bg-secondary">${job.language || job.options?.language || 'Auto'}</span></td>
+                <td><span class="badge ${getJobStatusBadgeClass(job.status)}">${job.status}</span></td>
+                <td>
+                    ${job.status === 'processing' ? 
+                        `<div class="progress" style="width: 80px;">
+                            <div class="progress-bar" style="width: ${job.progress || 0}%">${job.progress || 0}%</div>
+                        </div>` : 
+                        '-'
+                    }
+                </td>
+                <td><small class="text-muted">${formatDate(job.created_at)}</small></td>
+                <td>
+                    ${(job.status === 'pending' || job.status === 'processing') ? 
+                        `<button class="btn btn-sm btn-outline-danger me-1" onclick="cancelTranscriptionJob('${job.job_id || job.id}')" title="Cancel Job">
+                            <i class="bi bi-x-circle"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-info" onclick="viewTranscriptionJobDetails('${job.job_id || job.id}')" title="View Details">
+                            <i class="bi bi-info-circle"></i>
+                        </button>` :
+                        `<button class="btn btn-sm btn-outline-warning me-1" onclick="removeTranscriptionJob('${job.job_id || job.id}')" title="Remove Record">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-info" onclick="viewTranscriptionJobDetails('${job.job_id || job.id}')" title="View Details">
+                            <i class="bi bi-info-circle"></i>
+                        </button>`
+                    }
+                </td>
+            </tr>
+        `).join('');
+    }
+}
+
+function displayTranslationQueue() {
+    const data = allQueueData.translation;
+    
+    // Update counts
+    document.getElementById('translationPendingCount').textContent = data.pending?.length || 0;
+    document.getElementById('translationProgressCount').textContent = data.processing?.length || 0;
+    document.getElementById('translationCompletedCount').textContent = data.completed?.length || 0;
+    
+    // Combine all jobs for display
+    const allJobs = [
+        ...(data.pending || []).map(job => ({...job, status: 'pending'})),
+        ...(data.processing || []).map(job => ({...job, status: 'processing'})),
+        ...(data.completed || []).slice(0, 10).map(job => ({...job, status: 'completed'}))
+    ];
+    
+    const tbody = document.getElementById('translationJobsList');
+    if (allJobs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center">No translation jobs</td></tr>';
+    } else {
+        tbody.innerHTML = allJobs.map(job => `
+            <tr>
+                <td><code>${job.job_id || job.id}</code></td>
+                <td><code>${job.space_id}</code></td>
+                <td><span class="badge bg-primary">${job.source_language || 'Auto'}</span></td>
+                <td><span class="badge bg-success">${job.target_language || job.options?.translate_to || 'en'}</span></td>
+                <td><span class="badge ${getJobStatusBadgeClass(job.status)}">${job.status}</span></td>
+                <td>
+                    ${job.status === 'processing' ? 
+                        `<div class="progress" style="width: 80px;">
+                            <div class="progress-bar" style="width: ${job.progress || 0}%">${job.progress || 0}%</div>
+                        </div>` : 
+                        '-'
+                    }
+                </td>
+                <td><small class="text-muted">${formatDate(job.created_at)}</small></td>
+                <td>
+                    ${(job.status === 'pending' || job.status === 'processing') ? 
+                        `<button class="btn btn-sm btn-outline-danger me-1" onclick="cancelTranslationJob('${job.job_id || job.id}')" title="Cancel Job">
+                            <i class="bi bi-x-circle"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-info" onclick="viewTranslationJobDetails('${job.job_id || job.id}')" title="View Details">
+                            <i class="bi bi-info-circle"></i>
+                        </button>` :
+                        `<button class="btn btn-sm btn-outline-warning me-1" onclick="removeTranslationJob('${job.job_id || job.id}')" title="Remove Record">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-info" onclick="viewTranslationJobDetails('${job.job_id || job.id}')" title="View Details">
+                            <i class="bi bi-info-circle"></i>
+                        </button>`
+                    }
+                </td>
+            </tr>
+        `).join('');
+    }
+}
+
+function displayVideoQueue() {
+    const data = allQueueData.video;
+    
+    // Update counts
+    document.getElementById('videoPendingCount').textContent = data.pending?.length || 0;
+    document.getElementById('videoProgressCount').textContent = data.processing?.length || 0;
+    document.getElementById('videoCompletedCount').textContent = data.completed?.length || 0;
+    
+    // Combine all jobs for display
+    const allJobs = [
+        ...(data.pending || []).map(job => ({...job, status: 'pending'})),
+        ...(data.processing || []).map(job => ({...job, status: 'processing'})),
+        ...(data.completed || []).slice(0, 10).map(job => ({...job, status: 'completed'}))
+    ];
+    
+    const tbody = document.getElementById('videoJobsList');
+    if (allJobs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center">No video generation jobs</td></tr>';
+    } else {
+        tbody.innerHTML = allJobs.map(job => `
+            <tr>
+                <td><code>${job.job_id || job.id}</code></td>
+                <td><code>${job.space_id}</code></td>
+                <td>${job.user_id || 'Anonymous'}</td>
+                <td><span class="badge ${getJobStatusBadgeClass(job.status)}">${job.status}</span></td>
+                <td>
+                    ${job.status === 'processing' ? 
+                        `<div class="progress" style="width: 80px;">
+                            <div class="progress-bar" style="width: ${job.progress || 0}%">${job.progress || 0}%</div>
+                        </div>` : 
+                        '-'
+                    }
+                </td>
+                <td><small class="text-muted">${formatDate(job.created_at)}</small></td>
+                <td>
+                    ${(job.status === 'pending' || job.status === 'processing') ? 
+                        `<button class="btn btn-sm btn-outline-danger me-1" onclick="cancelVideoJob('${job.job_id || job.id}')" title="Cancel Job">
+                            <i class="bi bi-x-circle"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-info" onclick="viewVideoJobDetails('${job.job_id || job.id}')" title="View Details">
+                            <i class="bi bi-info-circle"></i>
+                        </button>` :
+                        `<button class="btn btn-sm btn-outline-warning me-1" onclick="removeVideoJob('${job.job_id || job.id}')" title="Remove Record">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-info" onclick="viewVideoJobDetails('${job.job_id || job.id}')" title="View Details">
+                            <i class="bi bi-info-circle"></i>
+                        </button>`
+                    }
+                </td>
+            </tr>
+        `).join('');
+    }
+}
+
+function getJobStatusBadgeClass(status) {
+    switch (status) {
+        case 'pending': return 'bg-warning text-dark';
+        case 'processing': return 'bg-info';
+        case 'completed': return 'bg-success';
+        case 'failed': return 'bg-danger';
+        default: return 'bg-secondary';
+    }
+}
+
+function displayQueue() {
+    // Backward compatibility - display download queue
+    displayDownloadQueue();
+}
+
+function getPriorityBadgeClass(priority) {
+    switch (priority) {
+        case 1: return 'bg-danger';
+        case 2: return 'bg-warning text-dark';
+        case 3: return 'bg-secondary';
+        case 4: return 'bg-info';
+        case 5: return 'bg-light text-dark';
+        default: return 'bg-secondary';
+    }
+}
+
+function updateJobPriority(jobId, newPriority) {
+    fetch(`/admin/api/jobs/${jobId}/priority`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ priority: parseInt(newPriority) })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            // Show success message
+            showToast('Priority updated successfully', 'success');
+            // Refresh queue to show new order
+            setTimeout(loadQueue, 500);
+        } else {
+            showToast('Error: ' + result.error, 'error');
+            // Revert the select value
+            loadQueue();
+        }
+    })
+    .catch(error => {
+        console.error('Error updating priority:', error);
+        showToast('Error updating priority', 'error');
+        loadQueue();
+    });
+}
+
+function cancelJob(jobId) {
+    // Delegate to the existing cancelDownloadJob function
+    cancelDownloadJob(jobId);
+}
+
+function viewJobDetails(jobId) {
+    // Implementation would go here - show job details modal
+    showToast('Job details view not yet implemented', 'info');
+}
+
+function formatDate(dateString) {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleString();
+}
+
+function clearAllCaches() {
+    if (!confirm('Are you sure you want to clear all caches? This will force a reload of all data from the database.')) {
+        return;
+    }
+    
+    // Show loading state
+    const cacheMessage = document.getElementById('cacheMessage');
+    cacheMessage.className = 'alert alert-info mt-3';
+    cacheMessage.innerHTML = '<i class="bi bi-hourglass-split spin"></i> Clearing caches...';
+    cacheMessage.style.display = 'block';
+    
+    fetch('/admin/api/cache/clear', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            cacheMessage.className = 'alert alert-success mt-3';
+            cacheMessage.innerHTML = '<i class="bi bi-check-circle"></i> ' + result.message;
+            
+            // Show toast notification
+            showToast('All caches have been cleared successfully', 'success');
+            
+            // Hide message after 5 seconds
+            setTimeout(() => {
+                cacheMessage.style.display = 'none';
+            }, 5000);
+            
+            // Refresh any active data displays
+            if (window.location.hash === '#queue' || document.querySelector('#queue-tab.active')) {
+                refreshAllQueues();
+            }
+            
+            // Reload cache status
+            setTimeout(loadCacheStatus, 1000);
+        } else {
+            cacheMessage.className = 'alert alert-danger mt-3';
+            cacheMessage.innerHTML = '<i class="bi bi-x-circle"></i> Error: ' + (result.error || 'Failed to clear caches');
+            showToast('Error clearing caches', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error clearing caches:', error);
+        cacheMessage.className = 'alert alert-danger mt-3';
+        cacheMessage.innerHTML = '<i class="bi bi-x-circle"></i> Error clearing caches';
+        showToast('Error clearing caches', 'error');
+    });
+}
+
+function showToast(message, type = 'info') {
+    // Simple toast notification
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'error' ? 'danger' : type} position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    toast.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
+    `;
+    document.body.appendChild(toast);
+    
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.remove();
+        }
+    }, 3000);
+}
+
+// Queue management action functions
+function cancelTranscriptionJob(jobId) {
+    if (!confirm('Are you sure you want to cancel this transcription job?')) return;
+    
+    fetch(`/admin/api/transcription/${jobId}/cancel`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            showToast('Transcription job cancelled', 'success');
+            loadTranscriptionQueue();
+        } else {
+            showToast('Error: ' + result.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error cancelling transcription job:', error);
+        showToast('Error cancelling transcription job', 'error');
+    });
+}
+
+function cancelTranslationJob(jobId) {
+    if (!confirm('Are you sure you want to cancel this translation job?')) return;
+    
+    fetch(`/admin/api/translation/${jobId}/cancel`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            showToast('Translation job cancelled', 'success');
+            loadTranslationQueue();
+        } else {
+            showToast('Error: ' + result.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error cancelling translation job:', error);
+        showToast('Error cancelling translation job', 'error');
+    });
+}
+
+function cancelVideoJob(jobId) {
+    if (!confirm('Are you sure you want to cancel this video generation job?')) return;
+    
+    fetch(`/admin/api/video/${jobId}/cancel`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            showToast('Video job cancelled', 'success');
+            loadVideoQueue();
+        } else {
+            showToast('Error: ' + result.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error cancelling video job:', error);
+        showToast('Error cancelling video job', 'error');
+    });
+}
+
+function cancelDownloadJob(jobId) {
+    if (!confirm('Are you sure you want to cancel this download job? This will stop the download process.')) return;
+    
+    fetch(`/admin/api/download/${jobId}/cancel`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            const message = result.process_killed ? 
+                'Download job cancelled and process terminated' : 
+                'Download job cancelled';
+            showToast(message, 'success');
+            loadDownloadQueue();
+        } else {
+            showToast('Error: ' + result.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error cancelling download job:', error);
+        showToast('Error cancelling download job', 'error');
+    });
+}
+
+function removeDownloadJob(jobId) {
+    if (!confirm('Are you sure you want to remove this job record? This action cannot be undone.')) return;
+    
+    fetch(`/admin/api/download/${jobId}/remove`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            showToast('Download job record removed', 'success');
+            loadDownloadQueue();
+        } else {
+            showToast('Error: ' + result.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error removing download job:', error);
+        showToast('Error removing download job', 'error');
+    });
+}
+
+function removeTranscriptionJob(jobId) {
+    if (!confirm('Are you sure you want to remove this job record? This action cannot be undone.')) return;
+    
+    fetch(`/admin/api/transcription/${jobId}/remove`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            showToast('Transcription job record removed', 'success');
+            loadTranscriptionQueue();
+        } else {
+            showToast('Error: ' + result.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error removing transcription job:', error);
+        showToast('Error removing transcription job', 'error');
+    });
+}
+
+function removeTranslationJob(jobId) {
+    if (!confirm('Are you sure you want to remove this job record? This action cannot be undone.')) return;
+    
+    fetch(`/admin/api/translation/${jobId}/remove`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            showToast('Translation job record removed', 'success');
+            loadTranslationQueue();
+        } else {
+            showToast('Error: ' + result.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error removing translation job:', error);
+        showToast('Error removing translation job', 'error');
+    });
+}
+
+function removeVideoJob(jobId) {
+    if (!confirm('Are you sure you want to remove this job record? This action cannot be undone.')) return;
+    
+    fetch(`/admin/api/video/${jobId}/remove`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            showToast('Video job record removed', 'success');
+            loadVideoQueue();
+        } else {
+            showToast('Error: ' + result.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error removing video job:', error);
+        showToast('Error removing video job', 'error');
+    });
+}
+
+function viewTranscriptionJobDetails(jobId) {
+    fetch(`/admin/api/transcription/${jobId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const job = data.job;
+                let details = `Job ID: ${jobId}\n`;
+                details += `Space ID: ${job.space_id}\n`;
+                details += `Status: ${job.status}\n`;
+                details += `Progress: ${job.progress || 0}%\n`;
+                details += `Model: ${job.model || job.options?.model || 'Unknown'}\n`;
+                details += `Language: ${job.language || job.options?.language || 'Auto'}\n`;
+                
+                if (job.options?.translate_to) {
+                    details += `Translate to: ${job.options.translate_to}\n`;
+                }
+                
+                details += `Created: ${formatDate(job.created_at)}\n`;
+                
+                if (job.updated_at) {
+                    details += `Updated: ${formatDate(job.updated_at)}\n`;
+                }
+                
+                if (job.error) {
+                    details += `\nError: ${job.error}`;
+                }
+                
+                if (job.result) {
+                    details += `\nResult: Transcript generated (${job.result.text_sample || 'No preview available'})`;
+                }
+                
+                alert(details);
+            } else {
+                showToast('Error: ' + (data.error || 'Job not found'), 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading transcription job details:', error);
+            showToast('Error loading job details', 'error');
+        });
+}
+
+function viewTranslationJobDetails(jobId) {
+    fetch(`/admin/api/translation/${jobId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(`Job ID: ${jobId}\nSpace: ${data.job.space_id}\nFrom: ${data.job.source_language}\nTo: ${data.job.target_language}\nStatus: ${data.job.status}`);
+            } else {
+                showToast('Error loading job details', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading translation job details:', error);
+            showToast('Error loading job details', 'error');
+        });
+}
+
+function viewVideoJobDetails(jobId) {
+    fetch(`/admin/api/video/${jobId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(`Job ID: ${jobId}\nSpace: ${data.job.space_id}\nUser: ${data.job.user_id}\nStatus: ${data.job.status}\nProgress: ${data.job.progress}%`);
+            } else {
+                showToast('Error loading job details', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading video job details:', error);
+            showToast('Error loading job details', 'error');
+        });
+}
+
+// Cache Management Functions
+function loadCacheStatus() {
+    fetch('/admin/api/cache/status')
+        .then(response => response.json())
+        .then(data => {
+            const statusDiv = document.getElementById('cacheStatusInfo');
+            let html = '<ul class="mb-0">';
+            
+            // Spaces Cache
+            if (data.spaces_cache.active) {
+                const age = Math.round(data.spaces_cache.age_seconds);
+                const expires = Math.round(data.spaces_cache.expires_in_seconds);
+                html += `<li><strong>Spaces Cache:</strong> 
+                    <span class="badge bg-success">Active</span>
+                    <small class="text-muted">(Age: ${formatDuration(age)}, Expires in: ${formatDuration(expires)})</small>
+                </li>`;
+            } else {
+                html += `<li><strong>Spaces Cache:</strong> 
+                    <span class="badge bg-secondary">Empty</span>
+                    <small class="text-muted">(TTL: ${data.spaces_cache.ttl}s)</small>
+                </li>`;
+            }
+            
+            // Index Cache
+            if (data.index_cache.active) {
+                const age = Math.round(data.index_cache.age_seconds);
+                const expires = Math.round(data.index_cache.expires_in_seconds);
+                html += `<li><strong>Index Cache:</strong> 
+                    <span class="badge bg-success">Active</span>
+                    <small class="text-muted">(Age: ${formatDuration(age)}, Expires in: ${formatDuration(expires)})</small>
+                </li>`;
+            } else {
+                html += `<li><strong>Index Cache:</strong> 
+                    <span class="badge bg-secondary">Empty</span>
+                    <small class="text-muted">(TTL: ${data.index_cache.ttl}s)</small>
+                </li>`;
+            }
+            
+            html += '</ul>';
+            statusDiv.innerHTML = html;
+        })
+        .catch(error => {
+            console.error('Error loading cache status:', error);
+            document.getElementById('cacheStatusInfo').innerHTML = 
+                '<div class="text-danger">Error loading cache status</div>';
+        });
+}
+
+function formatDuration(seconds) {
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}m ${remainingSeconds}s`;
+}
+
+// Load queue when queue tab is shown
+document.addEventListener('DOMContentLoaded', function() {
+    const queueTab = document.getElementById('queue-tab');
+    if (queueTab) {
+        queueTab.addEventListener('shown.bs.tab', function() {
+            refreshAllQueues();
+        });
+    }
+    
+    // Load all queues on page load if we're on the queue tab
+    if (window.location.hash === '#queue' || document.querySelector('#queue-tab.active')) {
+        refreshAllQueues();
+    }
+    
+    // Load cache status when settings tab is shown
+    const settingsTab = document.getElementById('settings-tab');
+    if (settingsTab) {
+        settingsTab.addEventListener('shown.bs.tab', function() {
+            loadCacheStatus();
+        });
+    }
+    
+    // Load cache status on page load if we're on the settings tab
+    if (window.location.hash === '#settings' || document.querySelector('#settings-tab.active')) {
+        loadCacheStatus();
+    }
+});
 
 </script>
 {% endblock %}
