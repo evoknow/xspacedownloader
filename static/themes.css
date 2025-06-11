@@ -300,6 +300,46 @@ a:hover {
     color: var(--bs-body-color) !important;
 }
 
+/* Download/Play button icons should be white for visibility */
+.btn-success .bi,
+.btn-success i,
+.bg-success .bi,
+.bg-success i {
+    color: #fff !important;
+}
+
+/* General rule for all colored buttons to have white icons */
+.btn-primary .bi,
+.btn-primary i,
+.btn-secondary .bi,
+.btn-secondary i,
+.btn-danger .bi,
+.btn-danger i,
+.btn-info .bi,
+.btn-info i {
+    color: #fff !important;
+}
+
+/* Warning buttons should have dark icons for contrast */
+.btn-warning .bi,
+.btn-warning i {
+    color: #000 !important;
+}
+
+/* Outline buttons should use theme colors for icons */
+.btn-outline-primary .bi,
+.btn-outline-primary i,
+.btn-outline-secondary .bi,
+.btn-outline-secondary i,
+.btn-outline-success .bi,
+.btn-outline-success i,
+.btn-outline-danger .bi,
+.btn-outline-danger i,
+.btn-outline-info .bi,
+.btn-outline-info i {
+    color: currentColor !important;
+}
+
 /* Theme selector specific styles */
 .theme-selector {
     position: relative;
