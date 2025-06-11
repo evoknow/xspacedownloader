@@ -204,6 +204,102 @@ a:hover {
     box-shadow: 0 0.5rem 1rem var(--shadow-color) !important;
 }
 
+/* Tag styling for better readability */
+.badge {
+    color: #fff !important;
+}
+
+.badge.bg-primary {
+    background-color: var(--bs-primary) !important;
+    color: #fff !important;
+}
+
+.badge.bg-secondary {
+    background-color: var(--bs-secondary) !important;
+    color: #fff !important;
+}
+
+.badge.bg-success {
+    background-color: var(--bs-success) !important;
+    color: #fff !important;
+}
+
+.badge.bg-info {
+    background-color: var(--bs-info) !important;
+    color: #fff !important;
+}
+
+.badge.bg-warning {
+    background-color: var(--bs-warning) !important;
+    color: #000 !important; /* Black text for yellow background */
+}
+
+/* Handle Bootstrap's text-dark class within badges */
+.badge.text-dark {
+    color: #000 !important;
+}
+
+/* Make sure warning badges always have good contrast */
+.bg-warning {
+    color: #000 !important;
+}
+
+.badge.bg-danger {
+    background-color: var(--bs-danger) !important;
+    color: #fff !important;
+}
+
+/* Tag buttons and general tag styling */
+.tag-button, .space-tag {
+    background-color: var(--bs-primary) !important;
+    color: #fff !important;
+    border: none !important;
+}
+
+.tag-button:hover, .space-tag:hover {
+    background-color: var(--btn-primary-hover) !important;
+    color: #fff !important;
+}
+
+/* Ensure text is white on colored backgrounds */
+.bg-primary, .bg-secondary, .bg-success, .bg-info, .bg-danger {
+    color: #fff !important;
+}
+
+.bg-warning {
+    color: #000 !important;
+}
+
+/* For any custom tag classes */
+.tag, .badge-tag {
+    background-color: var(--bs-primary) !important;
+    color: #fff !important;
+    border-radius: 0.375rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+/* Card headers that use bg-light should be theme-aware */
+.card-header.bg-light {
+    background-color: var(--card-bg) !important;
+    border-bottom: 1px solid var(--card-border) !important;
+    color: var(--bs-body-color) !important;
+}
+
+/* Content areas that use bg-light for emphasis */
+.bg-light {
+    background-color: rgba(var(--bs-secondary-rgb), 0.1) !important;
+    color: var(--bs-body-color) !important;
+}
+
+/* System info cards in admin should be theme-aware */
+.card.bg-light {
+    background-color: var(--card-bg) !important;
+    border: 1px solid var(--card-border) !important;
+    color: var(--bs-body-color) !important;
+}
+
 /* Theme selector specific styles */
 .theme-selector {
     position: relative;

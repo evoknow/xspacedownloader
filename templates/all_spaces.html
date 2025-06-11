@@ -158,12 +158,12 @@
                                         <small class="space-tags-string" style="display: none;">{{ space.tags_string }}</small>
                                         <div class="mt-1">
                                             {% for tag in space.tags[:3] %}
-                                            <a href="{{ url_for('spaces_by_tag', tag_slug=tag.name) }}" class="badge bg-secondary text-decoration-none me-1">
+                                            <a href="{{ url_for('spaces_by_tag', tag_slug=tag.name) }}" class="badge bg-primary text-decoration-none me-1">
                                                 {{ tag.name }}
                                             </a>
                                             {% endfor %}
                                             {% if space.tags|length > 3 %}
-                                            <span class="badge bg-light text-dark">+{{ space.tags|length - 3 }}</span>
+                                            <span class="badge bg-secondary">+{{ space.tags|length - 3 }}</span>
                                             {% endif %}
                                         </div>
                                         {% endif %}
