@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-bs-theme="light">
+<html lang="en" data-bs-theme="light" data-theme="default">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +7,7 @@
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='themes.css') }}">
     <style>
         :root {
             --border-color-light: #e5e5e5;
@@ -256,9 +257,48 @@
             </a>
             
             <div class="d-flex align-items-center order-lg-2">
-                <div class="theme-toggle-container me-2">
-                    <i class="bi bi-sun-fill theme-toggle" id="light-mode-toggle"></i>
-                    <i class="bi bi-moon-fill theme-toggle" id="dark-mode-toggle"></i>
+                <div class="theme-selector me-2">
+                    <button class="btn btn-link p-0 border-0" id="theme-selector-btn" aria-label="Theme selector">
+                        <i class="bi bi-palette2 fs-5"></i>
+                    </button>
+                    <div class="theme-selector-dropdown" id="theme-dropdown">
+                        <div class="theme-option" data-theme="default">
+                            <div class="theme-color-preview"></div>
+                            <div>
+                                <div class="fw-medium">Default</div>
+                                <small class="text-muted">Blue & Gray</small>
+                            </div>
+                        </div>
+                        <div class="theme-option" data-theme="ocean">
+                            <div class="theme-color-preview"></div>
+                            <div>
+                                <div class="fw-medium">Ocean</div>
+                                <small class="text-muted">Teal & Cyan</small>
+                            </div>
+                        </div>
+                        <div class="theme-option" data-theme="sunset">
+                            <div class="theme-color-preview"></div>
+                            <div>
+                                <div class="fw-medium">Sunset</div>
+                                <small class="text-muted">Orange & Pink</small>
+                            </div>
+                        </div>
+                        <div class="theme-option" data-theme="forest">
+                            <div class="theme-color-preview"></div>
+                            <div>
+                                <div class="fw-medium">Forest</div>
+                                <small class="text-muted">Green & Nature</small>
+                            </div>
+                        </div>
+                        <div class="dropdown-divider"></div>
+                        <div class="d-flex justify-content-between align-items-center px-3 py-2">
+                            <span class="small">Dark mode:</span>
+                            <div class="theme-toggle-container">
+                                <i class="bi bi-sun-fill theme-toggle" id="light-mode-toggle"></i>
+                                <i class="bi bi-moon-fill theme-toggle" id="dark-mode-toggle"></i>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
@@ -338,20 +378,42 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
     
-    <!-- Theme toggle script -->
+    <!-- Enhanced Theme System Script -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Get the theme toggle buttons
+            // Get theme system elements
+            const themeSelectorBtn = document.getElementById('theme-selector-btn');
+            const themeDropdown = document.getElementById('theme-dropdown');
             const lightModeToggle = document.getElementById('light-mode-toggle');
             const darkModeToggle = document.getElementById('dark-mode-toggle');
+            const themeOptions = document.querySelectorAll('.theme-option');
             
-            // Function to set theme
-            function setTheme(theme) {
-                document.documentElement.setAttribute('data-bs-theme', theme);
-                localStorage.setItem('theme', theme);
+            let currentColorTheme = 'default';
+            let currentMode = 'light';
+            
+            // Function to set color theme
+            function setColorTheme(colorTheme) {
+                currentColorTheme = colorTheme;
+                document.documentElement.setAttribute('data-theme', colorTheme);
+                localStorage.setItem('colorTheme', colorTheme);
+                
+                // Update active state in dropdown
+                themeOptions.forEach(option => {
+                    option.classList.remove('active');
+                    if (option.dataset.theme === colorTheme) {
+                        option.classList.add('active');
+                    }
+                });
+            }
+            
+            // Function to set light/dark mode
+            function setMode(mode) {
+                currentMode = mode;
+                document.documentElement.setAttribute('data-bs-theme', mode);
+                localStorage.setItem('mode', mode);
                 
                 // Show/hide appropriate toggle buttons
-                if (theme === 'dark') {
+                if (mode === 'dark') {
                     lightModeToggle.style.display = 'block';
                     darkModeToggle.style.display = 'none';
                 } else {
@@ -360,26 +422,68 @@
                 }
             }
             
-            // Check if user has a saved preference
-            const savedTheme = localStorage.getItem('theme');
-            if (savedTheme) {
-                setTheme(savedTheme);
-            } else {
-                // Try to detect system preference
-                const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-                setTheme(prefersDark ? 'dark' : 'light');
+            // Initialize theme system
+            function initializeTheme() {
+                // Load saved color theme
+                const savedColorTheme = localStorage.getItem('colorTheme');
+                if (savedColorTheme) {
+                    setColorTheme(savedColorTheme);
+                } else {
+                    setColorTheme('default');
+                }
+                
+                // Load saved mode or detect system preference
+                const savedMode = localStorage.getItem('mode');
+                if (savedMode) {
+                    setMode(savedMode);
+                } else {
+                    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    setMode(prefersDark ? 'dark' : 'light');
+                }
             }
             
-            // Add event listeners for toggle buttons
-            lightModeToggle.addEventListener('click', () => setTheme('light'));
-            darkModeToggle.addEventListener('click', () => setTheme('dark'));
+            // Theme selector dropdown toggle
+            themeSelectorBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                themeDropdown.classList.toggle('show');
+            });
+            
+            // Close dropdown when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!themeSelectorBtn.contains(e.target) && !themeDropdown.contains(e.target)) {
+                    themeDropdown.classList.remove('show');
+                }
+            });
+            
+            // Theme option selection
+            themeOptions.forEach(option => {
+                option.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const selectedTheme = this.dataset.theme;
+                    setColorTheme(selectedTheme);
+                });
+            });
+            
+            // Light/dark mode toggles
+            lightModeToggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                setMode('light');
+            });
+            
+            darkModeToggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                setMode('dark');
+            });
             
             // Listen for changes in system preference
             window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
-                if (!localStorage.getItem('theme')) {
-                    setTheme(e.matches ? 'dark' : 'light');
+                if (!localStorage.getItem('mode')) {
+                    setMode(e.matches ? 'dark' : 'light');
                 }
             });
+            
+            // Initialize the theme system
+            initializeTheme();
         });
     </script>
     
