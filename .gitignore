@@ -17,6 +17,9 @@ db_config.json
 # Downloaded files
 downloads/
 
+# Temporary files
+temp/
+
 # Editor/IDE files
 .idea/
 .vscode/
