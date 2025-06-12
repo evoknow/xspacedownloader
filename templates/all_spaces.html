@@ -138,7 +138,6 @@
                                 <th class="d-none d-xl-table-cell text-center sort" data-sort="space-rating" style="cursor: pointer;">
                                     Rating <i class="bi bi-arrow-down-up ms-1"></i>
                                 </th>
-                                <th class="d-none d-xl-table-cell">Features</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -220,28 +219,6 @@
                                             <span class="text-muted">—</span>
                                         {% endif %}
                                     </span>
-                                </td>
-                                <td class="d-none d-xl-table-cell">
-                                    <div class="d-flex gap-1">
-                                        {% if space.has_transcript %}
-                                        <span class="badge bg-info" data-bs-toggle="tooltip" data-bs-placement="top" title="Transcript available">
-                                            <i class="bi bi-mic-fill"></i>
-                                        </span>
-                                        {% endif %}
-                                        {% if space.has_translation %}
-                                        <span class="badge bg-primary" data-bs-toggle="tooltip" data-bs-placement="top" title="Translation(s) available">
-                                            <i class="bi bi-translate"></i>
-                                        </span>
-                                        {% endif %}
-                                        {% if space.has_summary %}
-                                        <span class="badge bg-warning text-dark" data-bs-toggle="tooltip" data-bs-placement="top" title="Summary available">
-                                            <i class="bi bi-lightbulb-fill"></i>
-                                        </span>
-                                        {% endif %}
-                                        {% if not space.has_transcript and not space.has_translation and not space.has_summary %}
-                                        <span class="text-muted small">—</span>
-                                        {% endif %}
-                                    </div>
                                 </td>
                                 <td>
                                     <div class="btn-group btn-group-sm" role="group">
