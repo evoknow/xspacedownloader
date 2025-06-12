@@ -115,7 +115,7 @@
                         Download completed successfully. The file has been saved to the server.
                         <div class="mt-3">
                             <a href="{{ url_for('space_page', space_id=job.space_id) }}" class="btn btn-primary btn-sm">
-                                Listen to Space
+                                <i class="bi bi-play-circle"></i> Play
                             </a>
                         </div>
                     {% elif job.status == 'pending' %}
@@ -248,7 +248,7 @@
                     statusMessage.innerHTML += `
                         <div class="mt-3">
                             <a href="/spaces/{{ job.space_id }}" class="btn btn-primary btn-sm">
-                                Listen to Space
+                                <i class="bi bi-play-circle"></i> Play
                             </a>
                         </div>
                     `;

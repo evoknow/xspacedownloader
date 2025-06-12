@@ -246,7 +246,7 @@
                                 <td>
                                     <div class="btn-group btn-group-sm" role="group">
                                         {% if space.file_exists %}
-                                        <a href="{{ url_for('space_page', space_id=space.space_id) }}" class="btn btn-success track-play" data-space-id="{{ space.space_id }}" data-bs-toggle="tooltip" data-bs-placement="top" title="Listen to audio">
+                                        <a href="{{ url_for('space_page', space_id=space.space_id) }}" class="btn btn-success track-play" data-space-id="{{ space.space_id }}" data-bs-toggle="tooltip" data-bs-placement="top" title="Play audio">
                                             <i class="bi bi-play-circle"></i>
                                         </a>
                                         <a href="/download/{{ space.space_id }}?attachment=1" class="btn btn-outline-primary track-download" data-space-id="{{ space.space_id }}" data-bs-toggle="tooltip" data-bs-placement="top" title="Download MP3">

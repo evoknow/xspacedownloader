@@ -340,6 +340,82 @@ a:hover {
     color: currentColor !important;
 }
 
+/* Fix outline button text visibility across all themes */
+.btn-outline-secondary {
+    color: var(--bs-body-color) !important;
+    border-color: var(--bs-secondary) !important;
+}
+
+.btn-outline-secondary:hover {
+    background-color: var(--bs-secondary) !important;
+    border-color: var(--bs-secondary) !important;
+    color: #fff !important;
+}
+
+.btn-outline-primary {
+    color: var(--bs-primary) !important;
+    border-color: var(--bs-primary) !important;
+}
+
+.btn-outline-primary:hover {
+    background-color: var(--bs-primary) !important;
+    border-color: var(--bs-primary) !important;
+    color: #fff !important;
+}
+
+/* Popular tags section styling */
+.btn-outline-secondary .fw-medium,
+.btn-outline-secondary span {
+    color: var(--bs-body-color) !important;
+}
+
+.btn-outline-secondary:hover .fw-medium,
+.btn-outline-secondary:hover span {
+    color: #fff !important;
+}
+
+/* Ensure high contrast for outline buttons in all themes */
+[data-theme="sunset"] .btn-outline-secondary {
+    color: #7c2d12 !important;
+    border-color: #a855f7 !important;
+}
+
+[data-theme="sunset"] .btn-outline-secondary .fw-medium,
+[data-theme="sunset"] .btn-outline-secondary span:not(.badge) {
+    color: #7c2d12 !important;
+}
+
+[data-theme="forest"] .btn-outline-secondary {
+    color: #064e3b !important;
+    border-color: #6b7280 !important;
+}
+
+[data-theme="forest"] .btn-outline-secondary .fw-medium,
+[data-theme="forest"] .btn-outline-secondary span:not(.badge) {
+    color: #064e3b !important;
+}
+
+/* Dark mode variants for sunset and forest */
+[data-theme="sunset"][data-bs-theme="dark"] .btn-outline-secondary {
+    color: #fed7aa !important;
+    border-color: #a855f7 !important;
+}
+
+[data-theme="sunset"][data-bs-theme="dark"] .btn-outline-secondary .fw-medium,
+[data-theme="sunset"][data-bs-theme="dark"] .btn-outline-secondary span:not(.badge) {
+    color: #fed7aa !important;
+}
+
+[data-theme="forest"][data-bs-theme="dark"] .btn-outline-secondary {
+    color: #d1fae5 !important;
+    border-color: #6b7280 !important;
+}
+
+[data-theme="forest"][data-bs-theme="dark"] .btn-outline-secondary .fw-medium,
+[data-theme="forest"][data-bs-theme="dark"] .btn-outline-secondary span:not(.badge) {
+    color: #d1fae5 !important;
+}
+
 /* Theme selector specific styles */
 .theme-selector {
     position: relative;
