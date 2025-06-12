@@ -102,7 +102,7 @@
 {% block content %}
 <div class="row">
     <!-- Left Column - All Downloaded Spaces -->
-    <div class="col-12 col-lg-8">
+    <div class="col-12 col-lg-9">
         <div class="card shadow-sm" id="all-spaces-container">
             <div class="card-header bg-light">
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -284,56 +284,45 @@
     </div>
     
     <!-- Right Column - Popular Tags -->
-    <div class="col-12 col-lg-4">
+    <div class="col-12 col-lg-3">
         {% if popular_tags %}
         <div class="card shadow-sm">
             <div class="card-header bg-light py-2">
                 <h6 class="mb-0"><i class="bi bi-tags-fill me-1"></i> Popular Tags</h6>
             </div>
             <div class="card-body p-2">
-                <!-- Desktop: compact grid layout -->
-                <div class="d-none d-lg-block">
-                    <div class="row g-1">
-                        {% for tag in popular_tags[:12] %}
-                        <div class="col-6">
-                            <a href="{{ url_for('spaces_by_tag', tag_slug=tag.name) }}" 
-                               class="btn btn-xs btn-outline-secondary text-decoration-none w-100 d-flex justify-content-between align-items-center py-1 px-2"
-                               data-bs-toggle="tooltip" 
-                               data-bs-placement="top" 
-                               title="View all spaces tagged with '{{ tag.name }}'">
-                                <span class="small text-truncate me-1">{{ tag.name }}</span>
-                                <span class="badge bg-primary badge-xs">{{ tag.usage_count }}</span>
-                            </a>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    {% if popular_tags|length > 12 %}
-                    <div class="text-center mt-2">
-                        <small class="text-muted">+{{ popular_tags|length - 12 }} more tags</small>
-                    </div>
-                    {% endif %}
+                <!-- Desktop: vertical list -->
+                <div class="popular-tags-list d-none d-lg-flex flex-column gap-1">
+                    {% for tag in popular_tags %}
+                    <a href="{{ url_for('spaces_by_tag', tag_slug=tag.name) }}" 
+                       class="btn btn-xs btn-outline-secondary text-decoration-none d-flex justify-content-between align-items-center py-1 px-2"
+                       data-bs-toggle="tooltip" 
+                       data-bs-placement="left" 
+                       title="View all spaces tagged with '{{ tag.name }}'">
+                        <span class="small text-truncate">{{ tag.name }}</span>
+                        <span class="badge bg-primary badge-xs">{{ tag.usage_count }}</span>
+                    </a>
+                    {% endfor %}
                 </div>
                 
-                <!-- Mobile: compact wrapped layout -->
-                <div class="d-lg-none">
-                    <div class="d-flex flex-wrap gap-1">
-                        {% for tag in popular_tags[:8] %}
-                        <a href="{{ url_for('spaces_by_tag', tag_slug=tag.name) }}" 
-                           class="btn btn-xs btn-outline-secondary text-decoration-none py-1 px-2"
-                           data-bs-toggle="tooltip" 
-                           data-bs-placement="top" 
-                           title="{{ tag.usage_count }} spaces">
-                            <span class="small">{{ tag.name }}</span>
-                            <span class="badge bg-primary badge-xs ms-1">{{ tag.usage_count }}</span>
-                        </a>
-                        {% endfor %}
-                    </div>
-                    {% if popular_tags|length > 8 %}
-                    <div class="text-center mt-2">
-                        <small class="text-muted">+{{ popular_tags|length - 8 }} more</small>
-                    </div>
-                    {% endif %}
+                <!-- Mobile: wrapped layout -->
+                <div class="d-flex d-lg-none flex-wrap gap-1">
+                    {% for tag in popular_tags %}
+                    <a href="{{ url_for('spaces_by_tag', tag_slug=tag.name) }}" 
+                       class="btn btn-xs btn-outline-secondary text-decoration-none py-1 px-2"
+                       data-bs-toggle="tooltip" 
+                       data-bs-placement="top" 
+                       title="View all spaces tagged with '{{ tag.name }}'">
+                        <span class="small">{{ tag.name }}</span>
+                        <span class="badge bg-primary badge-xs ms-1">{{ tag.usage_count }}</span>
+                    </a>
+                    {% endfor %}
                 </div>
+                {% if popular_tags|length == 20 %}
+                <div class="text-center mt-2 pt-1 border-top">
+                    <small class="text-muted" style="font-size: 0.7rem;">Showing top 20 tags</small>
+                </div>
+                {% endif %}
             </div>
         </div>
         {% endif %}
