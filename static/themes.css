@@ -447,6 +447,60 @@ a:hover {
     white-space: nowrap;
 }
 
+/* Fix admin dashboard stats cards text visibility */
+.card.text-white {
+    color: #fff !important;
+}
+
+.card.bg-primary.text-white {
+    background-color: var(--bs-primary) !important;
+    color: #fff !important;
+}
+
+.card.bg-success.text-white {
+    background-color: var(--bs-success) !important;
+    color: #fff !important;
+}
+
+.card.bg-info.text-white {
+    background-color: var(--bs-info) !important;
+    color: #fff !important;
+}
+
+.card.bg-warning.text-white {
+    background-color: var(--bs-warning) !important;
+    color: #000 !important; /* Black text for yellow background */
+}
+
+.card.bg-danger.text-white {
+    background-color: var(--bs-danger) !important;
+    color: #fff !important;
+}
+
+.card.bg-secondary.text-white {
+    background-color: var(--bs-secondary) !important;
+    color: #fff !important;
+}
+
+/* Ensure card titles and numbers are visible */
+.card.text-white h1,
+.card.text-white h2,
+.card.text-white h3,
+.card.text-white h4,
+.card.text-white h5,
+.card.text-white h6 {
+    color: inherit !important;
+}
+
+.card.bg-warning.text-white h1,
+.card.bg-warning.text-white h2,
+.card.bg-warning.text-white h3,
+.card.bg-warning.text-white h4,
+.card.bg-warning.text-white h5,
+.card.bg-warning.text-white h6 {
+    color: #000 !important;
+}
+
 /* Theme selector specific styles */
 .theme-selector {
     position: relative;
