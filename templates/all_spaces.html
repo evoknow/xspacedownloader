@@ -126,17 +126,17 @@
                                     Space <i class="bi bi-arrow-down-up ms-1"></i>
                                 </th>
                                 <th class="d-none d-xl-table-cell">Host</th>
-                                <th class="d-none d-xl-table-cell sort" data-sort="space-date" style="cursor: pointer;">
-                                    Downloaded <i class="bi bi-arrow-down-up ms-1"></i>
+                                <th class="d-none d-xl-table-cell sort" data-sort="space-date" style="cursor: pointer;" title="Click to sort by download date">
+                                    Downloaded
                                 </th>
-                                <th class="d-none d-lg-table-cell text-center sort" data-sort="space-plays" style="cursor: pointer;">
-                                    Plays <i class="bi bi-arrow-down-up ms-1"></i>
+                                <th class="d-none d-lg-table-cell text-center sort" data-sort="space-plays" style="cursor: pointer;" title="Click to sort by play count">
+                                    Plays
                                 </th>
-                                <th class="d-none d-lg-table-cell text-center sort" data-sort="space-downloads" style="cursor: pointer;">
-                                    Downloads <i class="bi bi-arrow-down-up ms-1"></i>
+                                <th class="d-none d-lg-table-cell text-center sort" data-sort="space-downloads" style="cursor: pointer;" title="Click to sort by download count">
+                                    Downloads
                                 </th>
-                                <th class="d-none d-xl-table-cell text-center sort" data-sort="space-rating" style="cursor: pointer;">
-                                    Rating <i class="bi bi-arrow-down-up ms-1"></i>
+                                <th class="d-none d-xl-table-cell text-center sort" data-sort="space-rating" style="cursor: pointer;" title="Click to sort by rating">
+                                    Rating
                                 </th>
                                 <th>Actions</th>
                             </tr>
@@ -493,6 +493,25 @@
                 }).catch(error => {
                     console.error('Error tracking download:', error);
                 });
+            });
+        });
+        
+        // Enhanced sorting with visual feedback
+        const sortHeaders = document.querySelectorAll('th.sort');
+        sortHeaders.forEach(header => {
+            header.addEventListener('click', function() {
+                // Remove sort classes from all headers
+                sortHeaders.forEach(h => h.classList.remove('asc', 'desc'));
+                
+                // Determine sort direction
+                const currentSort = this.getAttribute('data-current-sort');
+                if (currentSort === 'asc') {
+                    this.classList.add('desc');
+                    this.setAttribute('data-current-sort', 'desc');
+                } else {
+                    this.classList.add('asc');
+                    this.setAttribute('data-current-sort', 'asc');
+                }
             });
         });
     });

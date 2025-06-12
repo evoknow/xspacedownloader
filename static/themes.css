@@ -501,6 +501,54 @@ a:hover {
     color: #000 !important;
 }
 
+/* Sortable table headers styling */
+th.sort {
+    position: relative;
+    transition: background-color 0.2s ease;
+    user-select: none;
+}
+
+th.sort:hover {
+    background-color: rgba(var(--bs-primary-rgb), 0.1) !important;
+}
+
+/* Dynamic sort indicators */
+th.sort::after {
+    content: '';
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+/* Show sort indicator on hover */
+th.sort:hover::after {
+    opacity: 0.5;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 4px solid var(--bs-body-color);
+}
+
+/* Sort indicators for active sorting */
+th.sort.asc::after {
+    opacity: 1;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 4px solid var(--bs-primary);
+}
+
+th.sort.desc::after {
+    opacity: 1;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 4px solid var(--bs-primary);
+    border-bottom: none;
+}
+
 /* Theme selector specific styles */
 .theme-selector {
     position: relative;
