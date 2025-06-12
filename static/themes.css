@@ -416,6 +416,37 @@ a:hover {
     color: #d1fae5 !important;
 }
 
+/* Compact button and badge styling for popular tags */
+.btn-xs {
+    padding: 0.125rem 0.25rem;
+    font-size: 0.75rem;
+    border-radius: 0.25rem;
+    line-height: 1.2;
+}
+
+.badge-xs {
+    font-size: 0.65rem;
+    padding: 0.125rem 0.25rem;
+}
+
+/* Ensure compact tags are readable */
+.btn-xs .small {
+    font-size: 0.75rem;
+    line-height: 1.2;
+}
+
+/* Popular tags specific styling */
+.popular-tags-list .btn-xs {
+    min-height: 1.75rem;
+}
+
+/* Text truncation for tag names */
+.text-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* Theme selector specific styles */
 .theme-selector {
     position: relative;

@@ -1864,10 +1864,17 @@ class Space:
             # Build and execute main query
             # Join with spaces table to get playback_cnt and download_cnt
             if status == 'completed':
+                # Use a subquery to get the most recent download job for each unique space
                 query = """
                     SELECT sds.*, s.playback_cnt, s.download_cnt, s.title,
                            (COALESCE(s.playback_cnt, 0) * 1.5 + COALESCE(s.download_cnt, 0)) as popularity_score
                     FROM space_download_scheduler sds
+                    INNER JOIN (
+                        SELECT space_id, MAX(end_time) as max_end_time
+                        FROM space_download_scheduler
+                        WHERE status = 'completed'
+                        GROUP BY space_id
+                    ) latest ON sds.space_id = latest.space_id AND sds.end_time = latest.max_end_time
                     LEFT JOIN spaces s ON sds.space_id = s.space_id
                     WHERE 1=1
                 """
@@ -1925,10 +1932,17 @@ class Space:
                     
                     # Rebuild query without priority
                     if status == 'completed':
+                        # Use a subquery to get the most recent download job for each unique space
                         query = """
                             SELECT sds.*, s.playback_cnt, s.download_cnt, s.title,
                                    (COALESCE(s.playback_cnt, 0) * 1.5 + COALESCE(s.download_cnt, 0)) as popularity_score
                             FROM space_download_scheduler sds
+                            INNER JOIN (
+                                SELECT space_id, MAX(end_time) as max_end_time
+                                FROM space_download_scheduler
+                                WHERE status = 'completed'
+                                GROUP BY space_id
+                            ) latest ON sds.space_id = latest.space_id AND sds.end_time = latest.max_end_time
                             LEFT JOIN spaces s ON sds.space_id = s.space_id
                             WHERE 1=1
                         """
