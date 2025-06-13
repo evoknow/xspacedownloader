@@ -761,6 +761,8 @@ class VideoGenerator:
                     start_time = float(silence_end_match.group(1))
                     # Don't add buffer - we want to cut right where audio starts
                     logger.info(f"Detected audio starts at {start_time} seconds")
+                    # Store the silence offset for transcription timecode correction
+                    self._store_silence_offset(job_id, start_time)
                 else:
                     logger.info("No silence_end found, checking for continuous silence")
                     # If no silence_end found, audio might start immediately or have very short silence
@@ -832,6 +834,35 @@ class VideoGenerator:
         except Exception as e:
             logger.warning(f"Error removing leading silence: {e}, using original audio")
             return audio_path
+    
+    def _store_silence_offset(self, job_id: str, offset_seconds: float):
+        """
+        Store the silence offset in the job file for timecode correction.
+        
+        Args:
+            job_id (str): Video generation job ID
+            offset_seconds (float): Seconds of silence removed from the beginning
+        """
+        try:
+            job_file = os.path.join("transcript_jobs", f"{job_id}_video.json")
+            
+            # Read existing job data
+            job_data = {}
+            if os.path.exists(job_file):
+                with open(job_file, 'r') as f:
+                    job_data = json.load(f)
+            
+            # Add silence offset to job data
+            job_data['silence_offset'] = offset_seconds
+            
+            # Write back to file
+            with open(job_file, 'w') as f:
+                json.dump(job_data, f, indent=2)
+            
+            logger.info(f"Stored silence offset of {offset_seconds}s for job {job_id}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to store silence offset for job {job_id}: {e}")
     
     def _escape_ffmpeg_text(self, text: str) -> str:
         """

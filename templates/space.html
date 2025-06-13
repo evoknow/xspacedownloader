@@ -1115,8 +1115,9 @@
                     event.target.classList.add('active-timecode');
                 }
                 
-                // Seek to the time
-                audioPlayer.currentTime = seconds;
+                // Seek to the time (adjusted for silence offset)
+                const adjustedTime = Math.max(0, seconds - (window.silenceOffset || 0));
+                audioPlayer.currentTime = adjustedTime;
                 
                 // Auto-play if paused
                 if (audioPlayer.paused) {
@@ -1171,6 +1172,20 @@
         const spaceId = '{{ space.space_id }}';
         const spaceStatus = '{{ space.status }}';
         const minPlayDuration = {{ tracking_config.min_play_duration|default(30) }};
+        
+        // Initialize silence offset for timecode correction
+        window.silenceOffset = 0;
+        fetch(`/api/spaces/${spaceId}/silence-offset`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.silence_offset) {
+                    window.silenceOffset = data.silence_offset;
+                    console.log(`Loaded silence offset: ${window.silenceOffset} seconds`);
+                }
+            })
+            .catch(error => {
+                console.warn('Could not load silence offset:', error);
+            });
         
         // Initialize Bootstrap tooltips
         const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');

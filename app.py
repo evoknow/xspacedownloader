@@ -5051,6 +5051,39 @@ def download_video(space_id, job_id):
         logger.error(f"Error downloading video for job {job_id}: {e}", exc_info=True)
         return jsonify({'error': 'Failed to download video'}), 500
 
+@app.route('/api/spaces/<space_id>/silence-offset', methods=['GET'])
+def get_space_silence_offset(space_id):
+    """Get silence offset for a space to correct transcription timecodes."""
+    try:
+        # Look for video generation job files for this space
+        import glob
+        job_files = glob.glob(f"transcript_jobs/*_video.json")
+        
+        silence_offset = 0  # Default to no offset
+        
+        for job_file in job_files:
+            try:
+                with open(job_file, 'r') as f:
+                    job_data = json.load(f)
+                
+                # Check if this job is for the requested space
+                if job_data.get('space_id') == space_id and 'silence_offset' in job_data:
+                    silence_offset = job_data['silence_offset']
+                    break
+                    
+            except Exception as e:
+                logger.warning(f"Error reading job file {job_file}: {e}")
+                continue
+        
+        return jsonify({
+            'space_id': space_id,
+            'silence_offset': silence_offset
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting silence offset for space {space_id}: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to get silence offset'}), 500
+
 @app.route('/admin/api/spaces/<space_id>/redo-tags', methods=['POST'])
 def admin_redo_tags(space_id):
     """Regenerate tags for a space using its transcript."""
