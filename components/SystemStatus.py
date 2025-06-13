@@ -249,6 +249,79 @@ class SystemStatus:
         except Exception as e:
             return {'error': str(e)}
     
+    def check_mysql_connection(self) -> Dict[str, Any]:
+        """Check MySQL database connectivity using db_config.json."""
+        try:
+            db_config_path = self.current_dir / 'db_config.json'
+            if not db_config_path.exists():
+                return {
+                    'active': False,
+                    'status': 'error',
+                    'message': 'db_config.json not found',
+                    'enabled': False
+                }
+            
+            with open(db_config_path, 'r') as f:
+                config = json.load(f)
+            
+            # Try to import mysql.connector
+            try:
+                import mysql.connector
+            except ImportError:
+                return {
+                    'active': False,
+                    'status': 'error',
+                    'message': 'mysql-connector-python not installed',
+                    'enabled': False
+                }
+            
+            # Test the connection
+            try:
+                conn = mysql.connector.connect(
+                    host=config.get('host', 'localhost'),
+                    port=config.get('port', 3306),
+                    user=config['user'],
+                    password=config['password'],
+                    database=config['database'],
+                    connect_timeout=5
+                )
+                
+                # Execute a simple query to verify connection
+                cursor = conn.cursor()
+                cursor.execute('SELECT 1')
+                cursor.fetchone()
+                cursor.close()
+                conn.close()
+                
+                return {
+                    'active': True,
+                    'status': 'active',
+                    'enabled': True,
+                    'host': config.get('host', 'localhost'),
+                    'port': config.get('port', 3306),
+                    'database': config.get('database', 'unknown'),
+                    'message': f"Connected to {config.get('host', 'localhost')}:{config.get('port', 3306)}"
+                }
+                
+            except mysql.connector.Error as e:
+                return {
+                    'active': False,
+                    'status': 'error',
+                    'enabled': True,
+                    'host': config.get('host', 'localhost'),
+                    'port': config.get('port', 3306),
+                    'database': config.get('database', 'unknown'),
+                    'message': f"Connection failed: {str(e)}"
+                }
+                
+        except Exception as e:
+            return {
+                'active': False,
+                'status': 'error',
+                'enabled': False,
+                'message': f"Error checking MySQL: {str(e)}"
+            }
+    
     def get_comprehensive_status(self) -> Dict[str, Any]:
         """Get comprehensive system status."""
         return {
@@ -260,9 +333,9 @@ class SystemStatus:
                 'xspacedownloader-gunicorn': self.get_systemd_service_status('xspacedownloader-gunicorn'),
                 'xspacedownloader-bg': self.get_systemd_service_status('xspacedownloader-bg'),
                 'xspacedownloader-transcribe': self.get_systemd_service_status('xspacedownloader-transcribe'),
-                'nginx': self.get_systemd_service_status('nginx'),
-                'mysql': self.get_systemd_service_status('mysql')
+                'nginx': self.get_systemd_service_status('nginx')
             },
+            'mysql_status': self.check_mysql_connection(),
             'port_info': self.get_port_info(),
             'disk_usage': self.get_disk_usage()
         }

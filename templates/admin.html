@@ -4540,6 +4540,19 @@ function displaySystemStatus(data) {
                                 ${service.memory ? ` | Memory: ${service.memory}` : ''}
                             </small>
                         `).join('')}
+                        
+                        <!-- MySQL Database Status -->
+                        ${data.mysql_status ? `
+                            <hr class="my-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span><strong>MySQL Database:</strong></span>
+                                ${getStatusBadge(data.mysql_status.active, data.mysql_status.status)}
+                            </div>
+                            <small class="text-muted d-block">
+                                ${data.mysql_status.message || 'Unknown'}
+                                ${data.mysql_status.database ? ` | DB: ${data.mysql_status.database}` : ''}
+                            </small>
+                        ` : ''}
                     </div>
                 </div>
             </div>
