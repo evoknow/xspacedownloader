@@ -198,34 +198,84 @@ class SystemStatus:
         
         return port_info
     
+    def get_directory_size(self, path: Path) -> int:
+        """Get total size of a directory in bytes."""
+        total_size = 0
+        try:
+            if path.exists():
+                if path.is_file():
+                    return path.stat().st_size
+                for item in path.rglob('*'):
+                    if item.is_file():
+                        try:
+                            total_size += item.stat().st_size
+                        except (OSError, IOError):
+                            pass
+        except Exception:
+            pass
+        return total_size
+    
     def get_disk_usage(self) -> Dict[str, Any]:
-        """Get disk usage for key directories."""
-        disk_info = {}
+        """Get disk usage for key directories and overall disk info."""
+        disk_info = {
+            'directories': {},
+            'disk_total': {},
+            'app_total_gb': 0
+        }
         
         try:
-            # Get usage for main directories
+            # Get overall disk usage (where the app is installed)
+            disk_usage = psutil.disk_usage(str(self.current_dir))
+            disk_info['disk_total'] = {
+                'total_gb': round(disk_usage.total / (1024**3), 2),
+                'used_gb': round(disk_usage.used / (1024**3), 2),
+                'free_gb': round(disk_usage.free / (1024**3), 2),
+                'percent_used': round((disk_usage.used / disk_usage.total) * 100, 1)
+            }
+            
+            # Get usage for app directories
             directories = {
-                'root': '/',
                 'downloads': self.current_dir / 'downloads',
                 'logs': self.current_dir / 'logs',
-                'transcripts': self.current_dir / 'transcript_jobs'
+                'transcripts': self.current_dir / 'transcript_jobs',
+                'temp': self.current_dir / 'temp'
             }
+            
+            total_app_size = 0
             
             for name, path in directories.items():
                 try:
                     if Path(path).exists():
-                        usage = psutil.disk_usage(str(path))
-                        disk_info[name] = {
-                            'total_gb': round(usage.total / (1024**3), 2),
-                            'used_gb': round(usage.used / (1024**3), 2),
-                            'free_gb': round(usage.free / (1024**3), 2),
-                            'percent_used': round((usage.used / usage.total) * 100, 1)
+                        dir_size = self.get_directory_size(Path(path))
+                        total_app_size += dir_size
+                        size_gb = round(dir_size / (1024**3), 2)
+                        
+                        disk_info['directories'][name] = {
+                            'size_gb': size_gb,
+                            'size_mb': round(dir_size / (1024**2), 2)
+                        }
+                    else:
+                        disk_info['directories'][name] = {
+                            'size_gb': 0,
+                            'size_mb': 0,
+                            'exists': False
                         }
                 except Exception as e:
-                    disk_info[name] = {'error': str(e)}
+                    disk_info['directories'][name] = {'error': str(e)}
+            
+            # Calculate total app size and percentages
+            disk_info['app_total_gb'] = round(total_app_size / (1024**3), 2)
+            
+            # Calculate percentage of app size each directory uses
+            for name, info in disk_info['directories'].items():
+                if 'size_gb' in info and total_app_size > 0:
+                    info['percent_of_app'] = round((info['size_gb'] / disk_info['app_total_gb']) * 100, 1)
+                else:
+                    info['percent_of_app'] = 0
                     
         except Exception as e:
             print(f"Error getting disk usage: {e}")
+            disk_info['error'] = str(e)
         
         return disk_info
     

@@ -4534,8 +4534,9 @@ function displaySystemStatus(data) {
                                 ${getStatusBadge(service.active, service.status)}
                             </div>
                             <small class="text-muted d-block mb-2">
-                                Status: ${service.status || 'Unknown'} 
-                                ${service.enabled ? '(Enabled)' : '(Disabled)'}
+                                ${service.enabled ? 
+                                    '<i class="bi bi-check-circle text-success" title="Service starts automatically on boot"></i> Auto-start enabled' : 
+                                    '<i class="bi bi-x-circle text-warning" title="Service must be started manually"></i> Auto-start disabled'}
                                 ${service.main_pid ? ` | PID: ${service.main_pid}` : ''}
                                 ${service.memory ? ` | Memory: ${service.memory}` : ''}
                             </small>
@@ -4560,29 +4561,52 @@ function displaySystemStatus(data) {
             <!-- Disk Usage -->
             <div class="col-md-6 mb-4">
                 <div class="card">
-                    <div class="card-header">
+                    <div class="card-header d-flex justify-content-between align-items-center">
                         <h6 class="mb-0"><i class="bi bi-hdd"></i> Disk Usage</h6>
+                        ${data.disk_usage?.disk_total?.free_gb ? `
+                            <span class="badge bg-info">${data.disk_usage.disk_total.free_gb} GB Free</span>
+                        ` : ''}
                     </div>
                     <div class="card-body">
-                        ${Object.entries(data.disk_usage || {}).map(([path, usage]) => `
+                        ${data.disk_usage?.disk_total ? `
                             <div class="mb-3">
                                 <div class="d-flex justify-content-between">
-                                    <span><strong>${path}:</strong></span>
-                                    <span>${usage.error ? 'Error' : `${usage.percent_used}%`}</span>
+                                    <span><strong>System Disk:</strong></span>
+                                    <span>${data.disk_usage.disk_total.percent_used}%</span>
                                 </div>
-                                ${usage.error ? `
-                                    <small class="text-danger">${usage.error}</small>
-                                ` : `
-                                    <div class="progress" style="height: 8px;">
-                                        <div class="progress-bar ${usage.percent_used > 90 ? 'bg-danger' : usage.percent_used > 70 ? 'bg-warning' : 'bg-success'}" 
-                                             style="width: ${usage.percent_used}%"></div>
-                                    </div>
-                                    <small class="text-muted">
-                                        ${usage.used_gb} GB / ${usage.total_gb} GB used, ${usage.free_gb} GB free
-                                    </small>
-                                `}
+                                <div class="progress" style="height: 10px;">
+                                    <div class="progress-bar ${data.disk_usage.disk_total.percent_used > 90 ? 'bg-danger' : data.disk_usage.disk_total.percent_used > 70 ? 'bg-warning' : 'bg-success'}" 
+                                         style="width: ${data.disk_usage.disk_total.percent_used}%"></div>
+                                </div>
+                                <small class="text-muted">
+                                    ${data.disk_usage.disk_total.used_gb} GB / ${data.disk_usage.disk_total.total_gb} GB used
+                                </small>
                             </div>
-                        `).join('')}
+                            <hr>
+                        ` : ''}
+                        
+                        ${data.disk_usage?.app_total_gb !== undefined ? `
+                            <div class="mb-2">
+                                <strong>Application Total: ${data.disk_usage.app_total_gb} GB</strong>
+                            </div>
+                        ` : ''}
+                        
+                        ${data.disk_usage?.directories ? Object.entries(data.disk_usage.directories).map(([name, dir]) => `
+                            <div class="mb-2">
+                                <div class="d-flex justify-content-between">
+                                    <span>${name}:</span>
+                                    <span>${dir.error ? 'Error' : 
+                                        dir.exists === false ? 'Not found' :
+                                        `${dir.size_gb} GB (${dir.percent_of_app}%)`}</span>
+                                </div>
+                                ${!dir.error && dir.exists !== false && dir.percent_of_app > 0 ? `
+                                    <div class="progress" style="height: 6px;">
+                                        <div class="progress-bar bg-primary" 
+                                             style="width: ${dir.percent_of_app}%"></div>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `).join('') : 'No directory information available'}
                     </div>
                 </div>
             </div>
