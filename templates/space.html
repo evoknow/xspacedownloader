@@ -3,6 +3,9 @@
 {% block title %}{{ space.title if space.title else space.space_id }} - XSpace Downloader{% endblock %}
 
 {% block head %}
+<!-- Plyr CSS -->
+<link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+
 <!-- SummerNote CSS -->
 <link href="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.css" rel="stylesheet">
 
@@ -303,6 +306,84 @@
         -ms-user-select: text;
         user-select: text;
     }
+    
+    /* Plyr custom styling */
+    .plyr {
+        border-radius: 8px;
+        font-family: inherit;
+    }
+    
+    .plyr--audio .plyr__control.plyr__tab-focus,
+    .plyr--audio .plyr__control:hover,
+    .plyr--audio .plyr__control[aria-expanded="true"] {
+        background: var(--bs-primary);
+        color: white;
+    }
+    
+    .plyr--audio .plyr__progress__played {
+        background: var(--bs-primary);
+    }
+    
+    .plyr--audio .plyr__volume__input {
+        color: var(--bs-primary);
+    }
+    
+    .plyr--audio .plyr__controls {
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 0 0 8px 8px;
+    }
+    
+    /* Dark mode Plyr styling */
+    html[data-bs-theme="dark"] .plyr {
+        --plyr-color-main: var(--bs-primary);
+        --plyr-video-background: #2b2b2b;
+        --plyr-menu-background: #333;
+        --plyr-menu-color: #eee;
+    }
+    
+    html[data-bs-theme="dark"] .plyr--audio .plyr__controls {
+        background: rgba(51, 51, 51, 0.95);
+        border-radius: 0 0 8px 8px;
+    }
+    
+    html[data-bs-theme="dark"] .plyr__control,
+    html[data-bs-theme="dark"] .plyr__control[data-plyr] {
+        color: #eee;
+    }
+    
+    html[data-bs-theme="dark"] .plyr--audio .plyr__progress__played,
+    html[data-bs-theme="dark"] .plyr--audio .plyr__volume__input {
+        color: var(--bs-primary);
+    }
+    
+    /* Responsive Plyr controls */
+    @media (max-width: 768px) {
+        .plyr__control--overlaid {
+            display: none;
+        }
+        
+        .plyr--audio .plyr__controls {
+            padding: 8px;
+        }
+        
+        .plyr__control {
+            padding: 6px 8px;
+        }
+        
+        .plyr__time {
+            font-size: 0.8rem;
+        }
+    }
+    
+    /* Integration with existing controls */
+    .audio-controls {
+        margin-top: 0.5rem;
+    }
+    
+    /* Hide legacy controls that Plyr now provides */
+    .plyr + .audio-controls .btn-group {
+        display: none;
+    }
 </style>
 {% endblock %}
 
@@ -313,7 +394,7 @@
             <div class="card-header">
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div class="d-flex gap-2 order-1 order-md-3">
-                        <button id="transcribe-btn" class="btn btn-info btn-sm" {% if space.transcripts %}data-has-transcript="true"{% endif %} {% if has_pending_transcript_job %}disabled{% endif %} data-bs-toggle="tooltip" data-bs-placement="top" title="{% if has_pending_transcript_job %}Transcription already in progress{% else %}Generate transcript from audio{% endif %}">
+                        <button id="transcribe-btn" class="btn btn-info btn-sm" data-service="transcription" data-original-class="btn-info" {% if space.transcripts %}data-has-transcript="true"{% endif %} {% if has_pending_transcript_job %}disabled{% endif %} data-bs-toggle="tooltip" data-bs-placement="top" title="{% if has_pending_transcript_job %}Transcription already in progress{% else %}Generate transcript from audio{% endif %}">
                             <i class="bi bi-mic"></i> <span class="d-none d-sm-inline">{% if has_pending_transcript_job %}Transcribing...{% else %}Transcribe{% endif %}</span>
                         </button>
                         <!-- Smart download button - will be populated by JavaScript -->
@@ -322,7 +403,7 @@
                                 <i class="bi bi-download"></i> <span class="d-none d-sm-inline">Download</span>
                             </a>
                         </div>
-                        <button id="generate-video-btn" class="btn btn-secondary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Generate MP4 video with waveform visualization">
+                        <button id="generate-video-btn" class="btn btn-secondary btn-sm" data-service="video" data-original-class="btn-secondary" data-bs-toggle="tooltip" data-bs-placement="top" title="Generate MP4 video with waveform visualization">
                             <i class="bi bi-camera-video"></i> <span class="d-none d-sm-inline">Generate Video</span>
                         </button>
                         {% if can_edit_space %}
@@ -457,7 +538,7 @@
                 <div class="audio-player mb-4">
                     <div class="card">
                         <div class="card-body">
-                            <audio id="audio-player" controls class="w-100">
+                            <audio id="audio-player" controls class="w-100" data-plyr-config='{"hideControls": false}'>
                                 <source src="/download/{{ space.space_id }}" type="{{ content_type|default('audio/mpeg') }}">
                                 Your browser does not support the audio element.
                             </audio>
@@ -603,7 +684,7 @@
                                             <option value="ja">Japanese</option>
                                             <option value="ru">Russian</option>
                                         </select>
-                                        <button id="translate-btn" class="btn btn-sm btn-outline-info" data-bs-toggle="tooltip" data-bs-placement="top" title="Translate transcript">
+                                        <button id="translate-btn" class="btn btn-sm btn-outline-info" data-service="translation" data-original-class="btn-outline-info" data-bs-toggle="tooltip" data-bs-placement="top" title="Translate transcript">
                                             <i class="bi bi-translate"></i>
                                         </button>
                                     </div>
@@ -880,8 +961,9 @@
                 </div>
                 
                 <div class="mb-3">
-                    <audio id="trim-audio-preview" controls class="w-100">
+                    <audio id="trim-audio-preview" controls class="w-100" data-plyr-config='{"hideControls": false}'>
                         <source src="/download/{{ space.space_id }}" type="audio/mpeg">
+                        Your browser does not support the audio element.
                     </audio>
                 </div>
                 
@@ -1099,8 +1181,7 @@
     
     // Global function to seek audio player to specific time
     function seekToTime(seconds) {
-        const audioPlayer = document.getElementById('audio-player');
-        if (audioPlayer) {
+        if (mainPlayer) {
             try {
                 // Remove previous highlights
                 document.querySelectorAll('.timecode-link').forEach(link => {
@@ -1117,18 +1198,21 @@
                 
                 // Seek to the time (adjusted for silence offset)
                 const adjustedTime = Math.max(0, seconds - (window.silenceOffset || 0));
-                audioPlayer.currentTime = adjustedTime;
+                mainPlayer.currentTime = adjustedTime;
                 
                 // Auto-play if paused
-                if (audioPlayer.paused) {
-                    audioPlayer.play().catch(e => {
+                if (mainPlayer.paused) {
+                    mainPlayer.play().catch(e => {
                         console.log('Auto-play prevented by browser:', e);
                         // Just seek without playing if auto-play is blocked
                     });
                 }
                 
                 // Scroll the audio player into view if not visible
-                audioPlayer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                const playerElement = document.getElementById('audio-player');
+                if (playerElement) {
+                    playerElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
                 
             } catch (error) {
                 console.error('Error seeking to time:', error);
@@ -1140,10 +1224,9 @@
     
     // Global function to update current playing position highlight
     function updateCurrentSegmentHighlight() {
-        const audioPlayer = document.getElementById('audio-player');
-        if (!audioPlayer) return;
+        if (!mainPlayer) return;
         
-        const currentTime = audioPlayer.currentTime;
+        const currentTime = mainPlayer.currentTime;
         const timecodeLinks = document.querySelectorAll('.timecode-link');
         let activeLink = null;
         
@@ -1191,32 +1274,33 @@
         const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
         const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
         
-        // Audio player setup
-        if (audioPlayer) {
-            // Track play count with duration
-            let playStartTime = null;
-            let totalPlayDuration = 0;
-            let hasTrackedPlay = false;
-            
-            // Function to update play duration and check if we should track
-            function updatePlayDuration() {
-                if (playStartTime) {
-                    const sessionDuration = (Date.now() - playStartTime) / 1000;
-                    totalPlayDuration += sessionDuration;
-                    playStartTime = Date.now(); // Reset for continuous tracking
-                    
-                    console.log(`Play duration updated. Session: ${sessionDuration}s, Total: ${totalPlayDuration}s, Min required: ${minPlayDuration}s, Already tracked: ${hasTrackedPlay}`);
-                    
-                    // Track play if duration is >= configured minimum and not already tracked
-                    if (totalPlayDuration >= minPlayDuration && !hasTrackedPlay) {
-                        hasTrackedPlay = true;
-                        console.log('Triggering play tracking...');
-                        fetch(`/api/track_play/${spaceId}`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
+        // Audio player setup (wait for Plyr to be ready)
+        function setupAudioTracking() {
+            if (mainPlayer) {
+                // Track play count with duration
+                let playStartTime = null;
+                let totalPlayDuration = 0;
+                let hasTrackedPlay = false;
+                
+                // Function to update play duration and check if we should track
+                function updatePlayDuration() {
+                    if (playStartTime) {
+                        const sessionDuration = (Date.now() - playStartTime) / 1000;
+                        totalPlayDuration += sessionDuration;
+                        playStartTime = Date.now(); // Reset for continuous tracking
+                        
+                        console.log(`Play duration updated. Session: ${sessionDuration}s, Total: ${totalPlayDuration}s, Min required: ${minPlayDuration}s, Already tracked: ${hasTrackedPlay}`);
+                        
+                        // Track play if duration is >= configured minimum and not already tracked
+                        if (totalPlayDuration >= minPlayDuration && !hasTrackedPlay) {
+                            hasTrackedPlay = true;
+                            console.log('Triggering play tracking...');
+                            fetch(`/api/track_play/${spaceId}`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
                                 duration: Math.round(totalPlayDuration)
                             })
                         }).then(response => response.json())
@@ -1234,199 +1318,191 @@
                 }
             }
             
-            audioPlayer.addEventListener('play', function() {
-                playStartTime = Date.now();
-                console.log('Audio started playing at:', new Date(playStartTime));
-            });
-            
-            audioPlayer.addEventListener('pause', function() {
-                if (playStartTime) {
-                    const sessionDuration = (Date.now() - playStartTime) / 1000;
-                    totalPlayDuration += sessionDuration;
-                    playStartTime = null;
+                mainPlayer.on('play', function() {
+                    playStartTime = Date.now();
+                    console.log('Audio started playing at:', new Date(playStartTime));
+                });
+                
+                mainPlayer.on('pause', function() {
+                    if (playStartTime) {
+                        const sessionDuration = (Date.now() - playStartTime) / 1000;
+                        totalPlayDuration += sessionDuration;
+                        playStartTime = null;
+                        
+                        console.log(`Audio paused. Session duration: ${sessionDuration}s, Total duration: ${totalPlayDuration}s`);
+                        updatePlayDuration();
+                    }
+                });
+                
+                // Check play duration periodically while playing
+                let playCheckInterval;
+                mainPlayer.on('play', function() {
+                    playCheckInterval = setInterval(updatePlayDuration, 5000); // Check every 5 seconds
+                });
+                
+                mainPlayer.on('pause', function() {
+                    if (playCheckInterval) {
+                        clearInterval(playCheckInterval);
+                    }
+                });
+                
+                // Reset tracking when audio ends
+                mainPlayer.on('ended', function() {
+                    if (playCheckInterval) {
+                        clearInterval(playCheckInterval);
+                    }
                     
-                    console.log(`Audio paused. Session duration: ${sessionDuration}s, Total duration: ${totalPlayDuration}s`);
-                    updatePlayDuration();
-                }
-            });
-            
-            // Check play duration periodically while playing
-            let playCheckInterval;
-            audioPlayer.addEventListener('play', function() {
-                playCheckInterval = setInterval(updatePlayDuration, 5000); // Check every 5 seconds
-            });
-            
-            audioPlayer.addEventListener('pause', function() {
-                if (playCheckInterval) {
-                    clearInterval(playCheckInterval);
-                }
-            });
-            
-            // Reset tracking when audio ends
-            audioPlayer.addEventListener('ended', function() {
-                if (playCheckInterval) {
-                    clearInterval(playCheckInterval);
-                }
+                    if (playStartTime) {
+                        const sessionDuration = (Date.now() - playStartTime) / 1000;
+                        totalPlayDuration += sessionDuration;
+                        playStartTime = null;
+                    }
+                    
+                    console.log(`Audio ended. Total duration: ${totalPlayDuration}s, Min required: ${minPlayDuration}s, Already tracked: ${hasTrackedPlay}`);
+                    
+                    // Track play if duration is >= configured minimum and not already tracked
+                    if (totalPlayDuration >= minPlayDuration && !hasTrackedPlay) {
+                        hasTrackedPlay = true;
+                        console.log('Triggering play tracking on ended...');
+                        fetch(`/api/track_play/${spaceId}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                duration: Math.round(totalPlayDuration)
+                            })
+                        }).then(response => response.json())
+                        .then(data => {
+                            console.log('Play tracking response (ended):', data);
+                            if (!data.counted) {
+                                console.log('Play not counted:', data.reason);
+                            } else {
+                                console.log('Play successfully tracked on ended');
+                            }
+                        }).catch(error => {
+                            console.error('Error tracking play:', error);
+                        });
+                    }
+                    
+                    // Reset for next play
+                    hasTrackedPlay = false;
+                    totalPlayDuration = 0;
+                });
                 
-                if (playStartTime) {
-                    const sessionDuration = (Date.now() - playStartTime) / 1000;
-                    totalPlayDuration += sessionDuration;
-                    playStartTime = null;
-                }
-                
-                console.log(`Audio ended. Total duration: ${totalPlayDuration}s, Min required: ${minPlayDuration}s, Already tracked: ${hasTrackedPlay}`);
-                
-                // Track play if duration is >= configured minimum and not already tracked
-                if (totalPlayDuration >= minPlayDuration && !hasTrackedPlay) {
-                    hasTrackedPlay = true;
-                    console.log('Triggering play tracking on ended...');
-                    fetch(`/api/track_play/${spaceId}`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            duration: Math.round(totalPlayDuration)
-                        })
-                    }).then(response => response.json())
-                    .then(data => {
-                        console.log('Play tracking response (ended):', data);
-                        if (!data.counted) {
-                            console.log('Play not counted:', data.reason);
-                        } else {
-                            console.log('Play successfully tracked on ended');
-                        }
-                    }).catch(error => {
-                        console.error('Error tracking play:', error);
+                // Setup timecode highlighting
+                mainPlayer.on('timeupdate', updateCurrentSegmentHighlight);
+            
+                // Playback speed control (Note: Plyr has built-in speed controls, but we keep this for compatibility)
+                const playbackSpeed = document.getElementById('playback-speed');
+                if (playbackSpeed) {
+                    playbackSpeed.addEventListener('change', function() {
+                        mainPlayer.speed = parseFloat(this.value);
                     });
                 }
                 
-                // Reset for next play
-                hasTrackedPlay = false;
-                totalPlayDuration = 0;
-            });
-            
-            // Playback speed control
-            const playbackSpeed = document.getElementById('playback-speed');
-            playbackSpeed.addEventListener('change', function() {
-                audioPlayer.playbackRate = parseFloat(this.value);
-            });
-            
-            // Volume control
-            const volume = document.getElementById('volume');
-            volume.addEventListener('input', function() {
-                audioPlayer.volume = this.value;
-            });
-            
-            // Add event listener for current time updates to highlight transcript segments
-            audioPlayer.addEventListener('timeupdate', function() {
-                updateCurrentSegmentHighlight();
-            });
-            
-            // Remember playback position
-            const storageKey = 'xspace_position_' + spaceId;
-            
-            // Load saved position
-            const savedPosition = localStorage.getItem(storageKey);
-            if (savedPosition) {
-                audioPlayer.currentTime = parseFloat(savedPosition);
-            }
-            
-            // Save position every 5 seconds
-            setInterval(() => {
-                if (!audioPlayer.paused) {
-                    localStorage.setItem(storageKey, audioPlayer.currentTime.toString());
+                // Volume control (Note: Plyr has built-in volume controls, but we keep this for compatibility)
+                const volume = document.getElementById('volume');
+                if (volume) {
+                    volume.addEventListener('input', function() {
+                        mainPlayer.volume = this.value;
+                    });
                 }
-            }, 5000);
-            
-            // Save position on pause/stop
-            audioPlayer.addEventListener('pause', () => {
-                localStorage.setItem(storageKey, audioPlayer.currentTime.toString());
-            });
-            
-            // Save speed preference
-            const speedKey = 'xspace_speed';
-            const savedSpeed = localStorage.getItem(speedKey);
-            if (savedSpeed) {
-                audioPlayer.playbackRate = parseFloat(savedSpeed);
-                playbackSpeed.value = savedSpeed;
-            }
-            
-            playbackSpeed.addEventListener('change', function() {
-                localStorage.setItem(speedKey, this.value);
-            });
-            
-            // Skip forward/backward buttons
-            const skipForward = document.getElementById('skip-forward');
-            const skipBackward = document.getElementById('skip-backward');
-            
-            if (skipForward) {
-                skipForward.addEventListener('click', function() {
-                    audioPlayer.currentTime = Math.min(audioPlayer.currentTime + 30, audioPlayer.duration);
-                });
-            }
-            
-            if (skipBackward) {
-                skipBackward.addEventListener('click', function() {
-                    audioPlayer.currentTime = Math.max(audioPlayer.currentTime - 15, 0);
-                });
-            }
-            
-            // Add time display element
-            audioPlayer.addEventListener('loadedmetadata', function() {
-                if (!document.getElementById('time-display')) {
-                    const timeDisplay = document.createElement('div');
-                    timeDisplay.id = 'time-display';
-                    timeDisplay.className = 'mt-2 text-muted small';
-                    audioPlayer.parentNode.insertBefore(timeDisplay, audioPlayer.nextSibling);
-                }
-                updateTimeDisplay();
-            });
-            
-            audioPlayer.addEventListener('timeupdate', updateTimeDisplay);
-            
-            function updateTimeDisplay() {
-                const timeDisplay = document.getElementById('time-display');
-                if (timeDisplay && !isNaN(audioPlayer.duration)) {
-                    const currentMinutes = Math.floor(audioPlayer.currentTime / 60);
-                    const currentSeconds = Math.floor(audioPlayer.currentTime % 60);
-                    const durationMinutes = Math.floor(audioPlayer.duration / 60);
-                    const durationSeconds = Math.floor(audioPlayer.duration % 60);
-                    
-                    timeDisplay.textContent = `${currentMinutes}:${currentSeconds.toString().padStart(2, '0')} / ${durationMinutes}:${durationSeconds.toString().padStart(2, '0')}`;
-                }
-            }
-            
-            // Add keyboard shortcuts
-            document.addEventListener('keydown', function(e) {
-                // Only if audio player is in view
-                const rect = audioPlayer.getBoundingClientRect();
-                const isInView = (rect.top >= 0 && rect.bottom <= window.innerHeight);
                 
-                if (isInView) {
-                    // Right arrow - skip forward 30s
-                    if (e.key === 'ArrowRight') {
-                        audioPlayer.currentTime = Math.min(audioPlayer.currentTime + 30, audioPlayer.duration);
+                // Remember playback position
+                const storageKey = 'xspace_position_' + spaceId;
+                
+                // Load saved position
+                const savedPosition = localStorage.getItem(storageKey);
+                if (savedPosition) {
+                    mainPlayer.currentTime = parseFloat(savedPosition);
+                }
+                
+                // Save position every 5 seconds
+                setInterval(() => {
+                    if (!mainPlayer.paused) {
+                        localStorage.setItem(storageKey, mainPlayer.currentTime.toString());
                     }
+                }, 5000);
+                
+                // Save position on pause/stop
+                mainPlayer.on('pause', () => {
+                    localStorage.setItem(storageKey, mainPlayer.currentTime.toString());
+                });
+                
+                // Save speed preference
+                const speedKey = 'xspace_speed';
+                const savedSpeed = localStorage.getItem(speedKey);
+                if (savedSpeed && playbackSpeed) {
+                    mainPlayer.speed = parseFloat(savedSpeed);
+                    playbackSpeed.value = savedSpeed;
+                }
+                
+                if (playbackSpeed) {
+                    playbackSpeed.addEventListener('change', function() {
+                        localStorage.setItem(speedKey, this.value);
+                    });
+                }
+            }
+        }
+        
+        // Wait for Plyr to be ready before setting up tracking
+        setTimeout(setupAudioTracking, 100);
+            
+        // Skip forward/backward buttons
+        const skipForward = document.getElementById('skip-forward');
+        const skipBackward = document.getElementById('skip-backward');
+        
+        if (skipForward) {
+            skipForward.addEventListener('click', function() {
+                if (mainPlayer) {
+                    mainPlayer.currentTime = Math.min(mainPlayer.currentTime + 30, mainPlayer.duration);
+                }
+            });
+        }
+        
+        if (skipBackward) {
+            skipBackward.addEventListener('click', function() {
+                if (mainPlayer) {
+                    mainPlayer.currentTime = Math.max(mainPlayer.currentTime - 15, 0);
+                }
+            });
+        }
+            
+        function updateTimeDisplay() {
+            // Plyr handles time display internally, so this function is optional now
+            // Keep it for backwards compatibility if there are custom time displays
+        }
+        
+        function updatePlayerInfo() {
+            // Called when Plyr player is ready
+            console.log('Plyr player is ready');
+        }
+            
+        // Keyboard shortcuts (Plyr has built-in keyboard support, but we can add custom ones)
+        document.addEventListener('keydown', function(e) {
+            if (mainPlayer) {
+                const audioPlayerElement = document.getElementById('audio-player');
+                if (audioPlayerElement) {
+                    const rect = audioPlayerElement.getBoundingClientRect();
+                    const isInView = (rect.top >= 0 && rect.bottom <= window.innerHeight);
                     
-                    // Left arrow - skip backward 15s
-                    if (e.key === 'ArrowLeft') {
-                        audioPlayer.currentTime = Math.max(audioPlayer.currentTime - 15, 0);
-                    }
-                    
-                    // Space - play/pause (only if no input is focused)
-                    if (e.key === ' ' && document.activeElement.tagName !== 'INPUT' && 
-                        document.activeElement.tagName !== 'TEXTAREA' && 
-                        document.activeElement.tagName !== 'SELECT') {
-                        e.preventDefault();
-                        if (audioPlayer.paused) {
-                            audioPlayer.play();
-                        } else {
-                            audioPlayer.pause();
+                    if (isInView) {
+                        // Right arrow - skip forward 30s
+                        if (e.key === 'ArrowRight') {
+                            e.preventDefault();
+                            mainPlayer.currentTime = Math.min(mainPlayer.currentTime + 30, mainPlayer.duration);
+                        }
+                        
+                        // Left arrow - skip backward 15s
+                        if (e.key === 'ArrowLeft') {
+                            e.preventDefault();
+                            mainPlayer.currentTime = Math.max(mainPlayer.currentTime - 15, 0);
                         }
                     }
                 }
-            });
+            }
+        });
             
             // Clipping functionality
             setupClippingControls();
@@ -3700,6 +3776,75 @@
 
 </script>
 
+<!-- Load Plyr JS -->
+<script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
+
+<!-- Initialize Plyr Players -->
+<script>
+    // Initialize Plyr players with custom configuration
+    let mainPlayer, trimPlayer;
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize main audio player
+        const mainAudioElement = document.getElementById('audio-player');
+        if (mainAudioElement) {
+            mainPlayer = new Plyr(mainAudioElement, {
+                controls: [
+                    'play-large',
+                    'restart',
+                    'play',
+                    'progress',
+                    'current-time',
+                    'duration',
+                    'mute',
+                    'volume',
+                    'settings',
+                    'fullscreen'
+                ],
+                settings: ['speed', 'loop'],
+                speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] },
+                hideControls: false,
+                clickToPlay: true,
+                keyboard: { focused: true, global: false },
+                tooltips: { controls: true, seek: true }
+            });
+            
+            // Add custom styling
+            mainPlayer.on('ready', function() {
+                updatePlayerInfo();
+            });
+            
+            mainPlayer.on('timeupdate', function() {
+                updateTimeDisplay();
+            });
+        }
+        
+        // Initialize trim modal audio player
+        const trimAudioElement = document.getElementById('trim-audio-preview');
+        if (trimAudioElement) {
+            trimPlayer = new Plyr(trimAudioElement, {
+                controls: [
+                    'play',
+                    'progress',
+                    'current-time',
+                    'duration',
+                    'mute',
+                    'volume'
+                ],
+                hideControls: false,
+                clickToPlay: true,
+                keyboard: { focused: true, global: false },
+                tooltips: { controls: true, seek: true }
+            });
+        }
+    });
+    
+    // Helper function to get the actual media element
+    function getMediaElement(player) {
+        return player ? player.media : null;
+    }
+</script>
+
 <!-- Load SummerNote JS -->
 <script src="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.js"></script>
 
@@ -3959,7 +4104,6 @@
         loadNotes();
         
         // Trim Audio Functionality
-        const trimAudioPreview = document.getElementById('trim-audio-preview');
         const trimStartMin = document.getElementById('trim-start-min');
         const trimStartSec = document.getElementById('trim-start-sec');
         const trimEndMin = document.getElementById('trim-end-min');
@@ -3970,13 +4114,20 @@
         const setCurrentStartBtn = document.getElementById('set-current-start');
         const setCurrentEndBtn = document.getElementById('set-current-end');
         
+        // Format time for display
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+        
         // Update trim info display
         function updateTrimInfo() {
             const startTime = parseInt(trimStartMin.value || 0) * 60 + parseInt(trimStartSec.value || 0);
             const endTime = parseInt(trimEndMin.value || 0) * 60 + parseInt(trimEndSec.value || 0);
             
-            if (trimAudioPreview && trimAudioPreview.duration) {
-                const duration = trimAudioPreview.duration;
+            if (trimPlayer && trimPlayer.duration) {
+                const duration = trimPlayer.duration;
                 const actualEndTime = (endTime === 0) ? duration : Math.min(endTime, duration);
                 
                 if (startTime < actualEndTime) {
@@ -3993,8 +4144,8 @@
         // Set current time buttons
         if (setCurrentStartBtn) {
             setCurrentStartBtn.addEventListener('click', function() {
-                if (trimAudioPreview && trimAudioPreview.currentTime) {
-                    const time = Math.floor(trimAudioPreview.currentTime);
+                if (trimPlayer && trimPlayer.currentTime) {
+                    const time = Math.floor(trimPlayer.currentTime);
                     trimStartMin.value = Math.floor(time / 60);
                     trimStartSec.value = time % 60;
                     updateTrimInfo();
@@ -4004,8 +4155,8 @@
         
         if (setCurrentEndBtn) {
             setCurrentEndBtn.addEventListener('click', function() {
-                if (trimAudioPreview && trimAudioPreview.currentTime) {
-                    const time = Math.floor(trimAudioPreview.currentTime);
+                if (trimPlayer && trimPlayer.currentTime) {
+                    const time = Math.floor(trimPlayer.currentTime);
                     trimEndMin.value = Math.floor(time / 60);
                     trimEndSec.value = time % 60;
                     updateTrimInfo();
@@ -4026,8 +4177,8 @@
             trimModal.addEventListener('show.bs.modal', function() {
                 // Wait for audio to load
                 setTimeout(() => {
-                    if (trimAudioPreview && trimAudioPreview.duration) {
-                        const duration = Math.floor(trimAudioPreview.duration);
+                    if (trimPlayer && trimPlayer.duration) {
+                        const duration = Math.floor(trimPlayer.duration);
                         trimEndMin.value = Math.floor(duration / 60);
                         trimEndSec.value = duration % 60;
                         updateTrimInfo();
