@@ -1598,6 +1598,35 @@
     </div>
 </div>
 
+<!-- Job Details Modal -->
+<div class="modal fade" id="jobDetailsModal" tabindex="-1" aria-labelledby="jobDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="jobDetailsModalLabel">
+                    <i class="bi bi-info-circle"></i> Job Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="jobDetailsContent">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading job details...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i> Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Include Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -3650,8 +3679,203 @@ function cancelJob(jobId) {
 }
 
 function viewJobDetails(jobId) {
-    // Implementation would go here - show job details modal
-    showToast('Job details view not yet implemented', 'info');
+    // Show the modal
+    const modal = new bootstrap.Modal(document.getElementById('jobDetailsModal'));
+    modal.show();
+    
+    // Reset content to loading state
+    const content = document.getElementById('jobDetailsContent');
+    content.innerHTML = `
+        <div class="text-center">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading job details...</p>
+        </div>
+    `;
+    
+    // Fetch job details
+    fetch(`/api/downloads/${jobId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                content.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i> Error loading job details: ${data.error}
+                    </div>
+                `;
+                return;
+            }
+            
+            const job = data.job;
+            const statusClass = getStatusClass(job.status);
+            const statusIcon = getStatusIcon(job.status);
+            
+            content.innerHTML = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="bi bi-info-circle"></i> Basic Information</h6>
+                            </div>
+                            <div class="card-body">
+                                <table class="table table-sm">
+                                    <tr>
+                                        <td><strong>Job ID:</strong></td>
+                                        <td>${job.id}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Space ID:</strong></td>
+                                        <td><code>${job.space_id}</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Status:</strong></td>
+                                        <td><span class="badge bg-${statusClass}">${statusIcon} ${job.status}</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>File Type:</strong></td>
+                                        <td>${job.file_type || 'N/A'}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>User ID:</strong></td>
+                                        <td>${job.user_id || 'Anonymous'}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="bi bi-clock"></i> Timing Information</h6>
+                            </div>
+                            <div class="card-body">
+                                <table class="table table-sm">
+                                    <tr>
+                                        <td><strong>Created:</strong></td>
+                                        <td>${formatDate(job.created_at)}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Updated:</strong></td>
+                                        <td>${formatDate(job.updated_at)}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Start Time:</strong></td>
+                                        <td>${formatDate(job.start_time)}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>End Time:</strong></td>
+                                        <td>${formatDate(job.end_time)}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Duration:</strong></td>
+                                        <td>${calculateDuration(job.start_time, job.end_time)}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                ${job.progress_in_size || job.progress_in_percent ? `
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="bi bi-bar-chart"></i> Progress Information</h6>
+                    </div>
+                    <div class="card-body">
+                        ${job.progress_in_percent ? `
+                            <div class="mb-2">
+                                <label class="form-label">Progress: ${job.progress_in_percent}%</label>
+                                <div class="progress">
+                                    <div class="progress-bar" style="width: ${job.progress_in_percent}%"></div>
+                                </div>
+                            </div>
+                        ` : ''}
+                        ${job.progress_in_size ? `
+                            <p><strong>Downloaded Size:</strong> ${(job.progress_in_size / 1024 / 1024).toFixed(2)} MB</p>
+                        ` : ''}
+                        ${job.process_id ? `
+                            <p><strong>Process ID:</strong> ${job.process_id}</p>
+                        ` : ''}
+                    </div>
+                </div>
+                ` : ''}
+                
+                ${job.error_message ? `
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="bi bi-exclamation-triangle text-danger"></i> Error Information</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-danger">
+                            <code>${job.error_message}</code>
+                        </div>
+                    </div>
+                </div>
+                ` : ''}
+                
+                <div class="text-center mt-3">
+                    <a href="/spaces/${job.space_id}" class="btn btn-primary btn-sm" target="_blank">
+                        <i class="bi bi-eye"></i> View Space
+                    </a>
+                    ${job.status === 'completed' ? `
+                        <a href="/download/${job.space_id}?attachment=1" class="btn btn-success btn-sm" target="_blank">
+                            <i class="bi bi-download"></i> Download File
+                        </a>
+                    ` : ''}
+                </div>
+            `;
+        })
+        .catch(error => {
+            console.error('Error fetching job details:', error);
+            content.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle"></i> Failed to load job details. Please try again.
+                </div>
+            `;
+        });
+}
+
+function getStatusClass(status) {
+    switch(status) {
+        case 'completed': return 'success';
+        case 'failed': return 'danger';
+        case 'in_progress': case 'downloading': return 'info';
+        case 'pending': return 'warning';
+        default: return 'secondary';
+    }
+}
+
+function getStatusIcon(status) {
+    switch(status) {
+        case 'completed': return '<i class="bi bi-check-circle"></i>';
+        case 'failed': return '<i class="bi bi-x-circle"></i>';
+        case 'in_progress': case 'downloading': return '<i class="bi bi-arrow-clockwise"></i>';
+        case 'pending': return '<i class="bi bi-clock"></i>';
+        default: return '<i class="bi bi-question-circle"></i>';
+    }
+}
+
+function calculateDuration(startTime, endTime) {
+    if (!startTime || !endTime) return 'N/A';
+    
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    const durationMs = end - start;
+    
+    if (durationMs < 0) return 'N/A';
+    
+    const seconds = Math.floor(durationMs / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    
+    if (hours > 0) {
+        return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+    } else if (minutes > 0) {
+        return `${minutes}m ${seconds % 60}s`;
+    } else {
+        return `${seconds}s`;
+    }
 }
 
 function formatDate(dateString) {

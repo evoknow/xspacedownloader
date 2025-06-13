@@ -1251,7 +1251,7 @@ def trim_audio(space_id):
         cookie_id = data.get('cookie_id')
         user_id = session.get('user_id', 0)
         
-        # Check permissions - user must own the space
+        # Check permissions: space owner OR admin
         space = get_space_component()
         cursor = space.connection.cursor(dictionary=True)
         query = "SELECT user_id, cookie_id FROM spaces WHERE space_id = %s"
@@ -1262,9 +1262,13 @@ def trim_audio(space_id):
         if not space_record:
             return jsonify({'error': 'Space not found'}), 404
         
-        # Check ownership
+        # Check permissions: space owner OR admin
+        is_admin = session.get('is_admin', False)
         can_edit = False
-        if user_id > 0:
+        
+        if is_admin:
+            can_edit = True
+        elif user_id > 0:
             # Logged in user - must match user_id
             can_edit = (space_record['user_id'] == user_id)
         else:
