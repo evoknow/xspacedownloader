@@ -4138,14 +4138,14 @@ function refreshSQLLogs() {
     fetch('/admin/api/sql-logs')
         .then(response => response.json())
         .then(data => {
-            if (data.success) {
+            if (data.error) {
+                showToast('Error loading SQL logs: ' + data.error, 'error');
+            } else {
                 sqlLogData = data.logs || [];
                 sqlLogStatus = data.enabled || false;
                 updateSQLLogStatus();
                 displaySQLLogs();
                 calculateSQLStats();
-            } else {
-                showToast('Error loading SQL logs: ' + data.error, 'error');
             }
         })
         .catch(error => {
