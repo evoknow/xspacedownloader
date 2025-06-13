@@ -441,11 +441,7 @@
                                 <code>{{ space.space_id }}</code> <i class="bi bi-box-arrow-up-right small"></i>
                             </a>
                             {% if space.status and space.status != 'completed' %}
-                            <span class="badge 
-                                {% if space.status == 'downloading' %}bg-info
-                                {% elif space.status == 'pending' %}bg-warning
-                                {% elif space.status == 'failed' %}bg-danger
-                                {% else %}bg-secondary{% endif %}">
+                            <span class="badge {% if space.status == 'downloading' %}bg-info{% elif space.status == 'pending' %}bg-warning{% elif space.status == 'failed' %}bg-danger{% else %}bg-secondary{% endif %}">
                                 {{ space.status|title }}
                             </span>
                             {% endif %}
@@ -1229,9 +1225,9 @@
     
     document.addEventListener('DOMContentLoaded', function() {
         const audioPlayer = document.getElementById('audio-player');
-        const spaceId = '{{ space.space_id }}';
-        const spaceStatus = '{{ space.status }}';
-        const minPlayDuration = {{ tracking_config.min_play_duration|default(30) }};
+        const spaceId = '{{ space.space_id|escapejs }}';
+        const spaceStatus = '{{ space.status|default('')|escapejs }}';
+        const minPlayDuration = {% if tracking_config and tracking_config.min_play_duration %}{{ tracking_config.min_play_duration }}{% else %}30{% endif %};
         
         // Initialize silence offset for timecode correction
         window.silenceOffset = 0;
@@ -3996,7 +3992,7 @@
                 return;
             }
             
-            const cookieId = getCookieId();
+            const cookieId = window.getCookieId();
             const url = currentNoteId 
                 ? `/api/spaces/${spaceId}/notes/${currentNoteId}`
                 : `/api/spaces/${spaceId}/notes`;
@@ -4033,7 +4029,7 @@
         
         // Delete note
         function deleteNote(noteId) {
-            const cookieId = getCookieId();
+            const cookieId = window.getCookieId();
             fetch(`/api/spaces/${spaceId}/notes/${noteId}?cookie_id=${cookieId}`, {
                 method: 'DELETE'
             })
@@ -4187,7 +4183,7 @@
                 applyTrimBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Trimming...';
                 
                 // Send trim request
-                const cookieId = getCookieId();
+                const cookieId = window.getCookieId();
                 fetch(`/api/spaces/${spaceId}/trim`, {
                     method: 'POST',
                     headers: {
@@ -4342,7 +4338,7 @@
         
         // Load reviews
         function loadReviews() {
-            const cookieId = getCookieId();
+            const cookieId = window.getCookieId();
             fetch(`/api/spaces/${spaceId}/reviews?cookie_id=${cookieId}`)
                 .then(response => response.json())
                 .then(data => {
@@ -4459,7 +4455,7 @@
             saveReviewBtn.addEventListener('click', function() {
                 const rating = parseInt(reviewRating.value);
                 const reviewText = document.getElementById('review-text').value.trim();
-                const cookieId = getCookieId();
+                const cookieId = window.getCookieId();
                 
                 if (rating === 0) {
                     showToast('Please select a rating', 'warning');
@@ -4543,7 +4539,7 @@
                 return;
             }
             
-            const cookieId = getCookieId();
+            const cookieId = window.getCookieId();
             fetch(`/api/spaces/${spaceId}/reviews/${reviewId}?cookie_id=${cookieId}`, {
                 method: 'DELETE'
             })
@@ -4569,7 +4565,7 @@
         const favoriteBtn = document.getElementById('favorite-btn');
         if (favoriteBtn) {
             favoriteBtn.addEventListener('click', function() {
-                const cookieId = getCookieId();
+                const cookieId = window.getCookieId();
                 const isCurrentlyFavorite = this.classList.contains('btn-warning');
                 
                 // Disable button during request
@@ -4626,7 +4622,7 @@
         
         function initializeVideoGeneration() {
             const generateBtn = document.getElementById('generate-video-btn');
-            const spaceId = '{{ space.space_id }}';
+            const spaceId = '{{ space.space_id|escapejs }}';
             
             if (generateBtn) {
                 // Check if video already exists
