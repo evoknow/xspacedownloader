@@ -114,9 +114,33 @@
                                 <ul>
                                     <li>Length of the Space (longer spaces take more time)</li>
                                     <li>Current queue size (downloads are processed in order)</li>
-                                    <li>Server load</li>
+                                    <li>Server load and available resources</li>
+                                    <li>Additional processing (transcription, translation, video generation)</li>
                                 </ul>
-                                Typically, a 1-hour Space takes 2-5 minutes to download and process. You can monitor progress in the Queue page.
+                                Typically, a 1-hour Space takes 2-5 minutes to download and process. You can monitor real-time progress in the Queue page.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq6a">
+                                How does the Queue system work?
+                            </button>
+                        </h2>
+                        <div id="faq6a" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                XSpace Downloader uses an advanced queue system to manage all processing tasks:
+                                <ul>
+                                    <li><strong>Download Queue:</strong> Handles initial Space downloading and audio conversion</li>
+                                    <li><strong>Transcription Queue:</strong> Processes speech-to-text conversion with AI language detection</li>
+                                    <li><strong>Translation Queue:</strong> Manages multilingual content translation</li>
+                                    <li><strong>Video Generation Queue:</strong> Creates MP4 videos with branding and host profiles</li>
+                                    <li><strong>Priority System:</strong> Admins can adjust job priorities for faster processing</li>
+                                    <li><strong>Real-time Updates:</strong> Live progress tracking with estimated completion times</li>
+                                    <li><strong>Error Handling:</strong> Automatic retry logic and detailed error reporting</li>
+                                </ul>
+                                The Queue page shows all active and completed jobs with detailed status information.
                             </div>
                         </div>
                     </div>
@@ -273,11 +297,123 @@
                                 <ul>
                                     <li><strong>User Management:</strong> View all users, toggle admin status, suspend accounts</li>
                                     <li><strong>Space Management:</strong> Monitor all downloaded spaces, remove inappropriate content</li>
-                                    <li><strong>Statistics:</strong> Track daily/weekly/monthly usage patterns</li>
-                                    <li><strong>Analytics:</strong> View most popular spaces, active users, and download trends</li>
-                                    <li><strong>System Health:</strong> Monitor queue status and system performance</li>
+                                    <li><strong>Queue Management:</strong> Monitor download, transcription, translation, and video generation queues</li>
+                                    <li><strong>Statistics:</strong> Track daily/weekly/monthly usage patterns with interactive charts</li>
+                                    <li><strong>System Status:</strong> Real-time monitoring of background processes, services, and system health</li>
+                                    <li><strong>SQL Logs:</strong> Monitor database query performance and troubleshoot issues</li>
+                                    <li><strong>Settings:</strong> Configure transcription, email, branding, and rate limiting options</li>
+                                    <li><strong>Cache Management:</strong> Clear system caches to improve performance</li>
                                 </ul>
                                 Admins can access the dashboard via the Admin button in the navigation menu.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq10d">
+                                Can I generate video content from Spaces?
+                            </button>
+                        </h2>
+                        <div id="faq10d" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Yes! XSpace Downloader can generate professional MP4 videos from audio content:
+                                <ul>
+                                    <li><strong>Visual Branding:</strong> Customize background colors, logos, and titles</li>
+                                    <li><strong>Host Profiles:</strong> Automatically includes host profile pictures from Twitter</li>
+                                    <li><strong>Automatic Trimming:</strong> Removes leading silence for cleaner videos</li>
+                                    <li><strong>Multiple Formats:</strong> Generate videos for social media, presentations, or archival</li>
+                                    <li><strong>Queue Management:</strong> Video generation is processed in the background</li>
+                                </ul>
+                                Use the "Generate Video" button on any Space page to create an MP4 version. Video generation requires the admin to have configured video processing settings.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq10e">
+                                How do tags and search work?
+                            </button>
+                        </h2>
+                        <div id="faq10e" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                XSpace Downloader uses AI-powered tagging and advanced search capabilities:
+                                <ul>
+                                    <li><strong>AI Auto-Tagging:</strong> Spaces are automatically tagged based on content analysis</li>
+                                    <li><strong>Smart Tag Generation:</strong> AI identifies topics, themes, and subjects discussed</li>
+                                    <li><strong>Popular Tags:</strong> Browse trending topics and discover related content</li>
+                                    <li><strong>Search by Tags:</strong> Find spaces by clicking on any tag or searching for specific topics</li>
+                                    <li><strong>Tag Management:</strong> Admins can regenerate tags or clean up inappropriate ones</li>
+                                    <li><strong>Host and Title Search:</strong> Search by speaker names, usernames, or custom titles</li>
+                                </ul>
+                                The "All Spaces" page shows popular tags in the sidebar for easy browsing.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq10f">
+                                What theming and customization options are available?
+                            </button>
+                        </h2>
+                        <div id="faq10f" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                XSpace Downloader offers extensive customization options:
+                                <ul>
+                                    <li><strong>Multiple Themes:</strong> Choose from Default (Blue), Ocean (Teal), Sunset (Orange), and Forest (Green) themes</li>
+                                    <li><strong>Dark/Light Mode:</strong> Toggle between light and dark modes for any theme</li>
+                                    <li><strong>Theme Selector:</strong> Quick access to theme switching in the navigation bar</li>
+                                    <li><strong>Brand Customization:</strong> Admins can customize logos, colors, and site branding</li>
+                                    <li><strong>Responsive Design:</strong> All themes work perfectly on desktop, tablet, and mobile</li>
+                                    <li><strong>Accessibility:</strong> High contrast options and screen reader compatibility</li>
+                                </ul>
+                                Your theme preference is saved automatically and syncs across devices when logged in.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq10g">
+                                How does the rating and review system work?
+                            </button>
+                        </h2>
+                        <div id="faq10g" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Users can rate and review Spaces to help others discover quality content:
+                                <ul>
+                                    <li><strong>5-Star Rating:</strong> Rate Spaces from 1 to 5 stars based on quality and value</li>
+                                    <li><strong>Written Reviews:</strong> Add detailed comments about the content</li>
+                                    <li><strong>Review Moderation:</strong> Reviews can be flagged and moderated by admins</li>
+                                    <li><strong>Average Ratings:</strong> Spaces show their average rating and review count</li>
+                                    <li><strong>User History:</strong> Track your own ratings and reviews in your account</li>
+                                    <li><strong>Quality Discovery:</strong> Find the best content through community ratings</li>
+                                </ul>
+                                Only logged-in users can leave ratings and reviews, and you can update your review at any time.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq10h">
+                                What are Favorites and how do they work?
+                            </button>
+                        </h2>
+                        <div id="faq10h" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                The Favorites system helps you organize and quickly access your preferred content:
+                                <ul>
+                                    <li><strong>Quick Access:</strong> Click the star icon on any Space to add it to favorites</li>
+                                    <li><strong>Favorites Page:</strong> Dedicated page showing all your favorited Spaces</li>
+                                    <li><strong>Smart Organization:</strong> Favorites are sorted by most recently added</li>
+                                    <li><strong>Cross-Device Sync:</strong> Your favorites sync across all devices when logged in</li>
+                                    <li><strong>Easy Management:</strong> Remove favorites by clicking the star again</li>
+                                    <li><strong>Quick Navigation:</strong> Access favorites from the main navigation menu</li>
+                                </ul>
+                                Favorites are private to your account and help you build a personal collection of valuable content.
                             </div>
                         </div>
                     </div>
@@ -377,7 +513,77 @@
                                     <li>10GB storage for application and downloads</li>
                                     <li>Linux, macOS, or Windows with WSL</li>
                                     <li>Stable internet connection</li>
+                                    <li>Python 3.8+ with virtual environment support</li>
+                                    <li>MySQL/MariaDB database server</li>
+                                    <li>FFmpeg for audio/video processing</li>
+                                    <li>Optional: Nginx for production deployment</li>
                                 </ul>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq13a">
+                                How do I deploy XSpace Downloader to production?
+                            </button>
+                        </h2>
+                        <div id="faq13a" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                XSpace Downloader includes comprehensive deployment automation:
+                                <ul>
+                                    <li><strong>deploy.py:</strong> Automated production deployment script with nginx and systemd configuration</li>
+                                    <li><strong>update.py:</strong> Zero-downtime updates that pull latest code and restart services</li>
+                                    <li><strong>Auto-Update System:</strong> Optional automatic updates every 6 hours via systemd timer or cron</li>
+                                    <li><strong>Service Management:</strong> Proper systemd services for web application and background processes</li>
+                                    <li><strong>Security:</strong> Isolated user accounts, restricted file permissions, and secure configurations</li>
+                                </ul>
+                                Run <code>sudo python3 deploy.py --domain=yoursite.com</code> for initial setup, then use <code>sudo ./update.py</code> for updates.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq13b">
+                                What monitoring and logging features are available?
+                            </button>
+                        </h2>
+                        <div id="faq13b" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                XSpace Downloader provides extensive monitoring capabilities:
+                                <ul>
+                                    <li><strong>System Status Dashboard:</strong> Real-time monitoring of background processes, system resources, and services</li>
+                                    <li><strong>SQL Query Logging:</strong> Optional database performance monitoring with execution times</li>
+                                    <li><strong>Process Monitoring:</strong> Track downloader, transcriber, and progress watcher processes with PIDs and memory usage</li>
+                                    <li><strong>Disk Usage Tracking:</strong> Monitor storage usage by application components</li>
+                                    <li><strong>Service Health Checks:</strong> Automatic monitoring of MySQL, Nginx, and application services</li>
+                                    <li><strong>Queue Analytics:</strong> Track download, transcription, and processing queues</li>
+                                    <li><strong>Usage Statistics:</strong> Comprehensive analytics on user activity and content popularity</li>
+                                </ul>
+                                All monitoring data is available in the Admin Dashboard with auto-refresh capabilities.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq13c">
+                                Can I customize the branding and appearance?
+                            </button>
+                        </h2>
+                        <div id="faq13c" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Yes! XSpace Downloader offers extensive customization options:
+                                <ul>
+                                    <li><strong>Site Branding:</strong> Upload custom logos, set brand colors, and customize site titles</li>
+                                    <li><strong>Theme System:</strong> Four built-in themes (Default, Ocean, Sunset, Forest) with dark/light mode variants</li>
+                                    <li><strong>Video Branding:</strong> Customize generated videos with logos, background colors, and branding</li>
+                                    <li><strong>Email Templates:</strong> Configure branded email communications</li>
+                                    <li><strong>Admin Customization:</strong> All branding options are configurable through the Admin Dashboard</li>
+                                    <li><strong>CSS Customization:</strong> Advanced users can modify the theme system for complete customization</li>
+                                </ul>
+                                Branding changes are applied site-wide and saved automatically.
                             </div>
                         </div>
                     </div>
