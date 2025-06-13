@@ -178,6 +178,11 @@
                 <i class="bi bi-database"></i> SQL
             </button>
         </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="status-tab" data-bs-toggle="tab" data-bs-target="#status" type="button" role="tab">
+                <i class="bi bi-activity"></i> System Status
+            </button>
+        </li>
         {% if is_localhost %}
         <li class="nav-item" role="presentation">
             <button class="nav-link" id="development-tab" data-bs-toggle="tab" data-bs-target="#development" type="button" role="tab">
@@ -1383,6 +1388,34 @@
                         <i class="bi bi-exclamation-triangle"></i>
                         <strong>Performance Impact:</strong> SQL logging may impact database performance. 
                         Disable logging in production environments when not needed for debugging.
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- System Status Tab -->
+        <div class="tab-pane fade" id="status" role="tabpanel">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="mb-0"><i class="bi bi-activity"></i> System Status</h5>
+                        <small class="text-muted">Monitor background processes, system resources, and application health</small>
+                    </div>
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadSystemStatus()">
+                            <i class="bi bi-arrow-clockwise"></i> Refresh
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAutoRefresh()" id="autoRefreshBtn">
+                            <i class="bi bi-play"></i> Auto Refresh
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body" id="systemStatusContent">
+                    <div class="text-center py-5">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading system status...</p>
                     </div>
                 </div>
             </div>
@@ -4275,6 +4308,314 @@ document.addEventListener('DOMContentLoaded', function() {
             element.addEventListener('input', displaySQLLogs);
         }
     });
+});
+
+// System Status functionality
+let systemStatusAutoRefresh = false;
+let systemStatusInterval = null;
+
+function loadSystemStatus() {
+    const contentDiv = document.getElementById('systemStatusContent');
+    if (!contentDiv) return;
+    
+    // Show loading spinner
+    contentDiv.innerHTML = `
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading system status...</p>
+        </div>
+    `;
+    
+    fetch('/admin/api/system_status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                contentDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <h6>Error loading system status:</h6>
+                        <p class="mb-0">${data.error}</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            displaySystemStatus(data);
+        })
+        .catch(error => {
+            console.error('Error loading system status:', error);
+            contentDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <h6>Failed to load system status</h6>
+                    <p class="mb-0">Please check the console for details.</p>
+                </div>
+            `;
+        });
+}
+
+function displaySystemStatus(data) {
+    const contentDiv = document.getElementById('systemStatusContent');
+    if (!contentDiv) return;
+    
+    const formatUptime = (uptime) => uptime || 'Unknown';
+    const formatMemory = (mb) => mb ? `${mb} MB` : 'Unknown';
+    const getStatusBadge = (isRunning, status = null) => {
+        if (isRunning === true || status === 'active') {
+            return '<span class="badge bg-success">Running</span>';
+        } else if (isRunning === false || status === 'inactive') {
+            return '<span class="badge bg-danger">Stopped</span>';
+        } else {
+            return '<span class="badge bg-warning">Unknown</span>';
+        }
+    };
+    
+    let html = `
+        <div class="row">
+            <!-- System Information -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="bi bi-info-circle"></i> System Information</h6>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm">
+                            <tr><td><strong>Hostname:</strong></td><td>${data.system_info?.hostname || 'Unknown'}</td></tr>
+                            <tr><td><strong>Platform:</strong></td><td>${data.system_info?.platform || 'Unknown'}</td></tr>
+                            <tr><td><strong>Architecture:</strong></td><td>${data.system_info?.architecture || 'Unknown'}</td></tr>
+                            <tr><td><strong>Python:</strong></td><td>${data.system_info?.python_version || 'Unknown'}</td></tr>
+                            <tr><td><strong>CPU Cores:</strong></td><td>${data.system_info?.cpu_count || 'Unknown'}</td></tr>
+                            <tr><td><strong>Boot Time:</strong></td><td>${data.system_info?.boot_time || 'Unknown'}</td></tr>
+                            <tr><td><strong>Uptime:</strong></td><td>${formatUptime(data.system_info?.uptime)}</td></tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Port Information -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="bi bi-diagram-3"></i> Network Ports</h6>
+                    </div>
+                    <div class="card-body">
+                        ${data.port_info?.main_app ? `
+                            <div class="alert alert-success">
+                                <strong>Main Application:</strong> Port ${data.port_info.main_app.port} 
+                                (PID: ${data.port_info.main_app.pid})
+                            </div>
+                        ` : '<div class="alert alert-warning">Main application port not detected</div>'}
+                        
+                        <h6 class="mt-3">Active Ports:</h6>
+                        <div style="max-height: 150px; overflow-y: auto;">
+                            ${data.port_info?.listening_ports?.length ? 
+                                data.port_info.listening_ports.map(port => `
+                                    <small class="d-block">
+                                        ${port.address}:${port.port} - ${port.process_name || 'Unknown'} 
+                                        ${port.pid ? `(PID: ${port.pid})` : ''}
+                                    </small>
+                                `).join('') 
+                                : '<small class="text-muted">No listening ports detected</small>'
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <!-- Gunicorn Status -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="bi bi-server"></i> Gunicorn Application Server</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span><strong>Status:</strong></span>
+                            ${getStatusBadge(data.gunicorn_status?.status === 'running')}
+                        </div>
+                        ${data.gunicorn_status?.master_pid ? `
+                            <p><strong>Master PID:</strong> ${data.gunicorn_status.master_pid}</p>
+                            <p><strong>Uptime:</strong> ${formatUptime(data.gunicorn_status.master_uptime)}</p>
+                        ` : ''}
+                        <p><strong>Workers:</strong> ${data.gunicorn_status?.worker_count || 0}</p>
+                        ${data.gunicorn_status?.total_memory_mb ? `
+                            <p><strong>Total Memory:</strong> ${formatMemory(data.gunicorn_status.total_memory_mb)}</p>
+                        ` : ''}
+                        
+                        ${data.gunicorn_status?.workers?.length ? `
+                            <details class="mt-2">
+                                <summary><small>Worker Details</small></summary>
+                                <div class="mt-2">
+                                    ${data.gunicorn_status.workers.map(worker => `
+                                        <small class="d-block">
+                                            PID ${worker.pid}: ${formatMemory(worker.memory_mb)}, 
+                                            Uptime: ${formatUptime(worker.uptime)}
+                                        </small>
+                                    `).join('')}
+                                </div>
+                            </details>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Background Processes -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="bi bi-gear"></i> Background Processes</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span><strong>Downloader:</strong></span>
+                                ${getStatusBadge(data.background_processes?.bg_downloader?.length > 0)}
+                            </div>
+                            <small class="text-muted">
+                                ${data.background_processes?.bg_downloader?.length || 0} process(es) running
+                            </small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span><strong>Transcriber:</strong></span>
+                                ${getStatusBadge(data.background_processes?.background_transcribe?.length > 0)}
+                            </div>
+                            <small class="text-muted">
+                                ${data.background_processes?.background_transcribe?.length || 0} process(es) running
+                            </small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span><strong>Progress Watcher:</strong></span>
+                                ${getStatusBadge(data.background_processes?.bg_progress_watcher?.length > 0)}
+                            </div>
+                            <small class="text-muted">
+                                ${data.background_processes?.bg_progress_watcher?.length || 0} process(es) running
+                            </small>
+                        </div>
+                        
+                        <!-- Process Details -->
+                        ${Object.entries(data.background_processes || {}).some(([key, processes]) => processes.length > 0) ? `
+                            <details class="mt-3">
+                                <summary><small>Process Details</small></summary>
+                                <div class="mt-2" style="max-height: 200px; overflow-y: auto;">
+                                    ${Object.entries(data.background_processes || {}).map(([processType, processes]) => 
+                                        processes.map(proc => `
+                                            <div class="border-bottom pb-1 mb-1">
+                                                <small><strong>${processType}:</strong> PID ${proc.pid}</small><br>
+                                                <small>Memory: ${formatMemory(proc.memory_mb)}, Uptime: ${formatUptime(proc.uptime)}</small><br>
+                                                <small class="text-muted">Started: ${proc.started}</small>
+                                            </div>
+                                        `).join('')
+                                    ).join('')}
+                                </div>
+                            </details>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <!-- SystemD Services -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="bi bi-list-check"></i> SystemD Services</h6>
+                    </div>
+                    <div class="card-body">
+                        ${Object.entries(data.systemd_services || {}).map(([serviceName, service]) => `
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span><strong>${serviceName}:</strong></span>
+                                ${getStatusBadge(service.active, service.status)}
+                            </div>
+                            <small class="text-muted d-block mb-2">
+                                Status: ${service.status || 'Unknown'} 
+                                ${service.enabled ? '(Enabled)' : '(Disabled)'}
+                                ${service.main_pid ? ` | PID: ${service.main_pid}` : ''}
+                                ${service.memory ? ` | Memory: ${service.memory}` : ''}
+                            </small>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Disk Usage -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="bi bi-hdd"></i> Disk Usage</h6>
+                    </div>
+                    <div class="card-body">
+                        ${Object.entries(data.disk_usage || {}).map(([path, usage]) => `
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between">
+                                    <span><strong>${path}:</strong></span>
+                                    <span>${usage.error ? 'Error' : `${usage.percent_used}%`}</span>
+                                </div>
+                                ${usage.error ? `
+                                    <small class="text-danger">${usage.error}</small>
+                                ` : `
+                                    <div class="progress" style="height: 8px;">
+                                        <div class="progress-bar ${usage.percent_used > 90 ? 'bg-danger' : usage.percent_used > 70 ? 'bg-warning' : 'bg-success'}" 
+                                             style="width: ${usage.percent_used}%"></div>
+                                    </div>
+                                    <small class="text-muted">
+                                        ${usage.used_gb} GB / ${usage.total_gb} GB used, ${usage.free_gb} GB free
+                                    </small>
+                                `}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="text-end">
+            <small class="text-muted">Last updated: ${new Date(data.timestamp).toLocaleString()}</small>
+        </div>
+    `;
+    
+    contentDiv.innerHTML = html;
+}
+
+function toggleAutoRefresh() {
+    const btn = document.getElementById('autoRefreshBtn');
+    if (!btn) return;
+    
+    if (systemStatusAutoRefresh) {
+        // Stop auto refresh
+        systemStatusAutoRefresh = false;
+        if (systemStatusInterval) {
+            clearInterval(systemStatusInterval);
+            systemStatusInterval = null;
+        }
+        btn.innerHTML = '<i class="bi bi-play"></i> Auto Refresh';
+        btn.classList.remove('btn-outline-danger');
+        btn.classList.add('btn-outline-secondary');
+    } else {
+        // Start auto refresh (every 10 seconds)
+        systemStatusAutoRefresh = true;
+        systemStatusInterval = setInterval(loadSystemStatus, 10000);
+        btn.innerHTML = '<i class="bi bi-stop"></i> Stop Auto Refresh';
+        btn.classList.remove('btn-outline-secondary');
+        btn.classList.add('btn-outline-danger');
+        loadSystemStatus(); // Load immediately
+    }
+}
+
+// Load system status when the tab is shown
+document.addEventListener('DOMContentLoaded', function() {
+    const statusTab = document.getElementById('status-tab');
+    if (statusTab) {
+        statusTab.addEventListener('shown.bs.tab', function() {
+            loadSystemStatus();
+        });
+    }
 });
 
 </script>

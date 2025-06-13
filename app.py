@@ -88,6 +88,21 @@ except ImportError:
     )
     logger = logging.getLogger('webapp')
 
+# Import SQLLogger and SystemStatus components
+try:
+    from components.SQLLogger import sql_logger
+    SQL_LOGGER_AVAILABLE = True
+except ImportError:
+    SQL_LOGGER_AVAILABLE = False
+    logger.warning("SQLLogger component not available - SQL logging will be disabled")
+
+try:
+    from components.SystemStatus import system_status
+    SYSTEM_STATUS_AVAILABLE = True
+except ImportError:
+    SYSTEM_STATUS_AVAILABLE = False
+    logger.warning("SystemStatus component not available - system monitoring will be limited")
+
 # Application version
 __version__ = "1.1.1"
 
@@ -6981,6 +6996,110 @@ def admin_clear_cache():
         
     except Exception as e:
         logger.error(f"Error clearing caches: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/system_status')
+def admin_system_status():
+    """Get comprehensive system status (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        if not SYSTEM_STATUS_AVAILABLE:
+            return jsonify({'error': 'SystemStatus component not available'}), 500
+        
+        status = system_status.get_comprehensive_status()
+        return jsonify(status)
+        
+    except Exception as e:
+        logger.error(f"Error getting system status: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+# SQL Logging API endpoints
+@app.route('/admin/api/sql-logging/enable', methods=['POST'])
+def admin_enable_sql_logging():
+    """Enable SQL query logging (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        if not SQL_LOGGER_AVAILABLE:
+            return jsonify({'error': 'SQL Logger not available'}), 500
+        
+        success = sql_logger.enable_logging()
+        if success:
+            logger.info(f"Admin user {session.get('user_id')} enabled SQL logging")
+            return jsonify({'success': True, 'message': 'SQL logging enabled'})
+        else:
+            return jsonify({'error': 'Failed to enable SQL logging'}), 500
+        
+    except Exception as e:
+        logger.error(f"Error enabling SQL logging: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/sql-logging/disable', methods=['POST'])
+def admin_disable_sql_logging():
+    """Disable SQL query logging (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        if not SQL_LOGGER_AVAILABLE:
+            return jsonify({'error': 'SQL Logger not available'}), 500
+        
+        success = sql_logger.disable_logging()
+        if success:
+            logger.info(f"Admin user {session.get('user_id')} disabled SQL logging")
+            return jsonify({'success': True, 'message': 'SQL logging disabled'})
+        else:
+            return jsonify({'error': 'Failed to disable SQL logging'}), 500
+        
+    except Exception as e:
+        logger.error(f"Error disabling SQL logging: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/sql-logs')
+def admin_get_sql_logs():
+    """Get recent SQL query logs (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        if not SQL_LOGGER_AVAILABLE:
+            return jsonify({'error': 'SQL Logger not available'}), 500
+        
+        limit = min(int(request.args.get('limit', 100)), 500)  # Max 500 logs
+        logs = sql_logger.get_recent_logs(limit)
+        
+        return jsonify({
+            'logs': logs,
+            'enabled': sql_logger.is_enabled(),
+            'count': len(logs)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting SQL logs: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/sql-logs/clear', methods=['POST'])
+def admin_clear_sql_logs():
+    """Clear all SQL query logs (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        if not SQL_LOGGER_AVAILABLE:
+            return jsonify({'error': 'SQL Logger not available'}), 500
+        
+        success = sql_logger.clear_logs()
+        if success:
+            logger.info(f"Admin user {session.get('user_id')} cleared SQL logs")
+            return jsonify({'success': True, 'message': 'SQL logs cleared'})
+        else:
+            return jsonify({'error': 'Failed to clear SQL logs'}), 500
+        
+    except Exception as e:
+        logger.error(f"Error clearing SQL logs: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 # Route for About page
