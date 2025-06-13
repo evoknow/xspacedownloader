@@ -561,13 +561,6 @@
                                     </select>
                                 </div>
                                 
-                                <div class="me-3 mb-2">
-                                    <label for="volume" class="form-label">
-                                        <i class="bi bi-volume-up"></i> Volume
-                                    </label>
-                                    <input type="range" class="form-range" min="0" max="1" step="0.05" id="volume" value="1">
-                                </div>
-                                
                                 <div class="mb-2">
                                     <button id="skip-forward" class="btn btn-sm btn-outline-secondary me-1" title="Skip forward 30 seconds">
                                         <i class="bi bi-skip-forward"></i> 30s
@@ -1181,7 +1174,8 @@
     
     // Global function to seek audio player to specific time
     function seekToTime(seconds) {
-        if (mainPlayer) {
+        if (window.mainPlayer) {
+            const mainPlayer = window.mainPlayer;
             try {
                 // Remove previous highlights
                 document.querySelectorAll('.timecode-link').forEach(link => {
@@ -1198,11 +1192,11 @@
                 
                 // Seek to the time (adjusted for silence offset)
                 const adjustedTime = Math.max(0, seconds - (window.silenceOffset || 0));
-                mainPlayer.currentTime = adjustedTime;
+                window.mainPlayer.currentTime = adjustedTime;
                 
                 // Auto-play if paused
-                if (mainPlayer.paused) {
-                    mainPlayer.play().catch(e => {
+                if (window.mainPlayer.paused) {
+                    window.mainPlayer.play().catch(e => {
                         console.log('Auto-play prevented by browser:', e);
                         // Just seek without playing if auto-play is blocked
                     });
@@ -1224,9 +1218,9 @@
     
     // Global function to update current playing position highlight
     function updateCurrentSegmentHighlight() {
-        if (!mainPlayer) return;
+        if (!window.mainPlayer) return;
         
-        const currentTime = mainPlayer.currentTime;
+        const currentTime = window.mainPlayer.currentTime;
         const timecodeLinks = document.querySelectorAll('.timecode-link');
         let activeLink = null;
         
@@ -1401,14 +1395,6 @@
                     });
                 }
                 
-                // Volume control (Note: Plyr has built-in volume controls, but we keep this for compatibility)
-                const volume = document.getElementById('volume');
-                if (volume) {
-                    volume.addEventListener('input', function() {
-                        mainPlayer.volume = this.value;
-                    });
-                }
-                
                 // Remember playback position
                 const storageKey = 'xspace_position_' + spaceId;
                 
@@ -1447,7 +1433,14 @@
         }
         
         // Wait for Plyr to be ready before setting up tracking
-        setTimeout(setupAudioTracking, 100);
+        function waitForPlyr() {
+            if (window.mainPlayer) {
+                setupAudioTracking();
+            } else {
+                setTimeout(waitForPlyr, 100);
+            }
+        }
+        waitForPlyr();
             
         // Skip forward/backward buttons
         const skipForward = document.getElementById('skip-forward');
@@ -1455,16 +1448,16 @@
         
         if (skipForward) {
             skipForward.addEventListener('click', function() {
-                if (mainPlayer) {
-                    mainPlayer.currentTime = Math.min(mainPlayer.currentTime + 30, mainPlayer.duration);
+                if (window.mainPlayer) {
+                    window.mainPlayer.currentTime = Math.min(window.mainPlayer.currentTime + 30, window.mainPlayer.duration);
                 }
             });
         }
         
         if (skipBackward) {
             skipBackward.addEventListener('click', function() {
-                if (mainPlayer) {
-                    mainPlayer.currentTime = Math.max(mainPlayer.currentTime - 15, 0);
+                if (window.mainPlayer) {
+                    window.mainPlayer.currentTime = Math.max(window.mainPlayer.currentTime - 15, 0);
                 }
             });
         }
@@ -1481,7 +1474,8 @@
             
         // Keyboard shortcuts (Plyr has built-in keyboard support, but we can add custom ones)
         document.addEventListener('keydown', function(e) {
-            if (mainPlayer) {
+            if (window.mainPlayer) {
+                const mainPlayer = window.mainPlayer;
                 const audioPlayerElement = document.getElementById('audio-player');
                 if (audioPlayerElement) {
                     const rect = audioPlayerElement.getBoundingClientRect();
@@ -3774,6 +3768,9 @@
         });
     }
 
+    // Move Plyr player variables to global scope for the first script block
+    window.mainPlayer = null;
+    window.trimPlayer = null;
 </script>
 
 <!-- Load Plyr JS -->
@@ -3782,13 +3779,11 @@
 <!-- Initialize Plyr Players -->
 <script>
     // Initialize Plyr players with custom configuration
-    let mainPlayer, trimPlayer;
-    
     document.addEventListener('DOMContentLoaded', function() {
         // Initialize main audio player
         const mainAudioElement = document.getElementById('audio-player');
         if (mainAudioElement) {
-            mainPlayer = new Plyr(mainAudioElement, {
+            window.mainPlayer = new Plyr(mainAudioElement, {
                 controls: [
                     'play-large',
                     'restart',
@@ -3810,19 +3805,25 @@
             });
             
             // Add custom styling
-            mainPlayer.on('ready', function() {
-                updatePlayerInfo();
+            window.mainPlayer.on('ready', function() {
+                // updatePlayerInfo function is in the other script block
+                if (typeof updatePlayerInfo === 'function') {
+                    updatePlayerInfo();
+                }
             });
             
-            mainPlayer.on('timeupdate', function() {
-                updateTimeDisplay();
+            window.mainPlayer.on('timeupdate', function() {
+                // updateTimeDisplay function is in the other script block
+                if (typeof updateTimeDisplay === 'function') {
+                    updateTimeDisplay();
+                }
             });
         }
         
         // Initialize trim modal audio player
         const trimAudioElement = document.getElementById('trim-audio-preview');
         if (trimAudioElement) {
-            trimPlayer = new Plyr(trimAudioElement, {
+            window.trimPlayer = new Plyr(trimAudioElement, {
                 controls: [
                     'play',
                     'progress',
@@ -3840,7 +3841,7 @@
     });
     
     // Helper function to get the actual media element
-    function getMediaElement(player) {
+    window.getMediaElement = function(player) {
         return player ? player.media : null;
     }
 </script>
