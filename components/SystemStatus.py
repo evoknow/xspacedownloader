@@ -277,12 +277,25 @@ class SystemStatus:
             
             # Test the connection
             try:
+                # Handle different config formats
+                db_user = config.get('user') or config.get('username') or config.get('db_user')
+                db_password = config.get('password') or config.get('db_password')
+                db_name = config.get('database') or config.get('db_name') or config.get('name')
+                
+                if not db_user or not db_password or not db_name:
+                    return {
+                        'active': False,
+                        'status': 'error',
+                        'message': 'Missing database credentials in db_config.json',
+                        'enabled': False
+                    }
+                
                 conn = mysql.connector.connect(
                     host=config.get('host', 'localhost'),
                     port=config.get('port', 3306),
-                    user=config['user'],
-                    password=config['password'],
-                    database=config['database'],
+                    user=db_user,
+                    password=db_password,
+                    database=db_name,
                     connect_timeout=5
                 )
                 
@@ -299,7 +312,7 @@ class SystemStatus:
                     'enabled': True,
                     'host': config.get('host', 'localhost'),
                     'port': config.get('port', 3306),
-                    'database': config.get('database', 'unknown'),
+                    'database': db_name,
                     'message': f"Connected to {config.get('host', 'localhost')}:{config.get('port', 3306)}"
                 }
                 
@@ -310,7 +323,7 @@ class SystemStatus:
                     'enabled': True,
                     'host': config.get('host', 'localhost'),
                     'port': config.get('port', 3306),
-                    'database': config.get('database', 'unknown'),
+                    'database': db_name,
                     'message': f"Connection failed: {str(e)}"
                 }
                 
