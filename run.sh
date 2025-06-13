@@ -126,7 +126,12 @@ echo "Transcription worker check complete"
 # Start progress watcher if needed
 echo "Checking and starting progress watcher if needed..."
 chmod +x run_progress_watcher.sh
-./run_progress_watcher.sh 2>/dev/null || echo "Progress watcher already running or failed to start"
+if ./run_progress_watcher.sh; then
+    echo "Progress watcher started successfully"
+else
+    echo "Progress watcher failed to start or is already running"
+    echo "Check logs/bg_progress_watcher.log for details"
+fi
 echo "Progress watcher check complete"
 
 BG_PID=""
