@@ -1,0 +1,14 @@
+[Unit]
+Description=Run XSpace Downloader Auto Update every 6 hours
+Requires=xspacedownloader-update.service
+
+[Timer]
+# Run every 6 hours
+OnCalendar=0/6:00:00
+# Run 5 minutes after boot
+OnBootSec=5min
+# If the timer missed a run (e.g., system was down), run immediately
+Persistent=true
+
+[Install]
+WantedBy=timers.target

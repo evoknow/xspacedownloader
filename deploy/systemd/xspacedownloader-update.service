@@ -1,0 +1,17 @@
+[Unit]
+Description=XSpace Downloader Auto Update
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/var/www/production/xspacedowoad.com/website/xspacedownloader/auto_update.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=xspacedownloader-update
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
