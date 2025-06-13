@@ -1153,7 +1153,7 @@
             setCookie('xspace_user_id', cookieId, 365);
         }
         return cookieId;
-    }
+    };
     
     // Global function to seek audio player to specific time
     function seekToTime(seconds) {
@@ -1861,9 +1861,17 @@
         
         // Function to load transcript content
         function loadTranscript(transcriptId) {
+            console.log('Loading transcript:', transcriptId);
             fetch(`/api/transcript/${transcriptId}`)
-                .then(response => response.json())
+                .then(response => {
+                    console.log('Transcript response:', response);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
+                    console.log('Transcript data:', data);
                     if (data.error) {
                         transcriptContent.innerHTML = `
                             <div class="alert alert-danger">
@@ -1890,10 +1898,10 @@
                     }
                 })
                 .catch(error => {
-                    console.error('Error:', error);
+                    console.error('Error loading transcript:', error);
                     transcriptContent.innerHTML = `
                         <div class="alert alert-danger">
-                            An error occurred while loading the transcript.
+                            Error loading transcript: ${error.message}
                         </div>
                     `;
                 });
@@ -2181,8 +2189,16 @@
             });
             
             // Load initial transcript
-            if (languageSelector.options.length > 0) {
+            if (languageSelector && languageSelector.options.length > 0) {
+                console.log('Loading initial transcript with value:', languageSelector.value);
                 loadTranscript(languageSelector.value);
+            } else {
+                console.log('No language selector or no options available');
+                // Hide the loading spinner if no transcript is available
+                const loader = document.querySelector('.transcript-loader');
+                if (loader) {
+                    loader.style.display = 'none';
+                }
             }
         }
         
