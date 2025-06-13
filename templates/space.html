@@ -544,23 +544,6 @@
                             </audio>
                             
                             <div class="mt-3 d-flex justify-content-between flex-wrap">
-                                <div class="me-3 mb-2">
-                                    <label for="playback-speed" class="form-label">
-                                        <i class="bi bi-speedometer2"></i> Playback Speed
-                                    </label>
-                                    <select id="playback-speed" class="form-select form-select-sm" style="width: auto;">
-                                        <option value="0.50">0.50x</option>
-                                        <option value="0.75">0.75x</option>
-                                        <option value="1.00" selected>1.00x</option>
-                                        <option value="1.25">1.25x</option>
-                                        <option value="1.50">1.50x</option>
-                                        <option value="1.75">1.75x</option>
-                                        <option value="2.00">2.00x</option>
-                                        <option value="2.50">2.50x</option>
-                                        <option value="3.00">3.00x</option>
-                                    </select>
-                                </div>
-                                
                                 <div class="mb-2">
                                     <button id="skip-forward" class="btn btn-sm btn-outline-secondary me-1" title="Skip forward 30 seconds">
                                         <i class="bi bi-skip-forward"></i> 30s
@@ -1162,8 +1145,8 @@
         return null;
     }
     
-    // Function to get or create cookie ID
-    function getCookieId() {
+    // Function to get or create cookie ID (make it global)
+    window.getCookieId = function() {
         let cookieId = getCookie('xspace_user_id');
         if (!cookieId) {
             cookieId = 'user_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
@@ -1295,8 +1278,8 @@
                                     'Content-Type': 'application/json',
                                 },
                                 body: JSON.stringify({
-                                duration: Math.round(totalPlayDuration)
-                            })
+                                    duration: Math.round(totalPlayDuration)
+                                })
                         }).then(response => response.json())
                         .then(data => {
                             console.log('Play tracking response:', data);
@@ -1387,14 +1370,6 @@
                 // Setup timecode highlighting
                 mainPlayer.on('timeupdate', updateCurrentSegmentHighlight);
             
-                // Playback speed control (Note: Plyr has built-in speed controls, but we keep this for compatibility)
-                const playbackSpeed = document.getElementById('playback-speed');
-                if (playbackSpeed) {
-                    playbackSpeed.addEventListener('change', function() {
-                        mainPlayer.speed = parseFloat(this.value);
-                    });
-                }
-                
                 // Remember playback position
                 const storageKey = 'xspace_position_' + spaceId;
                 
@@ -1416,19 +1391,6 @@
                     localStorage.setItem(storageKey, mainPlayer.currentTime.toString());
                 });
                 
-                // Save speed preference
-                const speedKey = 'xspace_speed';
-                const savedSpeed = localStorage.getItem(speedKey);
-                if (savedSpeed && playbackSpeed) {
-                    mainPlayer.speed = parseFloat(savedSpeed);
-                    playbackSpeed.value = savedSpeed;
-                }
-                
-                if (playbackSpeed) {
-                    playbackSpeed.addEventListener('change', function() {
-                        localStorage.setItem(speedKey, this.value);
-                    });
-                }
             }
         }
         
@@ -3571,7 +3533,7 @@
                 // Save function
                 function saveTitle() {
                     const newTitle = input.value.trim();
-                    const cookieId = getCookieId();
+                    const cookieId = window.getCookieId();
                     
                     // Make API request to update title
                     fetch(`/api/space/${spaceId}/title`, {
@@ -3941,7 +3903,7 @@
         
         // Load notes
         function loadNotes() {
-            const cookieId = getCookieId();
+            const cookieId = window.getCookieId();
             fetch(`/api/spaces/${spaceId}/notes?cookie_id=${cookieId}`)
                 .then(response => response.json())
                 .then(data => {
