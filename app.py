@@ -4937,10 +4937,8 @@ def remove_tag_from_space(space_id, tag_id):
 def generate_video(space_id):
     """Generate MP4 video for a space with audio visualization."""
     try:
-        # Check if user can edit this space or is admin
+        # Get space details to verify space exists
         space = get_space_component()
-        
-        # Get space details for permission checking
         cursor = space.connection.cursor(dictionary=True)
         cursor.execute("SELECT user_id, cookie_id FROM spaces WHERE space_id = %s", (space_id,))
         space_details = cursor.fetchone()
@@ -4949,24 +4947,8 @@ def generate_video(space_id):
         if not space_details:
             return jsonify({'error': 'Space not found'}), 404
         
-        # Check permissions: space owner OR admin
-        user_id = session.get('user_id', 0)
-        cookie_id = request.cookies.get('xspace_user_id', '')
-        is_admin = session.get('is_admin', False)
-        
-        can_edit = False
-        
-        if is_admin:
-            can_edit = True
-        elif user_id > 0:
-            # Logged in user - must match user_id
-            can_edit = (space_details['user_id'] == user_id)
-        else:
-            # Not logged in - must match cookie_id
-            can_edit = (space_details['cookie_id'] == cookie_id and space_details['user_id'] == 0)
-        
-        if not can_edit:
-            return jsonify({'error': 'Unauthorized'}), 403
+        # Allow any user to generate videos for any space
+        # Video generation is a public feature available to all users
         
         # Check if audio file exists
         download_dir = app.config['DOWNLOAD_DIR']

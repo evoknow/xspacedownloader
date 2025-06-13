@@ -1295,6 +1295,9 @@
                         <button type="button" class="btn btn-sm btn-outline-danger" onclick="clearSQLLogs()">
                             <i class="bi bi-trash"></i> Clear
                         </button>
+                        <button type="button" class="btn btn-sm btn-outline-info" onclick="copySQLLogs()">
+                            <i class="bi bi-clipboard"></i> Copy All
+                        </button>
                     </div>
                 </div>
                 <div class="card-body">
@@ -4274,6 +4277,38 @@ function clearSQLLogs() {
     .catch(error => {
         console.error('Error clearing SQL logs:', error);
         showToast('Error clearing SQL logs', 'error');
+    });
+}
+
+function copySQLLogs() {
+    if (!currentSQLLogs || currentSQLLogs.length === 0) {
+        showToast('No logs to copy', 'warning');
+        return;
+    }
+    
+    // Format logs as plain text
+    let logText = '';
+    currentSQLLogs.forEach(log => {
+        logText += `[${log.timestamp}] ${log.level}: ${log.message}\n`;
+    });
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(logText).then(() => {
+        showToast('SQL logs copied to clipboard', 'success');
+    }).catch(err => {
+        console.error('Failed to copy logs:', err);
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = logText;
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            showToast('SQL logs copied to clipboard', 'success');
+        } catch (err) {
+            showToast('Failed to copy logs', 'error');
+        }
+        document.body.removeChild(textArea);
     });
 }
 

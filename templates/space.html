@@ -318,7 +318,7 @@
                         </button>
                         <!-- Smart download button - will be populated by JavaScript -->
                         <div id="download-container">
-                            <a href="/download/{{ space.space_id }}?attachment=1" class="btn btn-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Download file">
+                            <a href="/download/{{ space.space_id }}?attachment=1" class="btn btn-primary btn-sm text-white" data-bs-toggle="tooltip" data-bs-placement="top" title="Download file">
                                 <i class="bi bi-download"></i> <span class="d-none d-sm-inline">Download</span>
                             </a>
                         </div>
@@ -3635,7 +3635,7 @@
             const format = formats[0];
             downloadContainer.innerHTML = `
                 <a href="/download/${spaceId}?attachment=1&format=${format.format}" 
-                   class="btn btn-primary btn-sm" 
+                   class="btn btn-primary btn-sm text-white" 
                    data-bs-toggle="tooltip" 
                    data-bs-placement="top" 
                    title="Download ${format.name} (${format.size_formatted})">
@@ -3659,11 +3659,11 @@
             downloadContainer.innerHTML = `
                 <div class="btn-group">
                     <a href="/download/${spaceId}?attachment=1&format=${formats[0].format}" 
-                       class="btn btn-primary btn-sm">
+                       class="btn btn-primary btn-sm text-white">
                         <i class="bi bi-download"></i> <span class="d-none d-sm-inline">Download</span>
                     </a>
                     <button type="button" 
-                            class="btn btn-primary btn-sm dropdown-toggle dropdown-toggle-split" 
+                            class="btn btn-primary btn-sm dropdown-toggle dropdown-toggle-split text-white" 
                             data-bs-toggle="dropdown" 
                             aria-expanded="false"
                             data-bs-auto-close="true">
