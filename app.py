@@ -7121,6 +7121,86 @@ def admin_clear_sql_logs():
         logger.error(f"Error clearing SQL logs: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
+@app.route('/admin/api/administrator-guide', methods=['GET'])
+def admin_administrator_guide():
+    """Return administrator guide as HTML."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        import markdown
+        from datetime import datetime
+        import os
+        
+        # Read the markdown file
+        guide_path = os.path.join(os.path.dirname(__file__), 'ADMINISTRATOR_GUIDE.md')
+        
+        if not os.path.exists(guide_path):
+            return 'Administrator Guide not found. Please ensure ADMINISTRATOR_GUIDE.md exists.', 404
+        
+        with open(guide_path, 'r', encoding='utf-8') as f:
+            markdown_content = f.read()
+        
+        # Replace template variables
+        current_date = datetime.now().strftime('%B %d, %Y')
+        markdown_content = markdown_content.replace('{{ current_date }}', current_date)
+        
+        # Convert markdown to HTML
+        html_content = markdown.markdown(
+            markdown_content,
+            extensions=[
+                'markdown.extensions.tables',
+                'markdown.extensions.fenced_code',
+                'markdown.extensions.toc',
+                'markdown.extensions.codehilite'
+            ]
+        )
+        
+        return html_content, 200, {'Content-Type': 'text/html; charset=utf-8'}
+        
+    except ImportError:
+        return 'Markdown library not available. Please install: pip install markdown', 500
+    except Exception as e:
+        logger.error(f"Error serving administrator guide: {e}", exc_info=True)
+        return f'Error loading administrator guide: {str(e)}', 500
+
+@app.route('/admin/api/administrator-guide/download', methods=['GET'])
+def admin_administrator_guide_download():
+    """Return administrator guide as downloadable markdown file."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        from datetime import datetime
+        import os
+        
+        # Read the markdown file
+        guide_path = os.path.join(os.path.dirname(__file__), 'ADMINISTRATOR_GUIDE.md')
+        
+        if not os.path.exists(guide_path):
+            return 'Administrator Guide not found. Please ensure ADMINISTRATOR_GUIDE.md exists.', 404
+        
+        with open(guide_path, 'r', encoding='utf-8') as f:
+            markdown_content = f.read()
+        
+        # Replace template variables
+        current_date = datetime.now().strftime('%B %d, %Y')
+        markdown_content = markdown_content.replace('{{ current_date }}', current_date)
+        
+        # Return as downloadable file
+        response = Response(
+            markdown_content,
+            mimetype='text/markdown',
+            headers={
+                'Content-Disposition': f'attachment; filename="XSpace_Downloader_Administrator_Guide_{datetime.now().strftime("%Y%m%d")}.md"'
+            }
+        )
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error downloading administrator guide: {e}", exc_info=True)
+        return f'Error downloading administrator guide: {str(e)}', 500
+
 # Route for About page
 @app.route('/about')
 def about():

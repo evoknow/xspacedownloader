@@ -183,6 +183,11 @@
                 <i class="bi bi-activity"></i> System Status
             </button>
         </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="help-tab" data-bs-toggle="tab" data-bs-target="#help" type="button" role="tab">
+                <i class="bi bi-question-circle"></i> Help
+            </button>
+        </li>
         {% if is_localhost %}
         <li class="nav-item" role="presentation">
             <button class="nav-link" id="development-tab" data-bs-toggle="tab" data-bs-target="#development" type="button" role="tab">
@@ -1419,6 +1424,38 @@
                             <span class="visually-hidden">Loading...</span>
                         </div>
                         <p class="mt-2">Loading system status...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Help Tab -->
+        <div class="tab-pane fade" id="help" role="tabpanel">
+            <div class="card mt-3">
+                <div class="card-header bg-info text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="mb-0"><i class="bi bi-question-circle"></i> Administrator's Guide</h5>
+                            <small>Comprehensive guide for managing XSpace Downloader</small>
+                        </div>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-sm btn-outline-light" onclick="printGuide()">
+                                <i class="bi bi-printer"></i> Print
+                            </button>
+                            <a href="/admin/api/administrator-guide/download" class="btn btn-sm btn-outline-light" target="_blank">
+                                <i class="bi bi-download"></i> Download
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div id="administrator-guide-content" style="height: 600px; overflow-y: auto;">
+                        <div class="text-center p-5">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading guide...</span>
+                            </div>
+                            <p class="mt-3">Loading Administrator's Guide...</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -4922,7 +4959,278 @@ document.addEventListener('DOMContentLoaded', function() {
             loadSystemStatus();
         });
     }
+    
+    // Load administrator guide when help tab is shown
+    const helpTab = document.getElementById('help-tab');
+    if (helpTab) {
+        helpTab.addEventListener('shown.bs.tab', function() {
+            loadAdministratorGuide();
+        });
+    }
 });
+
+// Load administrator guide content
+function loadAdministratorGuide() {
+    const content = document.getElementById('administrator-guide-content');
+    if (!content) return;
+    
+    // Show loading state
+    content.innerHTML = `
+        <div class="text-center p-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading guide...</span>
+            </div>
+            <p class="mt-3">Loading Administrator's Guide...</p>
+        </div>
+    `;
+    
+    // Fetch guide content
+    fetch('/admin/api/administrator-guide')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return response.text();
+        })
+        .then(html => {
+            content.innerHTML = `<div class="p-4">${html}</div>`;
+            
+            // Add table of contents navigation
+            addTableOfContents();
+            
+            // Style the content
+            styleGuideContent();
+        })
+        .catch(error => {
+            console.error('Error loading administrator guide:', error);
+            content.innerHTML = `
+                <div class="alert alert-danger m-4">
+                    <h5><i class="bi bi-exclamation-triangle"></i> Error Loading Guide</h5>
+                    <p>Failed to load the Administrator's Guide: ${error.message}</p>
+                    <p>Please try refreshing the page or contact technical support.</p>
+                </div>
+            `;
+        });
+}
+
+// Add table of contents with jump links
+function addTableOfContents() {
+    const content = document.getElementById('administrator-guide-content');
+    const headings = content.querySelectorAll('h2, h3');
+    
+    if (headings.length === 0) return;
+    
+    // Create TOC container
+    const tocHtml = `
+        <div class="card mb-4" id="table-of-contents">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-list-ol"></i> Table of Contents</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    ${Array.from(headings).map((heading, index) => {
+                        const id = `section-${index}`;
+                        heading.id = id;
+                        const level = heading.tagName === 'H2' ? 'fw-bold' : 'ms-3';
+                        return `
+                            <div class="col-md-6 mb-2">
+                                <a href="#${id}" class="text-decoration-none ${level}" onclick="scrollToSection('${id}')">
+                                    ${heading.textContent}
+                                </a>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    const firstChild = content.querySelector('.p-4').firstElementChild;
+    if (firstChild) {
+        firstChild.insertAdjacentHTML('afterend', tocHtml);
+    }
+}
+
+// Scroll to specific section
+function scrollToSection(sectionId) {
+    const element = document.getElementById(sectionId);
+    if (element) {
+        const content = document.getElementById('administrator-guide-content');
+        const elementTop = element.offsetTop - content.offsetTop;
+        content.scrollTo({
+            top: elementTop - 20,
+            behavior: 'smooth'
+        });
+    }
+}
+
+// Style the guide content for better readability
+function styleGuideContent() {
+    const content = document.getElementById('administrator-guide-content');
+    
+    // Style code blocks
+    content.querySelectorAll('code').forEach(code => {
+        if (!code.parentElement.tagName === 'PRE') {
+            code.classList.add('bg-light', 'p-1', 'rounded');
+        }
+    });
+    
+    // Style pre blocks
+    content.querySelectorAll('pre').forEach(pre => {
+        pre.classList.add('bg-dark', 'text-light', 'p-3', 'rounded', 'overflow-auto');
+        const code = pre.querySelector('code');
+        if (code) {
+            code.classList.remove('bg-light', 'p-1');
+        }
+    });
+    
+    // Style tables
+    content.querySelectorAll('table').forEach(table => {
+        table.classList.add('table', 'table-striped', 'table-hover');
+        const wrapper = document.createElement('div');
+        wrapper.classList.add('table-responsive', 'my-3');
+        table.parentNode.insertBefore(wrapper, table);
+        wrapper.appendChild(table);
+    });
+    
+    // Style blockquotes
+    content.querySelectorAll('blockquote').forEach(blockquote => {
+        blockquote.classList.add('border-start', 'border-4', 'border-primary', 'ps-3', 'my-3');
+    });
+    
+    // Add copy buttons to code blocks
+    content.querySelectorAll('pre code').forEach((code, index) => {
+        const copyId = `copy-code-${index}`;
+        const copyBtn = `
+            <button class="btn btn-sm btn-outline-secondary position-absolute" 
+                    style="top: 10px; right: 10px;" 
+                    onclick="copyCodeBlock('${copyId}')"
+                    title="Copy code">
+                <i class="bi bi-clipboard"></i>
+            </button>
+        `;
+        code.id = copyId;
+        const pre = code.parentElement;
+        pre.style.position = 'relative';
+        pre.insertAdjacentHTML('beforeend', copyBtn);
+    });
+}
+
+// Copy code block to clipboard
+function copyCodeBlock(codeId) {
+    const codeElement = document.getElementById(codeId);
+    if (!codeElement) return;
+    
+    navigator.clipboard.writeText(codeElement.textContent).then(() => {
+        showToast('Code copied to clipboard', 'success');
+    }).catch(err => {
+        console.error('Failed to copy code:', err);
+        showToast('Failed to copy code', 'error');
+    });
+}
+
+// Print the administrator guide
+function printGuide() {
+    const content = document.getElementById('administrator-guide-content');
+    if (!content) {
+        showToast('No content to print', 'warning');
+        return;
+    }
+    
+    // Create a new window for printing
+    const printWindow = window.open('', '_blank');
+    const guideContent = content.innerHTML;
+    
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>XSpace Downloader - Administrator's Guide</title>
+            <style>
+                body { 
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                    line-height: 1.6;
+                    color: #333;
+                    max-width: 800px;
+                    margin: 0 auto;
+                    padding: 20px;
+                }
+                h1, h2, h3, h4, h5, h6 { 
+                    color: #2c3e50;
+                    margin-top: 30px;
+                    margin-bottom: 15px;
+                }
+                h1 { border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+                h2 { border-bottom: 1px solid #ecf0f1; padding-bottom: 5px; }
+                code { 
+                    background: #f8f9fa;
+                    padding: 2px 6px;
+                    border-radius: 3px;
+                    font-family: 'Monaco', 'Menlo', monospace;
+                }
+                pre { 
+                    background: #2c3e50;
+                    color: #ecf0f1;
+                    padding: 15px;
+                    border-radius: 5px;
+                    overflow-x: auto;
+                }
+                pre code { 
+                    background: none;
+                    padding: 0;
+                    color: inherit;
+                }
+                table { 
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 15px 0;
+                }
+                th, td { 
+                    border: 1px solid #ddd;
+                    padding: 8px 12px;
+                    text-align: left;
+                }
+                th { 
+                    background: #f8f9fa;
+                    font-weight: bold;
+                }
+                .alert { 
+                    padding: 12px;
+                    margin: 15px 0;
+                    border-radius: 4px;
+                    border-left: 4px solid #3498db;
+                    background: #f8f9fa;
+                }
+                blockquote {
+                    border-left: 4px solid #3498db;
+                    padding-left: 15px;
+                    margin: 15px 0;
+                    color: #666;
+                }
+                @media print {
+                    body { margin: 0; padding: 15px; }
+                    h1 { page-break-before: always; }
+                    h1:first-child { page-break-before: auto; }
+                    pre, blockquote { page-break-inside: avoid; }
+                }
+            </style>
+        </head>
+        <body>
+            ${guideContent}
+            <footer style="margin-top: 50px; padding-top: 20px; border-top: 1px solid #ddd; text-align: center; color: #666;">
+                <p>XSpace Downloader - Administrator's Guide</p>
+                <p>Generated on ${new Date().toLocaleDateString()}</p>
+            </footer>
+        </body>
+        </html>
+    `);
+    
+    printWindow.document.close();
+    printWindow.onload = function() {
+        printWindow.print();
+        printWindow.close();
+    };
+}
 
 </script>
 {% endblock %}
