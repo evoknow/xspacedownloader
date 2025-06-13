@@ -314,6 +314,15 @@ class SystemStatus:
             with open(db_config_path, 'r') as f:
                 config = json.load(f)
             
+            # Check if using MySQL
+            if config.get('type') != 'mysql' or 'mysql' not in config:
+                return {
+                    'active': False,
+                    'status': 'info',
+                    'message': 'Not using MySQL database (SQLite or other)',
+                    'enabled': False
+                }
+            
             # Try to import mysql.connector
             try:
                 import mysql.connector
@@ -327,22 +336,27 @@ class SystemStatus:
             
             # Test the connection
             try:
+                # Get MySQL config section
+                mysql_config = config.get('mysql', {})
+                
                 # Handle different config formats
-                db_user = config.get('user') or config.get('username') or config.get('db_user')
-                db_password = config.get('password') or config.get('db_password')
-                db_name = config.get('database') or config.get('db_name') or config.get('name')
+                db_user = mysql_config.get('user') or mysql_config.get('username') or mysql_config.get('db_user')
+                db_password = mysql_config.get('password') or mysql_config.get('db_password')
+                db_name = mysql_config.get('database') or mysql_config.get('db_name') or mysql_config.get('name')
+                db_host = mysql_config.get('host', 'localhost')
+                db_port = mysql_config.get('port', 3306)
                 
                 if not db_user or not db_password or not db_name:
                     return {
                         'active': False,
                         'status': 'error',
-                        'message': 'Missing database credentials in db_config.json',
+                        'message': 'Missing database credentials in mysql config section',
                         'enabled': False
                     }
                 
                 conn = mysql.connector.connect(
-                    host=config.get('host', 'localhost'),
-                    port=config.get('port', 3306),
+                    host=db_host,
+                    port=db_port,
                     user=db_user,
                     password=db_password,
                     database=db_name,
@@ -360,10 +374,10 @@ class SystemStatus:
                     'active': True,
                     'status': 'active',
                     'enabled': True,
-                    'host': config.get('host', 'localhost'),
-                    'port': config.get('port', 3306),
+                    'host': db_host,
+                    'port': db_port,
                     'database': db_name,
-                    'message': f"Connected to {config.get('host', 'localhost')}:{config.get('port', 3306)}"
+                    'message': f"Connected to {db_host}:{db_port}"
                 }
                 
             except mysql.connector.Error as e:
@@ -371,8 +385,8 @@ class SystemStatus:
                     'active': False,
                     'status': 'error',
                     'enabled': True,
-                    'host': config.get('host', 'localhost'),
-                    'port': config.get('port', 3306),
+                    'host': db_host,
+                    'port': db_port,
                     'database': db_name,
                     'message': f"Connection failed: {str(e)}"
                 }
@@ -394,8 +408,6 @@ class SystemStatus:
             'gunicorn_status': self.get_gunicorn_status(),
             'systemd_services': {
                 'xspacedownloader-gunicorn': self.get_systemd_service_status('xspacedownloader-gunicorn'),
-                'xspacedownloader-bg': self.get_systemd_service_status('xspacedownloader-bg'),
-                'xspacedownloader-transcribe': self.get_systemd_service_status('xspacedownloader-transcribe'),
                 'nginx': self.get_systemd_service_status('nginx')
             },
             'mysql_status': self.check_mysql_connection(),
