@@ -1276,17 +1276,17 @@
                                 body: JSON.stringify({
                                     duration: Math.round(totalPlayDuration)
                                 })
-                        }).then(response => response.json())
-                        .then(data => {
+                            }).then(response => response.json())
+                            .then(data => {
                             console.log('Play tracking response:', data);
                             if (!data.counted) {
                                 console.log('Play not counted:', data.reason);
                             } else {
                                 console.log('Play successfully tracked');
                             }
-                        }).catch(error => {
-                            console.error('Error tracking play:', error);
-                        });
+                            }).catch(error => {
+                                console.error('Error tracking play:', error);
+                            });
                     }
                 }
             }
@@ -1345,17 +1345,17 @@
                             body: JSON.stringify({
                                 duration: Math.round(totalPlayDuration)
                             })
-                        }).then(response => response.json())
-                        .then(data => {
+                            }).then(response => response.json())
+                            .then(data => {
                             console.log('Play tracking response (ended):', data);
                             if (!data.counted) {
                                 console.log('Play not counted:', data.reason);
                             } else {
                                 console.log('Play successfully tracked on ended');
                             }
-                        }).catch(error => {
-                            console.error('Error tracking play:', error);
-                        });
+                            }).catch(error => {
+                                console.error('Error tracking play:', error);
+                            });
                     }
                     
                     // Reset for next play
