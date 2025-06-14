@@ -1226,7 +1226,7 @@
     document.addEventListener('DOMContentLoaded', function() {
         const audioPlayer = document.getElementById('audio-player');
         const spaceId = '{{ space.space_id }}';
-        const spaceStatus = '{{ space.status|default("") }}';
+        window.spaceStatus = '{{ space.status|default("") }}';
         const minPlayDuration = {% if tracking_config and tracking_config.min_play_duration %}{{ tracking_config.min_play_duration }}{% else %}30{% endif %};
         
         // Initialize silence offset for timecode correction
@@ -3371,7 +3371,7 @@
         }
         
         // Download status tracking
-        if (spaceStatus === 'pending' || spaceStatus === 'downloading' || spaceStatus === 'in_progress') {
+        if (window.spaceStatus === 'pending' || window.spaceStatus === 'downloading' || window.spaceStatus === 'in_progress') {
             // Function to format file size
             function formatBytes(bytes, decimals = 2) {
                 if (bytes === 0) return '0 Bytes';
