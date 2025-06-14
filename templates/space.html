@@ -1225,7 +1225,7 @@
     
     document.addEventListener('DOMContentLoaded', function() {
         const audioPlayer = document.getElementById('audio-player');
-        const spaceId = '{{ space.space_id }}';
+        window.spaceId = '{{ space.space_id }}';
         window.spaceStatus = '{{ space.status|default("") }}';
         const minPlayDuration = {% if tracking_config and tracking_config.min_play_duration %}{{ tracking_config.min_play_duration }}{% else %}30{% endif %};
         
@@ -3633,7 +3633,7 @@
                 fetchMetadataBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Fetching...';
                 
                 // Make API request to fetch metadata
-                fetch(`/api/space/${spaceId}/metadata`, {
+                fetch(`/api/space/${window.spaceId}/metadata`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -3667,7 +3667,7 @@
     // Smart download button functionality
     function initializeSmartDownloadButton() {
         const downloadContainer = document.getElementById('download-container');
-        const spaceId = '{{ space.space_id }}';
+        const spaceId = window.spaceId || '{{ space.space_id }}';
         
         // Fetch available download formats
         fetch(`/api/spaces/${spaceId}/available-formats`)
@@ -3686,7 +3686,7 @@
 
     function updateDownloadButton(formats) {
         const downloadContainer = document.getElementById('download-container');
-        const spaceId = '{{ space.space_id }}';
+        const spaceId = window.spaceId || '{{ space.space_id }}';
         
         if (formats.length === 1) {
             // Single format - show simple button
@@ -3863,7 +3863,7 @@
             });
         }
         
-        const spaceId = '{{ space.space_id }}';
+        const spaceId = window.spaceId || '{{ space.space_id }}';
         let currentNoteId = null;
         
         // Function to get or create cookie ID
@@ -4621,7 +4621,7 @@
         
         function initializeVideoGeneration() {
             const generateBtn = document.getElementById('generate-video-btn');
-            const spaceId = '{{ space.space_id }}';
+            const spaceId = window.spaceId || '{{ space.space_id }}';
             
             if (generateBtn) {
                 // Check if video already exists
