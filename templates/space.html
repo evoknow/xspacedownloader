@@ -1225,8 +1225,8 @@
     
     document.addEventListener('DOMContentLoaded', function() {
         const audioPlayer = document.getElementById('audio-player');
-        const spaceId = '{{ space.space_id|escapejs }}';
-        const spaceStatus = '{{ space.status|default('')|escapejs }}';
+        const spaceId = '{{ space.space_id }}';
+        const spaceStatus = '{{ space.status|default("") }}';
         const minPlayDuration = {% if tracking_config and tracking_config.min_play_duration %}{{ tracking_config.min_play_duration }}{% else %}30{% endif %};
         
         // Initialize silence offset for timecode correction
@@ -4622,7 +4622,7 @@
         
         function initializeVideoGeneration() {
             const generateBtn = document.getElementById('generate-video-btn');
-            const spaceId = '{{ space.space_id|escapejs }}';
+            const spaceId = '{{ space.space_id }}';
             
             if (generateBtn) {
                 // Check if video already exists
