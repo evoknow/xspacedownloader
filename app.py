@@ -2778,70 +2778,19 @@ def download_space(space_id):
         
         filename = f"{filename}.{ext}"
         
-        # Handle range requests for audio streaming
-        if not attachment:
-            # Get file stats
-            file_size = os.path.getsize(file_path)
-            
-            # Check for range header
-            range_header = request.headers.get('range')
-            if range_header:
-                try:
-                    # Parse range header
-                    byte_start = 0
-                    byte_end = file_size - 1
-                    
-                    if range_header:
-                        match = re.search(r'bytes=(\d+)-(\d*)', range_header)
-                        if match:
-                            byte_start = int(match.group(1))
-                            if match.group(2):
-                                byte_end = int(match.group(2))
-                    
-                    # Ensure valid range
-                    if byte_start >= file_size or byte_end >= file_size:
-                        return Response(status=416)  # Range Not Satisfiable
-                    
-                    # Read the requested chunk
-                    chunk_size = byte_end - byte_start + 1
-                    
-                    def generate():
-                        with open(file_path, 'rb') as f:
-                            f.seek(byte_start)
-                            remaining = chunk_size
-                            while remaining > 0:
-                                to_read = min(4096, remaining)
-                                chunk = f.read(to_read)
-                                if not chunk:
-                                    break
-                                remaining -= len(chunk)
-                                yield chunk
-                    
-                    # Return partial content
-                    response = Response(
-                        generate(),
-                        status=206,
-                        mimetype=content_type,
-                        headers={
-                            'Content-Range': f'bytes {byte_start}-{byte_end}/{file_size}',
-                            'Accept-Ranges': 'bytes',
-                            'Content-Length': str(chunk_size),
-                            'Cache-Control': 'no-cache'
-                        }
-                    )
-                    return response
-                except Exception as e:
-                    logger.error(f"Error handling range request: {e}")
-                    # Fall back to normal response
-            
-            # No range request - return full file with proper headers
-            response = send_file(file_path, mimetype=content_type, conditional=True)
-            response.headers['Accept-Ranges'] = 'bytes'
-            response.headers['Cache-Control'] = 'no-cache'
-            return response
-        else:
+        # Return the file with proper handling for range requests
+        if attachment:
             # Download as attachment
             return send_file(file_path, as_attachment=True, download_name=filename, mimetype=content_type)
+        else:
+            # Stream the file with conditional=True to handle range requests automatically
+            # Flask's send_file with conditional=True handles byte-range requests properly
+            return send_file(
+                file_path, 
+                mimetype=content_type,
+                as_attachment=False,
+                conditional=True  # This enables automatic range request handling
+            )
             
     except Exception as e:
         logger.error(f"Error downloading space: {e}", exc_info=True)
