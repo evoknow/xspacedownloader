@@ -7,20 +7,20 @@ Wants=mysql.service
 Type=exec
 User=nginx
 Group=nginx
-WorkingDirectory=/var/www/production/xspacedowoad.com/website/htdocs
-Environment="PATH=/var/www/production/xspacedowoad.com/website/htdocs/venv/bin:/usr/local/bin:/usr/bin:/bin"
-Environment="PYTHONPATH=/var/www/production/xspacedowoad.com/website/htdocs"
-ExecStart=/var/www/production/xspacedowoad.com/website/htdocs/bg_downloader_wrapper.sh
+WorkingDirectory=/var/www/production/xspacedownload.com/website/htdocs
+Environment="PATH=/var/www/production/xspacedownload.com/website/htdocs/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONPATH=/var/www/production/xspacedownload.com/website/htdocs"
+ExecStart=/var/www/production/xspacedownload.com/website/htdocs/bg_downloader_wrapper.sh
 Restart=always
 RestartSec=10
 
 # Allow access to needed directories
-ReadWritePaths=/var/www/production/xspacedowoad.com/website/htdocs/downloads
-ReadWritePaths=/var/www/production/xspacedowoad.com/website/htdocs/logs
+ReadWritePaths=/var/www/production/xspacedownload.com/website/htdocs/downloads
+ReadWritePaths=/var/www/production/xspacedownload.com/website/htdocs/logs
 
 # Logging
-StandardOutput=append:/var/www/production/xspacedowoad.com/website/htdocs/logs/bg-downloader.log
-StandardError=append:/var/www/production/xspacedowoad.com/website/htdocs/logs/bg-downloader-error.log
+StandardOutput=append:/var/www/production/xspacedownload.com/website/htdocs/logs/bg-downloader.log
+StandardError=append:/var/www/production/xspacedownload.com/website/htdocs/logs/bg-downloader-error.log
 
 [Install]
 WantedBy=multi-user.target

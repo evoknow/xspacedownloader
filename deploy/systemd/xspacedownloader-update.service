@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=/var/www/production/xspacedowoad.com/website/xspacedownloader/auto_update.sh
+ExecStart=/var/www/production/xspacedownload.com/website/xspacedownloader/auto_update.sh
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=xspacedownloader-update

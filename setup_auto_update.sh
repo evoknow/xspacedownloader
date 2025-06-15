@@ -15,7 +15,7 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # Configuration
-REPO_DIR="/var/www/production/xspacedowoad.com/website/xspacedownloader"
+REPO_DIR="/var/www/production/xspacedownload.com/website/xspacedownloader"
 AUTO_UPDATE_SCRIPT="$REPO_DIR/auto_update.sh"
 
 # Check if auto_update.sh exists

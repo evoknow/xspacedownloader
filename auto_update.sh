@@ -15,7 +15,7 @@
 #
 
 # Configuration
-REPO_DIR="/var/www/production/xspacedowoad.com/website/xspacedownloader"
+REPO_DIR="/var/www/production/xspacedownload.com/website/xspacedownloader"
 LOG_FILE="$REPO_DIR/logs/auto_update.log"
 UPDATE_SCRIPT="$REPO_DIR/update.py"
 LOCK_FILE="/tmp/xspacedownloader_update.lock"

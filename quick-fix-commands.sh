@@ -12,7 +12,7 @@ cat << 'EOF'
 
     # ADD THIS BLOCK before your location / block:
     location ^~ /audio/ {
-        alias /var/www/production/xspacedowoad.com/website/htdocs/downloads/;
+        alias /var/www/production/xspacedownload.com/website/htdocs/downloads/;
         
         sendfile on;
         tcp_nopush on;

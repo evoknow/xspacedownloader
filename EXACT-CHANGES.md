@@ -56,7 +56,7 @@ As a last resort, disable sendfile for the audio location:
 
 ```nginx
 location ^~ /audio/ {
-    alias /var/www/production/xspacedowoad.com/website/htdocs/downloads/;
+    alias /var/www/production/xspacedownload.com/website/htdocs/downloads/;
     
     # Disable sendfile for audio location
     sendfile off;

@@ -24,7 +24,7 @@ server {
     tcp_nopush on;
     tcp_nodelay on;
 
-    root /var/www/production/xspacedowoad.com/website/htdocs;
+    root /var/www/production/xspacedownload.com/website/htdocs;
 
     access_log /var/www/production/logs/nginx/xspacedownload.com.log;
     error_log /var/www/production/logs/nginx/xspacedownload.com.log;
@@ -35,7 +35,7 @@ server {
 
     # Direct audio serving - NO HTTP/2, NO proxy
     location ^~ /audio/ {
-        alias /var/www/production/xspacedowoad.com/website/htdocs/downloads/;
+        alias /var/www/production/xspacedownload.com/website/htdocs/downloads/;
         
         # Force HTTP/1.1 for this location
         http2 off;
@@ -113,7 +113,7 @@ server {
 
     # Static files
     location /static {
-        alias /var/www/production/xspacedowoad.com/website/htdocs/static;
+        alias /var/www/production/xspacedownload.com/website/htdocs/static;
         expires 30d;
         add_header Cache-Control "public, immutable";
     }
@@ -161,11 +161,11 @@ Make sure Nginx can access the files:
 
 ```bash
 # Check permissions
-ls -la /var/www/production/xspacedowoad.com/website/htdocs/downloads/
+ls -la /var/www/production/xspacedownload.com/website/htdocs/downloads/
 
 # Fix if needed
-sudo chown -R www-data:www-data /var/www/production/xspacedowoad.com/website/htdocs/downloads/
-sudo chmod -R 644 /var/www/production/xspacedowoad.com/website/htdocs/downloads/*.mp3
+sudo chown -R www-data:www-data /var/www/production/xspacedownload.com/website/htdocs/downloads/
+sudo chmod -R 644 /var/www/production/xspacedownload.com/website/htdocs/downloads/*.mp3
 ```
 
 ## Step 5: Test Configuration

@@ -57,7 +57,7 @@ I notice you have duplicate `Content-Type: audio/mpeg` headers. Clean this up:
 
 ```nginx
 location ^~ /audio/ {
-    alias /var/www/production/xspacedowoad.com/website/htdocs/downloads/;
+    alias /var/www/production/xspacedownload.com/website/htdocs/downloads/;
     
     try_files $uri =404;
     

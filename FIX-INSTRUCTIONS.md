@@ -17,7 +17,7 @@ Edit `/etc/nginx/sites-available/xspacedownload.com.conf` and add this **BEFORE*
 ```nginx
 # Direct audio serving - bypasses all proxy/HTTP2 issues
 location ^~ /audio/ {
-    alias /var/www/production/xspacedowoad.com/website/htdocs/downloads/;
+    alias /var/www/production/xspacedownload.com/website/htdocs/downloads/;
     
     sendfile on;
     tcp_nopush on;

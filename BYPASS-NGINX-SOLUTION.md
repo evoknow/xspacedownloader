@@ -69,8 +69,8 @@ If the above is too complex, serve files directly from Nginx:
 
 ```bash
 # Create symlinks or move files to a web directory
-mkdir -p /var/www/production/xspacedowoad.com/website/htdocs/audio
-ln -s /path/to/your/downloads/* /var/www/production/xspacedowoad.com/website/htdocs/audio/
+mkdir -p /var/www/production/xspacedownload.com/website/htdocs/audio
+ln -s /path/to/your/downloads/* /var/www/production/xspacedownload.com/website/htdocs/audio/
 ```
 
 ### 2. Update Nginx to serve files directly
@@ -78,7 +78,7 @@ ln -s /path/to/your/downloads/* /var/www/production/xspacedowoad.com/website/htd
 ```nginx
 # Add this location block
 location ^~ /audio/ {
-    alias /var/www/production/xspacedowoad.com/website/htdocs/audio/;
+    alias /var/www/production/xspacedownload.com/website/htdocs/audio/;
     
     # Perfect for media streaming
     sendfile on;

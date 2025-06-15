@@ -71,7 +71,7 @@ location ^~ /download/ {
    # REMOVE THIS ENTIRE BLOCK:
    location ^~ /downloads/ {
        internal;
-       alias /var/www/production/xspacedowoad.com/website/htdocs/downloads/;
+       alias /var/www/production/xspacedownload.com/website/htdocs/downloads/;
        # ... entire block
    }
    ```
