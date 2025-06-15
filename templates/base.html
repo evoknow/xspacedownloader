@@ -22,6 +22,45 @@
             transition: background-color 0.3s ease, color 0.3s ease;
         }
         
+        /* System message banner */
+        .system-message-banner {
+            position: fixed;
+            top: 80px; /* Just below navbar */
+            left: 0;
+            right: 0;
+            z-index: 1025;
+            background-color: #0d6efd;
+            color: white;
+            padding: 8px 0;
+            text-align: center;
+            font-size: 0.9rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .system-message-banner.show {
+            display: block;
+        }
+        
+        .system-message-banner.hide {
+            display: none;
+        }
+        
+        body.has-system-message {
+            padding-top: 130px; /* Extra space when system message is shown */
+        }
+        
+        @media (max-width: 768px) {
+            .system-message-banner {
+                top: 60px; /* Mobile navbar height */
+                font-size: 0.8rem;
+                padding: 6px 0;
+            }
+            
+            body.has-system-message {
+                padding-top: 100px; /* Mobile spacing */
+            }
+        }
+        
         /* Wider container for desktop, responsive for mobile */
         .main-container {
             max-width: 1400px;
@@ -343,6 +382,16 @@
         </div>
     </nav>
     
+    <!-- System Message Banner -->
+    <div id="system-message-banner" class="system-message-banner hide">
+        <div class="container-fluid">
+            <span id="system-message-text"></span>
+            <button type="button" class="btn btn-sm btn-outline-light ms-2" id="dismiss-system-message" style="padding: 2px 8px;">
+                <i class="bi bi-x"></i>
+            </button>
+        </div>
+    </div>
+    
     <!-- Main Container -->
     <div class="main-container">
         <!-- Flash messages -->
@@ -484,6 +533,166 @@
             
             // Initialize the theme system
             initializeTheme();
+        });
+        
+        // System Messages and Service Status
+        let serviceStatus = {
+            transcription_enabled: true,
+            video_generation_enabled: true,
+            translation_enabled: true
+        };
+        
+        // Function to load service status
+        function loadServiceStatus() {
+            fetch('/api/service_status')
+                .then(response => response.json())
+                .then(data => {
+                    serviceStatus = data;
+                    updateServiceButtons();
+                })
+                .catch(error => {
+                    console.error('Error loading service status:', error);
+                });
+        }
+        
+        // Function to update service buttons based on status
+        function updateServiceButtons() {
+            // Transcribe buttons
+            const transcribeButtons = document.querySelectorAll('[data-service="transcription"]');
+            transcribeButtons.forEach(btn => {
+                if (!serviceStatus.transcription_enabled) {
+                    btn.disabled = true;
+                    btn.title = 'Transcription service is temporarily disabled';
+                    if (btn.classList.contains('btn-primary')) {
+                        btn.classList.remove('btn-primary');
+                        btn.classList.add('btn-secondary');
+                    }
+                } else {
+                    btn.disabled = false;
+                    btn.title = '';
+                    if (btn.classList.contains('btn-secondary') && btn.dataset.originalClass) {
+                        btn.classList.remove('btn-secondary');
+                        btn.classList.add(btn.dataset.originalClass);
+                    }
+                }
+            });
+            
+            // Video generation buttons
+            const videoButtons = document.querySelectorAll('[data-service="video"]');
+            videoButtons.forEach(btn => {
+                if (!serviceStatus.video_generation_enabled) {
+                    btn.disabled = true;
+                    btn.title = 'Video generation service is temporarily disabled';
+                    if (btn.classList.contains('btn-primary')) {
+                        btn.classList.remove('btn-primary');
+                        btn.classList.add('btn-secondary');
+                    }
+                } else {
+                    btn.disabled = false;
+                    btn.title = '';
+                    if (btn.classList.contains('btn-secondary') && btn.dataset.originalClass) {
+                        btn.classList.remove('btn-secondary');
+                        btn.classList.add(btn.dataset.originalClass);
+                    }
+                }
+            });
+            
+            // Translation buttons
+            const translateButtons = document.querySelectorAll('[data-service="translation"]');
+            translateButtons.forEach(btn => {
+                if (!serviceStatus.translation_enabled) {
+                    btn.disabled = true;
+                    btn.title = 'Translation service is temporarily disabled';
+                    if (btn.classList.contains('btn-primary')) {
+                        btn.classList.remove('btn-primary');
+                        btn.classList.add('btn-secondary');
+                    }
+                } else {
+                    btn.disabled = false;
+                    btn.title = '';
+                    if (btn.classList.contains('btn-secondary') && btn.dataset.originalClass) {
+                        btn.classList.remove('btn-secondary');
+                        btn.classList.add(btn.dataset.originalClass);
+                    }
+                }
+            });
+        }
+        
+        // Function to load and display system messages
+        function loadSystemMessages() {
+            fetch('/api/system_messages')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.messages && data.messages.length > 0) {
+                        displaySystemMessage(data.messages[0]); // Show first active message
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading system messages:', error);
+                });
+        }
+        
+        // Function to display system message
+        function displaySystemMessage(message) {
+            const cookieName = `system_message_dismissed_${message.id}`;
+            const isDismissed = getCookie(cookieName);
+            
+            if (!isDismissed) {
+                const banner = document.getElementById('system-message-banner');
+                const text = document.getElementById('system-message-text');
+                const dismissBtn = document.getElementById('dismiss-system-message');
+                
+                text.textContent = message.message;
+                banner.classList.remove('hide');
+                banner.classList.add('show');
+                document.body.classList.add('has-system-message');
+                
+                // Handle dismiss button
+                dismissBtn.onclick = function() {
+                    dismissSystemMessage(message.id);
+                };
+            }
+        }
+        
+        // Function to dismiss system message
+        function dismissSystemMessage(messageId) {
+            const cookieName = `system_message_dismissed_${messageId}`;
+            setCookie(cookieName, 'true', 30); // Remember for 30 days
+            
+            const banner = document.getElementById('system-message-banner');
+            banner.classList.remove('show');
+            banner.classList.add('hide');
+            document.body.classList.remove('has-system-message');
+        }
+        
+        // Cookie helper functions
+        function setCookie(name, value, days) {
+            const expires = new Date();
+            expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+            document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
+        }
+        
+        function getCookie(name) {
+            const nameEQ = name + "=";
+            const ca = document.cookie.split(';');
+            for (let i = 0; i < ca.length; i++) {
+                let c = ca[i];
+                while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+                if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+            }
+            return null;
+        }
+        
+        // Initialize system on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadServiceStatus();
+            loadSystemMessages();
+            
+            // Refresh service status every 30 seconds
+            setInterval(loadServiceStatus, 30000);
+            
+            // Refresh system messages every 5 minutes
+            setInterval(loadSystemMessages, 300000);
         });
     </script>
     

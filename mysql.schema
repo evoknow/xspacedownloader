@@ -24,6 +24,35 @@ CREATE TABLE `api_keys` (
   CONSTRAINT `api_keys_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='API keys for external application access';
 
+-- Table structure for table `system_messages`
+DROP TABLE IF EXISTS `system_messages`;
+CREATE TABLE `system_messages` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `message` text NOT NULL COMMENT 'The system message content',
+  `start_date` datetime NOT NULL COMMENT 'When the message should start displaying',
+  `end_date` datetime NOT NULL COMMENT 'When the message should stop displaying',
+  `status` int NOT NULL DEFAULT '0' COMMENT 'Status: 0 = pending, 1 = displayed, -1 = deleted',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_status` (`status`),
+  KEY `idx_dates` (`start_date`,`end_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='System-wide messages for users';
+
+-- Table structure for table `app_settings`
+DROP TABLE IF EXISTS `app_settings`;
+CREATE TABLE `app_settings` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `setting_name` varchar(100) NOT NULL COMMENT 'Name of the setting',
+  `setting_value` text COMMENT 'Value of the setting',
+  `setting_type` varchar(50) DEFAULT 'string' COMMENT 'Type of setting (string, boolean, integer, json)',
+  `description` text COMMENT 'Description of the setting',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `setting_name` (`setting_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Application-wide settings';
+
 -- Table structure for table `email_config`
 DROP TABLE IF EXISTS `email_config`;
 CREATE TABLE `email_config` (
@@ -223,6 +252,13 @@ CREATE TABLE `verification_tokens` (
   KEY `idx_tokens_type` (`token_type`),
   CONSTRAINT `verification_tokens_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Add default app settings
+INSERT INTO `app_settings` (`setting_name`, `setting_value`, `setting_type`, `description`)
+VALUES 
+    ('transcription_enabled', 'true', 'boolean', 'Enable/disable transcription service'),
+    ('video_generation_enabled', 'true', 'boolean', 'Enable/disable video generation service')
+ON DUPLICATE KEY UPDATE `setting_name` = VALUES(`setting_name`);
 
 -- Add default admin user if it doesn't exist
 INSERT INTO `users` (`email`, `password`, `status`)

@@ -2790,6 +2790,7 @@ def download_space(space_id):
             response.headers['X-Accel-Redirect'] = f'/downloads/{base_filename}'
             response.headers['Content-Type'] = content_type
             response.headers['Content-Disposition'] = f'inline; filename="{filename}"'
+            response.headers['X-Accel-Buffering'] = 'no'
             
             # Optional: Add content length for progress bars
             response.headers['Content-Length'] = str(file_size)
