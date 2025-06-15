@@ -2778,19 +2778,26 @@ def download_space(space_id):
         
         filename = f"{filename}.{ext}"
         
-        # Return the file with proper handling for range requests
-        if attachment:
-            # Download as attachment
-            return send_file(file_path, as_attachment=True, download_name=filename, mimetype=content_type)
+        # Use X-Accel-Redirect to let Nginx handle the file serving and byte-range requests
+        # This prevents HTTP/2 protocol errors when seeking
+        if not attachment:
+            # For streaming, use X-Accel-Redirect
+            # Get just the filename from the full path
+            base_filename = os.path.basename(file_path)
+            
+            # Create response with X-Accel-Redirect header
+            response = Response()
+            response.headers['X-Accel-Redirect'] = f'/downloads/{base_filename}'
+            response.headers['Content-Type'] = content_type
+            response.headers['Content-Disposition'] = f'inline; filename="{filename}"'
+            
+            # Optional: Add content length for progress bars
+            response.headers['Content-Length'] = str(file_size)
+            
+            return response
         else:
-            # Stream the file with conditional=True to handle range requests automatically
-            # Flask's send_file with conditional=True handles byte-range requests properly
-            return send_file(
-                file_path, 
-                mimetype=content_type,
-                as_attachment=False,
-                conditional=True  # This enables automatic range request handling
-            )
+            # For downloads, we can still use send_file since byte-range isn't needed
+            return send_file(file_path, as_attachment=True, download_name=filename, mimetype=content_type)
             
     except Exception as e:
         logger.error(f"Error downloading space: {e}", exc_info=True)
