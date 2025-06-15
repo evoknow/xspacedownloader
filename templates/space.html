@@ -534,10 +534,16 @@
                 <div class="audio-player mb-4">
                     <div class="card">
                         <div class="card-body">
-                            <audio id="audio-player" controls class="w-100" data-plyr-config='{"hideControls": false}'>
+                            <!-- Temporarily disable Plyr for testing -->
+                            <audio id="audio-player" controls class="w-100" preload="metadata">
                                 <source src="/audio/{{ space.space_id }}.mp3" type="audio/mpeg">
                                 Your browser does not support the audio element.
                             </audio>
+                            
+                            <!-- Debug info -->
+                            <div class="mt-2 small text-muted">
+                                <strong>Debug:</strong> Using native HTML5 audio (Plyr disabled for testing)
+                            </div>
                             
                             <div class="mt-3 d-flex justify-content-between flex-wrap">
                                 <div class="mb-2">
@@ -933,7 +939,8 @@
                 </div>
                 
                 <div class="mb-3">
-                    <audio id="trim-audio-preview" controls class="w-100" data-plyr-config='{"hideControls": false}'>
+                    <!-- Temporarily disable Plyr for testing -->
+                    <audio id="trim-audio-preview" controls class="w-100" preload="metadata">
                         <source src="/audio/{{ space.space_id }}.mp3" type="audio/mpeg">
                         Your browser does not support the audio element.
                     </audio>
