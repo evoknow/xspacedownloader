@@ -3758,11 +3758,11 @@
 
 <!-- Initialize Plyr Players -->
 <script>
-    // Initialize Plyr players with custom configuration
+    // DISABLED: Initialize Plyr players with custom configuration (for testing)
     document.addEventListener('DOMContentLoaded', function() {
-        // Initialize main audio player
+        // DISABLED: Initialize main audio player
         const mainAudioElement = document.getElementById('audio-player');
-        if (mainAudioElement) {
+        if (false && mainAudioElement) { // DISABLED FOR TESTING
             window.mainPlayer = new Plyr(mainAudioElement, {
                 controls: [
                     'play-large',
@@ -3807,9 +3807,9 @@
             });
         }
         
-        // Initialize trim modal audio player
+        // DISABLED: Initialize trim modal audio player
         const trimAudioElement = document.getElementById('trim-audio-preview');
-        if (trimAudioElement) {
+        if (false && trimAudioElement) { // DISABLED FOR TESTING
             window.trimPlayer = new Plyr(trimAudioElement, {
                 controls: [
                     'play',
