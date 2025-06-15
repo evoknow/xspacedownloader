@@ -24,7 +24,7 @@ Add this to your Nginx `/audio/` location:
 
 ```nginx
 location ^~ /audio/ {
-    alias /var/www/production/xspacedowoad.com/website/htdocs/downloads/;
+    alias /var/www/production/xspacedownload.com/website/htdocs/downloads/;
     
     try_files $uri =404;
     
@@ -50,7 +50,7 @@ location ^~ /audio/ {
 
 ```nginx
 location ^~ /audio/ {
-    alias /var/www/production/xspacedowoad.com/website/htdocs/downloads/;
+    alias /var/www/production/xspacedownload.com/website/htdocs/downloads/;
     
     try_files $uri =404;
     
@@ -66,7 +66,7 @@ location ^~ /audio/ {
 
 ```nginx
 location ^~ /audio/ {
-    alias /var/www/production/xspacedowoad.com/website/htdocs/downloads/;
+    alias /var/www/production/xspacedownload.com/website/htdocs/downloads/;
     
     try_files $uri =404;
     
@@ -82,7 +82,7 @@ location ^~ /audio/ {
 
 ```nginx
 location ^~ /audio/ {
-    alias /var/www/production/xspacedowoad.com/website/htdocs/downloads/;
+    alias /var/www/production/xspacedownload.com/website/htdocs/downloads/;
     
     try_files $uri =404;
     

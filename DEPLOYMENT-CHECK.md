@@ -55,7 +55,7 @@ Run these on your server where the Flask app is hosted:
 
 ```bash
 # 1. Check current code version
-cd /var/www/production/xspacedowoad.com/website/htdocs
+cd /var/www/production/xspacedownload.com/website/htdocs
 git log --oneline -1
 
 # 2. Check if Flask app is running
