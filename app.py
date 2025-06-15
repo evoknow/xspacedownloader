@@ -2778,19 +2778,64 @@ def download_space(space_id):
         
         filename = f"{filename}.{ext}"
         
-        # Return the file directly from Flask (no X-Accel-Redirect)
+        # Return the file directly from Flask with range request support
         if attachment:
             # Download as attachment
             return send_file(file_path, as_attachment=True, download_name=filename, mimetype=content_type)
         else:
-            # Stream the file - Flask will handle range requests
-            return send_file(
-                file_path, 
-                mimetype=content_type,
-                as_attachment=False,
-                conditional=True,
-                max_age=3600
-            )
+            # Manual range request handling to avoid HTTP/2 issues
+            range_header = request.headers.get('Range')
+            
+            if not range_header:
+                # No range request - return full file
+                response = send_file(file_path, mimetype=content_type, as_attachment=False)
+                response.headers['Accept-Ranges'] = 'bytes'
+                response.headers['Content-Length'] = str(file_size)
+                return response
+            
+            # Handle range request manually
+            try:
+                # Parse range header (e.g., "bytes=1024-2048" or "bytes=1024-")
+                range_match = re.match(r'bytes=(\d+)-(\d*)', range_header)
+                if not range_match:
+                    # Invalid range header
+                    response = send_file(file_path, mimetype=content_type, as_attachment=False)
+                    response.headers['Accept-Ranges'] = 'bytes'
+                    return response
+                
+                start = int(range_match.group(1))
+                end = int(range_match.group(2)) if range_match.group(2) else file_size - 1
+                
+                # Ensure valid range
+                if start >= file_size or end >= file_size or start > end:
+                    return Response(status=416)  # Range Not Satisfiable
+                
+                # Read the specific byte range
+                length = end - start + 1
+                
+                with open(file_path, 'rb') as f:
+                    f.seek(start)
+                    data = f.read(length)
+                
+                # Return partial content response
+                response = Response(
+                    data,
+                    status=206,  # Partial Content
+                    mimetype=content_type
+                )
+                response.headers['Content-Range'] = f'bytes {start}-{end}/{file_size}'
+                response.headers['Accept-Ranges'] = 'bytes'
+                response.headers['Content-Length'] = str(length)
+                response.headers['Cache-Control'] = 'no-cache'
+                
+                return response
+                
+            except Exception as e:
+                logger.error(f"Error handling range request: {e}")
+                # Fall back to full file
+                response = send_file(file_path, mimetype=content_type, as_attachment=False)
+                response.headers['Accept-Ranges'] = 'bytes'
+                return response
             
     except Exception as e:
         logger.error(f"Error downloading space: {e}", exc_info=True)
