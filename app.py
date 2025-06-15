@@ -330,6 +330,56 @@ def get_space_component():
         logger.error(f"Error getting Space component: {e}")
         return None
 
+def check_service_enabled(service_name):
+    """Check if a service is enabled in app settings."""
+    try:
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        cursor.execute("""
+            SELECT setting_value 
+            FROM app_settings 
+            WHERE setting_name = %s
+        """, (service_name,))
+        
+        result = cursor.fetchone()
+        cursor.close()
+        
+        if result:
+            return result['setting_value'].lower() == 'true'
+        
+        # Default to enabled if setting not found
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error checking service setting {service_name}: {e}")
+        # Default to enabled on error
+        return True
+
+def get_active_system_messages():
+    """Get currently active system messages."""
+    try:
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        cursor.execute("""
+            SELECT id, message
+            FROM system_messages
+            WHERE status = 1
+              AND start_date <= NOW()
+              AND end_date >= NOW()
+            ORDER BY start_date DESC
+        """)
+        
+        messages = cursor.fetchall()
+        cursor.close()
+        
+        return messages
+        
+    except Exception as e:
+        logger.error(f"Error getting system messages: {e}")
+        return []
+
 def index():
     """Home page with form to submit a space URL."""
     # Check if setup is needed (no admin exists)
@@ -2728,11 +2778,70 @@ def download_space(space_id):
         
         filename = f"{filename}.{ext}"
         
-        # Return the file
-        if attachment:
-            return send_file(file_path, as_attachment=True, download_name=filename, mimetype=content_type)
+        # Handle range requests for audio streaming
+        if not attachment:
+            # Get file stats
+            file_size = os.path.getsize(file_path)
+            
+            # Check for range header
+            range_header = request.headers.get('range')
+            if range_header:
+                try:
+                    # Parse range header
+                    byte_start = 0
+                    byte_end = file_size - 1
+                    
+                    if range_header:
+                        match = re.search(r'bytes=(\d+)-(\d*)', range_header)
+                        if match:
+                            byte_start = int(match.group(1))
+                            if match.group(2):
+                                byte_end = int(match.group(2))
+                    
+                    # Ensure valid range
+                    if byte_start >= file_size or byte_end >= file_size:
+                        return Response(status=416)  # Range Not Satisfiable
+                    
+                    # Read the requested chunk
+                    chunk_size = byte_end - byte_start + 1
+                    
+                    def generate():
+                        with open(file_path, 'rb') as f:
+                            f.seek(byte_start)
+                            remaining = chunk_size
+                            while remaining > 0:
+                                to_read = min(4096, remaining)
+                                chunk = f.read(to_read)
+                                if not chunk:
+                                    break
+                                remaining -= len(chunk)
+                                yield chunk
+                    
+                    # Return partial content
+                    response = Response(
+                        generate(),
+                        status=206,
+                        mimetype=content_type,
+                        headers={
+                            'Content-Range': f'bytes {byte_start}-{byte_end}/{file_size}',
+                            'Accept-Ranges': 'bytes',
+                            'Content-Length': str(chunk_size),
+                            'Cache-Control': 'no-cache'
+                        }
+                    )
+                    return response
+                except Exception as e:
+                    logger.error(f"Error handling range request: {e}")
+                    # Fall back to normal response
+            
+            # No range request - return full file with proper headers
+            response = send_file(file_path, mimetype=content_type, conditional=True)
+            response.headers['Accept-Ranges'] = 'bytes'
+            response.headers['Cache-Control'] = 'no-cache'
+            return response
         else:
-            return send_file(file_path, mimetype=content_type, conditional=True)
+            # Download as attachment
+            return send_file(file_path, as_attachment=True, download_name=filename, mimetype=content_type)
             
     except Exception as e:
         logger.error(f"Error downloading space: {e}", exc_info=True)
@@ -3095,6 +3204,10 @@ def api_translate_languages():
 @app.route('/api/translate', methods=['POST'])
 def api_translate():
     """API endpoint to translate text."""
+    # Check if transcription service is enabled (translation is part of transcription)
+    if not check_service_enabled('transcription_enabled'):
+        return jsonify({'error': 'Translation service is temporarily disabled'}), 503
+    
     if not TRANSLATE_AVAILABLE:
         return jsonify({'error': 'Translation service is not available'}), 503
         
@@ -4941,6 +5054,10 @@ def remove_tag_from_space(space_id, tag_id):
 def generate_video(space_id):
     """Generate MP4 video for a space with audio visualization."""
     try:
+        # Check if video generation service is enabled
+        if not check_service_enabled('video_generation_enabled'):
+            return jsonify({'error': 'Video generation service is temporarily disabled'}), 503
+        
         # Get space details to verify space exists
         space = get_space_component()
         cursor = space.connection.cursor(dictionary=True)
@@ -6385,6 +6502,252 @@ def admin_get_translation_queue():
         logger.error(f"Error getting translation queue: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
+@app.route('/admin/api/service_settings', methods=['GET', 'POST'])
+def admin_service_settings():
+    """Get or update service settings (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        if request.method == 'GET':
+            # Get current settings
+            cursor.execute("""
+                SELECT setting_name, setting_value, setting_type, description
+                FROM app_settings
+                WHERE setting_name IN ('transcription_enabled', 'video_generation_enabled')
+            """)
+            settings = cursor.fetchall()
+            
+            # Convert to dictionary
+            settings_dict = {}
+            for setting in settings:
+                value = setting['setting_value']
+                if setting['setting_type'] == 'boolean':
+                    value = value.lower() == 'true'
+                settings_dict[setting['setting_name']] = {
+                    'value': value,
+                    'type': setting['setting_type'],
+                    'description': setting['description']
+                }
+            
+            cursor.close()
+            return jsonify({'settings': settings_dict})
+        
+        else:  # POST
+            data = request.get_json()
+            updated = []
+            
+            # Update transcription setting
+            if 'transcription_enabled' in data:
+                value = 'true' if data['transcription_enabled'] else 'false'
+                cursor.execute("""
+                    UPDATE app_settings 
+                    SET setting_value = %s, updated_at = NOW()
+                    WHERE setting_name = 'transcription_enabled'
+                """, (value,))
+                updated.append('transcription_enabled')
+            
+            # Update video generation setting
+            if 'video_generation_enabled' in data:
+                value = 'true' if data['video_generation_enabled'] else 'false'
+                cursor.execute("""
+                    UPDATE app_settings 
+                    SET setting_value = %s, updated_at = NOW()
+                    WHERE setting_name = 'video_generation_enabled'
+                """, (value,))
+                updated.append('video_generation_enabled')
+            
+            space.connection.commit()
+            cursor.close()
+            
+            logger.info(f"Admin updated service settings: {updated}")
+            
+            return jsonify({
+                'success': True,
+                'message': f'Updated settings: {", ".join(updated)}',
+                'updated': updated
+            })
+            
+    except Exception as e:
+        logger.error(f"Error managing service settings: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/system_messages', methods=['GET', 'POST'])
+def admin_system_messages():
+    """Get or create system messages (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        if request.method == 'GET':
+            # Get all non-deleted messages
+            cursor.execute("""
+                SELECT id, message, start_date, end_date, status,
+                       created_at, updated_at
+                FROM system_messages
+                WHERE status != -1
+                ORDER BY start_date DESC
+            """)
+            messages = cursor.fetchall()
+            
+            # Convert datetime objects to strings
+            for msg in messages:
+                msg['start_date'] = msg['start_date'].isoformat() if msg['start_date'] else None
+                msg['end_date'] = msg['end_date'].isoformat() if msg['end_date'] else None
+                msg['created_at'] = msg['created_at'].isoformat() if msg['created_at'] else None
+                msg['updated_at'] = msg['updated_at'].isoformat() if msg['updated_at'] else None
+            
+            cursor.close()
+            return jsonify({'messages': messages})
+        
+        else:  # POST - Create new message
+            data = request.get_json()
+            
+            # Validate required fields
+            if not all(k in data for k in ['message', 'start_date', 'end_date']):
+                return jsonify({'error': 'Missing required fields'}), 400
+            
+            cursor.execute("""
+                INSERT INTO system_messages (message, start_date, end_date, status)
+                VALUES (%s, %s, %s, 0)
+            """, (data['message'], data['start_date'], data['end_date']))
+            
+            message_id = cursor.lastrowid
+            space.connection.commit()
+            cursor.close()
+            
+            logger.info(f"Admin created system message ID: {message_id}")
+            
+            return jsonify({
+                'success': True,
+                'message': 'System message created successfully',
+                'id': message_id
+            }), 201
+            
+    except Exception as e:
+        logger.error(f"Error managing system messages: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/service_status')
+def api_service_status():
+    """Get current service status for frontend."""
+    try:
+        transcription_enabled = check_service_enabled('transcription_enabled')
+        video_generation_enabled = check_service_enabled('video_generation_enabled')
+        
+        return jsonify({
+            'transcription_enabled': transcription_enabled,
+            'video_generation_enabled': video_generation_enabled,
+            'translation_enabled': transcription_enabled  # Translation is part of transcription
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting service status: {e}")
+        return jsonify({
+            'transcription_enabled': True,
+            'video_generation_enabled': True,
+            'translation_enabled': True
+        })
+
+@app.route('/api/system_messages')
+def api_system_messages():
+    """Get active system messages for display."""
+    try:
+        messages = get_active_system_messages()
+        return jsonify({'messages': messages})
+        
+    except Exception as e:
+        logger.error(f"Error getting system messages: {e}")
+        return jsonify({'messages': []})
+
+@app.route('/admin/api/system_messages/<int:message_id>', methods=['PUT', 'DELETE'])
+def admin_update_system_message(message_id):
+    """Update or delete a system message (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        if request.method == 'DELETE':
+            # Soft delete by setting status to -1
+            cursor.execute("""
+                UPDATE system_messages 
+                SET status = -1, updated_at = NOW()
+                WHERE id = %s
+            """, (message_id,))
+            
+            if cursor.rowcount == 0:
+                cursor.close()
+                return jsonify({'error': 'Message not found'}), 404
+            
+            space.connection.commit()
+            cursor.close()
+            
+            logger.info(f"Admin deleted system message ID: {message_id}")
+            
+            return jsonify({
+                'success': True,
+                'message': 'System message deleted successfully'
+            })
+        
+        else:  # PUT - Update message
+            data = request.get_json()
+            
+            # Build update query dynamically
+            update_fields = []
+            params = []
+            
+            if 'message' in data:
+                update_fields.append('message = %s')
+                params.append(data['message'])
+            
+            if 'start_date' in data:
+                update_fields.append('start_date = %s')
+                params.append(data['start_date'])
+            
+            if 'end_date' in data:
+                update_fields.append('end_date = %s')
+                params.append(data['end_date'])
+            
+            if 'status' in data:
+                update_fields.append('status = %s')
+                params.append(data['status'])
+            
+            if not update_fields:
+                return jsonify({'error': 'No fields to update'}), 400
+            
+            update_fields.append('updated_at = NOW()')
+            params.append(message_id)
+            
+            query = f"UPDATE system_messages SET {', '.join(update_fields)} WHERE id = %s"
+            cursor.execute(query, params)
+            
+            if cursor.rowcount == 0:
+                cursor.close()
+                return jsonify({'error': 'Message not found'}), 404
+            
+            space.connection.commit()
+            cursor.close()
+            
+            logger.info(f"Admin updated system message ID: {message_id}")
+            
+            return jsonify({
+                'success': True,
+                'message': 'System message updated successfully'
+            })
+            
+    except Exception as e:
+        logger.error(f"Error updating system message: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/admin/api/queue/video')
 def admin_get_video_queue():
     """Get video generation queue status (admin only)."""
@@ -7213,6 +7576,13 @@ def about():
 def transcribe_space(space_id):
     """Submit a space for transcription."""
     try:
+        # Check if transcription service is enabled
+        if not check_service_enabled('transcription_enabled'):
+            if request.is_json:
+                return jsonify({'error': 'Transcription service is temporarily disabled'}), 503
+            flash('Transcription service is temporarily disabled', 'warning')
+            return redirect(url_for('space_page', space_id=space_id))
+        
         # Check if SpeechToText component is available
         if not SPEECH_TO_TEXT_AVAILABLE:
             if request.is_json:

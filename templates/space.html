@@ -3774,7 +3774,14 @@
                 hideControls: false,
                 clickToPlay: true,
                 keyboard: { focused: true, global: false },
-                tooltips: { controls: true, seek: true }
+                tooltips: { controls: true, seek: true },
+                // Reduce buffer to prevent excessive range requests
+                mediaMetadata: {
+                    title: '{{ space.title|default(space.space_id) }}'
+                },
+                // Optimize for streaming
+                invertTime: false,
+                seekTime: 10
             });
             
             // Add custom styling
