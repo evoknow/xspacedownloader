@@ -115,79 +115,86 @@ def create_missing_tables():
     """Create any missing tables from the schema."""
     try:
         db = DatabaseManager()
-        cursor = db.connection.cursor()
         
         logger.info("Checking and creating missing tables...")
         
-        created_tables = []
-        for table_name, create_sql in CREATE_TABLES.items():
+        with db.get_connection() as connection:
+            cursor = connection.cursor()
+            
+            created_tables = []
+            for table_name, create_sql in CREATE_TABLES.items():
+                try:
+                    # Check if table exists
+                    cursor.execute(f"""
+                        SELECT COUNT(*) as count 
+                        FROM information_schema.tables 
+                        WHERE table_schema = DATABASE() 
+                        AND table_name = '{table_name}'
+                    """)
+                    exists = cursor.fetchone()[0] > 0
+                    
+                    if not exists:
+                        logger.info(f"Creating table: {table_name}")
+                        cursor.execute(create_sql)
+                        created_tables.append(table_name)
+                    else:
+                        logger.info(f"Table already exists: {table_name}")
+                        
+                except Exception as e:
+                    logger.error(f"Error creating table {table_name}: {e}")
+            
+            # Commit table creations
+            connection.commit()
+            
+            # Insert default data
+            logger.info("Inserting default data...")
+            for table_name, inserts in DEFAULT_DATA.items():
+                if table_name in created_tables or True:  # Always try to insert defaults
+                    for query, data_list in inserts:
+                        for data in data_list:
+                            try:
+                                cursor.execute(query, data)
+                            except Exception as e:
+                                logger.debug(f"Could not insert default data for {table_name}: {e}")
+            
+            # Commit default data
+            connection.commit()
+            cursor.close()
+            
+            if created_tables:
+                logger.info(f"Successfully created tables: {', '.join(created_tables)}")
+            else:
+                logger.info("All tables already exist")
+        
+        # Check credits column in separate connection
+        with db.get_connection() as connection:
+            cursor = connection.cursor()
             try:
-                # Check if table exists
-                cursor.execute(f"""
+                cursor.execute("""
                     SELECT COUNT(*) as count 
-                    FROM information_schema.tables 
+                    FROM information_schema.columns 
                     WHERE table_schema = DATABASE() 
-                    AND table_name = '{table_name}'
+                    AND table_name = 'users' 
+                    AND column_name = 'credits'
                 """)
-                exists = cursor.fetchone()[0] > 0
+                credits_exists = cursor.fetchone()[0] > 0
                 
-                if not exists:
-                    logger.info(f"Creating table: {table_name}")
-                    cursor.execute(create_sql)
-                    created_tables.append(table_name)
+                if not credits_exists:
+                    logger.info("Adding credits column to users table...")
+                    cursor.execute("""
+                        ALTER TABLE users 
+                        ADD COLUMN credits DECIMAL(10,2) NOT NULL DEFAULT 5.00 
+                        COMMENT 'User credits in USD'
+                    """)
+                    connection.commit()
+                    logger.info("Credits column added successfully")
                 else:
-                    logger.info(f"Table already exists: {table_name}")
+                    logger.info("Credits column already exists in users table")
                     
             except Exception as e:
-                logger.error(f"Error creating table {table_name}: {e}")
-        
-        # Commit table creations
-        db.connection.commit()
-        
-        # Insert default data
-        logger.info("Inserting default data...")
-        for table_name, inserts in DEFAULT_DATA.items():
-            if table_name in created_tables or True:  # Always try to insert defaults
-                for query, data_list in inserts:
-                    for data in data_list:
-                        try:
-                            cursor.execute(query, data)
-                        except Exception as e:
-                            logger.debug(f"Could not insert default data for {table_name}: {e}")
-        
-        # Commit default data
-        db.connection.commit()
-        cursor.close()
-        
-        if created_tables:
-            logger.info(f"Successfully created tables: {', '.join(created_tables)}")
-        else:
-            logger.info("All tables already exist")
-            
-        # Also ensure the credits column exists in users table
-        try:
-            cursor = db.connection.cursor()
-            cursor.execute("""
-                SELECT COUNT(*) as count 
-                FROM information_schema.columns 
-                WHERE table_schema = DATABASE() 
-                AND table_name = 'users' 
-                AND column_name = 'credits'
-            """)
-            credits_exists = cursor.fetchone()[0] > 0
-            
-            if not credits_exists:
-                logger.info("Adding credits column to users table...")
-                cursor.execute("""
-                    ALTER TABLE users 
-                    ADD COLUMN credits DECIMAL(10,2) NOT NULL DEFAULT 5.00 
-                    COMMENT 'User credits in USD'
-                """)
-                db.connection.commit()
-                logger.info("Credits column added successfully")
-            cursor.close()
-        except Exception as e:
-            logger.error(f"Error checking/adding credits column: {e}")
+                logger.error(f"Error checking/adding credits column: {e}")
+            finally:
+                cursor.close()
             
         return True
         
