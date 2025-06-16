@@ -7799,17 +7799,20 @@ def admin_compute_cost():
         return jsonify({'error': 'Unauthorized'}), 403
     
     try:
+        from components.DatabaseManager import DatabaseManager
+        db = DatabaseManager()
+        
         if request.method == 'GET':
             # Get current compute cost setting
-            space = get_space_component()
-            cursor = space.connection.cursor(dictionary=True)
-            
-            cursor.execute("""
-                SELECT setting_value FROM app_settings 
-                WHERE setting_name = 'compute_cost_per_second'
-            """)
-            result = cursor.fetchone()
-            cursor.close()
+            with db.get_connection() as connection:
+                cursor = connection.cursor(dictionary=True)
+                
+                cursor.execute("""
+                    SELECT setting_value FROM app_settings 
+                    WHERE setting_name = 'compute_cost_per_second'
+                """)
+                result = cursor.fetchone()
+                cursor.close()
             
             cost_per_second = float(result['setting_value']) if result else 0.001
             return jsonify({'cost_per_second': cost_per_second})
@@ -7818,18 +7821,18 @@ def admin_compute_cost():
             data = request.get_json()
             cost_per_second = float(data.get('cost_per_second', 0.001))
             
-            space = get_space_component()
-            cursor = space.connection.cursor()
-            
-            # Update or insert the setting
-            cursor.execute("""
-                INSERT INTO app_settings (setting_name, setting_value, setting_type, description)
-                VALUES ('compute_cost_per_second', %s, 'decimal', 'Cost per second for compute operations')
-                ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
-            """, (str(cost_per_second),))
-            
-            space.connection.commit()
-            cursor.close()
+            with db.get_connection() as connection:
+                cursor = connection.cursor()
+                
+                # Update or insert the setting
+                cursor.execute("""
+                    INSERT INTO app_settings (setting_name, setting_value, setting_type, description)
+                    VALUES ('compute_cost_per_second', %s, 'decimal', 'Cost per second for compute operations')
+                    ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                """, (str(cost_per_second),))
+                
+                connection.commit()
+                cursor.close()
             
             logger.info(f"Admin updated compute cost to ${cost_per_second}/second")
             
@@ -7850,18 +7853,21 @@ def admin_get_ai_costs():
         return jsonify({'error': 'Unauthorized'}), 403
     
     try:
-        space = get_space_component()
-        cursor = space.connection.cursor(dictionary=True)
+        from components.DatabaseManager import DatabaseManager
+        db = DatabaseManager()
         
-        cursor.execute("""
-            SELECT id, vendor, model, input_token_cost_per_million_tokens, 
-                   output_token_cost_per_million_tokens, created_at, updated_at
-            FROM ai_api_cost
-            ORDER BY vendor, model
-        """)
-        
-        costs = cursor.fetchall()
-        cursor.close()
+        with db.get_connection() as connection:
+            cursor = connection.cursor(dictionary=True)
+            
+            cursor.execute("""
+                SELECT id, vendor, model, input_token_cost_per_million_tokens, 
+                       output_token_cost_per_million_tokens, created_at, updated_at
+                FROM ai_api_cost
+                ORDER BY vendor, model
+            """)
+            
+            costs = cursor.fetchall()
+            cursor.close()
         
         return jsonify({'costs': costs})
         
@@ -7885,21 +7891,24 @@ def admin_add_ai_cost():
         if not vendor or not model:
             return jsonify({'error': 'Vendor and model are required'}), 400
         
-        space = get_space_component()
-        cursor = space.connection.cursor()
+        from components.DatabaseManager import DatabaseManager
+        db = DatabaseManager()
         
-        cursor.execute("""
-            INSERT INTO ai_api_cost 
-            (vendor, model, input_token_cost_per_million_tokens, output_token_cost_per_million_tokens)
-            VALUES (%s, %s, %s, %s)
-            ON DUPLICATE KEY UPDATE
-            input_token_cost_per_million_tokens = VALUES(input_token_cost_per_million_tokens),
-            output_token_cost_per_million_tokens = VALUES(output_token_cost_per_million_tokens),
-            updated_at = NOW()
-        """, (vendor, model, input_cost, output_cost))
-        
-        space.connection.commit()
-        cursor.close()
+        with db.get_connection() as connection:
+            cursor = connection.cursor()
+            
+            cursor.execute("""
+                INSERT INTO ai_api_cost 
+                (vendor, model, input_token_cost_per_million_tokens, output_token_cost_per_million_tokens)
+                VALUES (%s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                input_token_cost_per_million_tokens = VALUES(input_token_cost_per_million_tokens),
+                output_token_cost_per_million_tokens = VALUES(output_token_cost_per_million_tokens),
+                updated_at = NOW()
+            """, (vendor, model, input_cost, output_cost))
+            
+            connection.commit()
+            cursor.close()
         
         logger.info(f"Admin added/updated AI cost: {vendor}/{model}")
         
@@ -7919,41 +7928,44 @@ def admin_credit_stats():
         return jsonify({'error': 'Unauthorized'}), 403
     
     try:
-        space = get_space_component()
-        cursor = space.connection.cursor(dictionary=True)
+        from components.DatabaseManager import DatabaseManager
+        db = DatabaseManager()
         
-        # Get user credit statistics
-        cursor.execute("""
-            SELECT 
-                COUNT(*) as user_count,
-                COALESCE(SUM(credits), 0) as total_credits,
-                COALESCE(AVG(credits), 0) as avg_credits,
-                COALESCE(MIN(credits), 0) as min_credits,
-                COALESCE(MAX(credits), 0) as max_credits
-            FROM users 
-            WHERE status = 1
-        """)
-        credit_stats = cursor.fetchone()
-        
-        # Get cost breakdown by type (last 30 days)
-        cursor.execute("""
-            SELECT cost_type, SUM(amount) as total_cost
-            FROM space_cost 
-            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-            GROUP BY cost_type
-        """)
-        cost_by_type = {row['cost_type']: float(row['total_cost']) for row in cursor.fetchall()}
-        
-        # Get cost breakdown by vendor (last 30 days)
-        cursor.execute("""
-            SELECT COALESCE(ai_vendor, 'compute') as vendor, SUM(amount) as total_cost
-            FROM space_cost 
-            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-            GROUP BY ai_vendor
-        """)
-        cost_by_vendor = {row['vendor']: float(row['total_cost']) for row in cursor.fetchall()}
-        
-        cursor.close()
+        with db.get_connection() as connection:
+            cursor = connection.cursor(dictionary=True)
+            
+            # Get user credit statistics
+            cursor.execute("""
+                SELECT 
+                    COUNT(*) as user_count,
+                    COALESCE(SUM(credits), 0) as total_credits,
+                    COALESCE(AVG(credits), 0) as avg_credits,
+                    COALESCE(MIN(credits), 0) as min_credits,
+                    COALESCE(MAX(credits), 0) as max_credits
+                FROM users 
+                WHERE status = 1
+            """)
+            credit_stats = cursor.fetchone()
+            
+            # Get cost breakdown by type (last 30 days)
+            cursor.execute("""
+                SELECT cost_type, SUM(amount) as total_cost
+                FROM space_cost 
+                WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+                GROUP BY cost_type
+            """)
+            cost_by_type = {row['cost_type']: float(row['total_cost']) for row in cursor.fetchall()}
+            
+            # Get cost breakdown by vendor (last 30 days)
+            cursor.execute("""
+                SELECT COALESCE(ai_vendor, 'compute') as vendor, SUM(amount) as total_cost
+                FROM space_cost 
+                WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+                GROUP BY ai_vendor
+            """)
+            cost_by_vendor = {row['vendor']: float(row['total_cost']) for row in cursor.fetchall()}
+            
+            cursor.close()
         
         return jsonify({
             'user_count': credit_stats['user_count'],
@@ -7976,20 +7988,23 @@ def admin_add_weekly_credits():
         return jsonify({'error': 'Unauthorized'}), 403
     
     try:
-        space = get_space_component()
-        cursor = space.connection.cursor()
+        from components.DatabaseManager import DatabaseManager
+        db = DatabaseManager()
         
-        # Add $5 to all active users
-        cursor.execute("""
-            UPDATE users 
-            SET credits = credits + 5.00,
-                updated_at = NOW()
-            WHERE status = 1
-        """)
-        
-        users_updated = cursor.rowcount
-        space.connection.commit()
-        cursor.close()
+        with db.get_connection() as connection:
+            cursor = connection.cursor()
+            
+            # Add $5 to all active users
+            cursor.execute("""
+                UPDATE users 
+                SET credits = credits + 5.00,
+                    updated_at = NOW()
+                WHERE status = 1
+            """)
+            
+            users_updated = cursor.rowcount
+            connection.commit()
+            cursor.close()
         
         logger.info(f"Admin added $5 credits to {users_updated} users")
         
