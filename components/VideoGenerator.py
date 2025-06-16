@@ -15,6 +15,25 @@ from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
+# Setup video generation specific logger
+video_logger = logging.getLogger('video_generation')
+video_logger.setLevel(logging.DEBUG)
+
+# Create logs directory if it doesn't exist
+os.makedirs('logs', exist_ok=True)
+
+# Create file handler for video.log
+video_handler = logging.FileHandler('logs/video.log')
+video_handler.setLevel(logging.DEBUG)
+
+# Create formatter
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+video_handler.setFormatter(formatter)
+
+# Add handler if not already added
+if not any(isinstance(h, logging.FileHandler) and h.baseFilename.endswith('video.log') for h in video_logger.handlers):
+    video_logger.addHandler(video_handler)
+
 class VideoGenerator:
     """Generates MP4 videos with audio visualization from audio files."""
     
@@ -328,6 +347,13 @@ class VideoGenerator:
         Returns:
             bool: Success flag
         """
+        video_logger.info("=" * 80)
+        video_logger.info(f"Starting video generation for job: {job_data.get('job_id')}")
+        video_logger.info(f"Audio path: {audio_path}")
+        video_logger.info(f"Video path: {video_path}")
+        video_logger.info(f"Audio file exists: {os.path.exists(audio_path)}")
+        video_logger.info(f"Audio file size: {os.path.getsize(audio_path) if os.path.exists(audio_path) else 'N/A'} bytes")
+        
         try:
             # Update progress
             job_data['progress'] = 25
@@ -335,13 +361,19 @@ class VideoGenerator:
                 json.dump(job_data, f, indent=2)
             
             # Process audio to remove leading silence
+            video_logger.info("Processing audio to remove leading silence...")
             processed_audio_path = self._remove_leading_silence(audio_path, job_data.get('job_id'))
+            video_logger.info(f"Processed audio path: {processed_audio_path}")
             
             # Extract space information
             space_data = job_data.get('space_data', {})
             title = space_data.get('title', 'Audio Space')
             host = space_data.get('metadata', {}).get('host', 'Unknown Host')
             job_id = job_data.get('job_id')
+            
+            video_logger.info(f"Space title: {title}")
+            video_logger.info(f"Host: {host}")
+            video_logger.info(f"Job ID: {job_id}")
             
             # Get branding configuration
             brand_config = self._get_brand_config()
@@ -610,12 +642,29 @@ class VideoGenerator:
             logger.info(f"Creating styled video cover for: {title}")
             logger.info(f"Running ffmpeg command: {' '.join(cmd)}")
             
+            # Log detailed command for debugging
+            video_logger.info("=" * 60)
+            video_logger.info("FFMPEG COMMAND DETAILS:")
+            video_logger.info("Command parts:")
+            for i, part in enumerate(cmd):
+                video_logger.info(f"  [{i}]: {part}")
+            video_logger.info("Full command:")
+            video_logger.info(' '.join(cmd))
+            video_logger.info("=" * 60)
+            
+            # Check FFmpeg availability
+            ffmpeg_check = self._check_ffmpeg()
+            video_logger.info(f"FFmpeg available: {ffmpeg_check}")
+            
             # Update progress
             job_data['progress'] = 50
             with open(job_file, 'w') as f:
                 json.dump(job_data, f, indent=2)
             
             # Run ffmpeg
+            video_logger.info("Starting FFmpeg execution...")
+            start_time = datetime.now()
+            
             result = subprocess.run(
                 cmd,
                 capture_output=True,
@@ -623,8 +672,14 @@ class VideoGenerator:
                 timeout=600  # 10 minute timeout for complex operations
             )
             
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds()
+            video_logger.info(f"FFmpeg execution completed in {duration:.2f} seconds")
+            
             if result.returncode == 0:
                 logger.info(f"Video created successfully: {video_path}")
+                video_logger.info(f"FFmpeg success! Return code: 0")
+                video_logger.info(f"Output video path: {video_path}")
                 
                 # Update progress
                 job_data['progress'] = 90
@@ -648,14 +703,32 @@ class VideoGenerator:
                         logger.warning(f"Failed to clean up temporary logo: {e}")
                 
                 # Verify file was created and has reasonable size
-                if os.path.exists(video_path) and os.path.getsize(video_path) > 1024:
-                    return True
+                if os.path.exists(video_path):
+                    file_size = os.path.getsize(video_path)
+                    video_logger.info(f"Video file created: {video_path}")
+                    video_logger.info(f"Video file size: {file_size} bytes ({file_size / (1024*1024):.2f} MB)")
+                    
+                    if file_size > 1024:
+                        video_logger.info("Video generation SUCCESSFUL!")
+                        return True
+                    else:
+                        video_logger.error(f"Video file too small: {file_size} bytes")
+                        return False
                 else:
-                    logger.error(f"Video file not created or too small: {video_path}")
+                    video_logger.error(f"Video file not created at: {video_path}")
                     return False
             else:
                 logger.error(f"FFmpeg failed with return code {result.returncode}")
                 logger.error(f"FFmpeg stderr: {result.stderr}")
+                
+                # Log detailed error information
+                video_logger.error("=" * 60)
+                video_logger.error(f"FFMPEG FAILED! Return code: {result.returncode}")
+                video_logger.error("STDOUT:")
+                video_logger.error(result.stdout)
+                video_logger.error("STDERR:")
+                video_logger.error(result.stderr)
+                video_logger.error("=" * 60)
                 
                 # Clean up temporary files on failure too
                 if processed_audio_path != audio_path and os.path.exists(processed_audio_path):
@@ -674,6 +747,9 @@ class VideoGenerator:
                 
         except subprocess.TimeoutExpired:
             logger.error("FFmpeg command timed out")
+            video_logger.error("FFMPEG TIMEOUT ERROR!")
+            video_logger.error(f"FFmpeg timed out after 600 seconds (10 minutes)")
+            
             # Clean up temporary files on timeout
             if 'processed_audio_path' in locals() and processed_audio_path != audio_path and os.path.exists(processed_audio_path):
                 try:
@@ -687,8 +763,17 @@ class VideoGenerator:
                 except:
                     pass
             return False
+            
         except Exception as e:
             logger.error(f"Error creating video: {e}")
+            video_logger.error("=" * 60)
+            video_logger.error("EXCEPTION IN VIDEO GENERATION!")
+            video_logger.error(f"Exception type: {type(e).__name__}")
+            video_logger.error(f"Exception message: {str(e)}")
+            video_logger.error("Full traceback:")
+            import traceback
+            video_logger.error(traceback.format_exc())
+            video_logger.error("=" * 60)
             # Clean up temporary files on error
             if 'processed_audio_path' in locals() and processed_audio_path != audio_path and os.path.exists(processed_audio_path):
                 try:

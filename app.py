@@ -5266,6 +5266,9 @@ def generate_video(space_id):
         from components.VideoGenerator import VideoGenerator
         video_generator = VideoGenerator(downloads_dir=app.config['DOWNLOAD_DIR'])
         
+        # Get current user ID if logged in
+        user_id = session.get('user_id', 0)
+        
         # Create video generation job
         job_id = video_generator.create_video_job(
             space_id=space_id,
@@ -5285,7 +5288,22 @@ def generate_video(space_id):
         
     except Exception as e:
         logger.error(f"Error generating video for space {space_id}: {e}", exc_info=True)
-        return jsonify({'error': 'Failed to generate video'}), 500
+        
+        # Log to video.log as well
+        try:
+            from components.VideoGenerator import video_logger
+            video_logger.error("=" * 60)
+            video_logger.error(f"ERROR IN /api/spaces/{space_id}/generate-video ENDPOINT")
+            video_logger.error(f"Exception type: {type(e).__name__}")
+            video_logger.error(f"Exception message: {str(e)}")
+            video_logger.error("Full traceback:")
+            import traceback
+            video_logger.error(traceback.format_exc())
+            video_logger.error("=" * 60)
+        except:
+            pass
+            
+        return jsonify({'error': f'Failed to generate video: {str(e)}'}), 500
 
 @app.route('/api/spaces/<space_id>/video-status/<job_id>', methods=['GET'])
 def get_video_status(space_id, job_id):
