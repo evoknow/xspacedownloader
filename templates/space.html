@@ -313,6 +313,28 @@
         font-family: inherit;
     }
     
+    /* Improve time display visibility */
+    .plyr__time {
+        font-weight: 500;
+        font-size: 14px;
+        opacity: 1 !important;
+    }
+    
+    .plyr__time + .plyr__time {
+        opacity: 0.8;
+    }
+    
+    /* Make volume control more compact on mobile */
+    @media (max-width: 768px) {
+        .plyr__volume {
+            max-width: 60px;
+        }
+        
+        .plyr__volume input[type=range] {
+            width: 50px;
+        }
+    }
+    
     .plyr--audio .plyr__control.plyr__tab-focus,
     .plyr--audio .plyr__control:hover,
     .plyr--audio .plyr__control[aria-expanded="true"] {
@@ -351,6 +373,14 @@
         color: #eee;
     }
     
+    /* Improve time visibility in dark mode */
+    html[data-bs-theme="dark"] .plyr__time {
+        color: #fff !important;
+        background: rgba(0, 0, 0, 0.3);
+        padding: 2px 4px;
+        border-radius: 3px;
+    }
+    
     html[data-bs-theme="dark"] .plyr--audio .plyr__progress__played,
     html[data-bs-theme="dark"] .plyr--audio .plyr__volume__input {
         color: var(--bs-primary);
@@ -366,12 +396,30 @@
             padding: 8px;
         }
         
-        .plyr__control {
-            padding: 6px 8px;
+        /* Make progress bar larger and easier to touch on mobile */
+        .plyr__progress {
+            margin: 0 8px;
         }
         
+        .plyr__progress input[type=range] {
+            height: 44px;
+            margin: -17px 0;
+        }
+        
+        .plyr__progress__container {
+            height: 10px;
+            margin-top: 8px;
+        }
+        
+        /* Reduce control button sizes slightly */
+        .plyr__control {
+            padding: 7px;
+        }
+        
+        /* Better spacing for time displays */
         .plyr__time {
-            font-size: 0.8rem;
+            font-size: 12px;
+            min-width: 40px;
         }
     }
     
@@ -3767,8 +3815,17 @@
         
         if (mainAudioElement && typeof Plyr !== 'undefined') {
             try {
-                window.mainPlayer = new Plyr(mainAudioElement, {
-                controls: [
+                // Different controls for mobile vs desktop
+                const isMobile = window.innerWidth <= 768;
+                const controls = isMobile ? [
+                    'play-large',
+                    'play',
+                    'progress',
+                    'current-time',
+                    'duration',
+                    'mute',
+                    'settings'
+                ] : [
                     'play-large',
                     'restart',
                     'play',
@@ -3779,7 +3836,10 @@
                     'volume',
                     'settings',
                     'fullscreen'
-                ],
+                ];
+                
+                window.mainPlayer = new Plyr(mainAudioElement, {
+                controls: controls,
                 settings: ['speed', 'loop'],
                 speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] },
                 hideControls: false,
