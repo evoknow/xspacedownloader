@@ -3102,10 +3102,11 @@ Tags should be:
 - Specific and descriptive (NOT generic words like "good", "your", "nice", etc.)
 - Relevant domain-specific terms, proper nouns, or important concepts
 - Useful for categorization and search
+- NEVER just numbers by themselves (avoid tags like "2024", "100", "5", etc.)
 - Examples of good tags: "Machine Learning", "Climate Change", "Bitcoin", "Mental Health", "Space Exploration", "Web3", "Artificial Intelligence", "Cybersecurity", "Marketing Strategy"
-- Examples of bad tags: "good", "your", "nice", "really", "very", "thing", "stuff", "people"
+- Examples of bad tags: "good", "your", "nice", "really", "very", "thing", "stuff", "people", "2024", "100", "5"
 
-Avoid common everyday words and focus on distinctive topics, technologies, organizations, concepts, or themes that make this content unique.
+Avoid common everyday words, standalone numbers, and focus on distinctive topics, technologies, organizations, concepts, or themes that make this content unique.
 
 Return ONLY the tags as a comma-separated list, nothing else.
 
@@ -3143,8 +3144,22 @@ Transcript:
                     tags_text = result.get('text', '').strip()
                     tags = [tag.strip() for tag in tags_text.split(',') if tag.strip()]
                     
+                    # Filter out standalone numbers and ensure tags meet quality criteria
+                    import re
+                    filtered_tags = []
+                    for tag in tags:
+                        # Skip if tag is just a number
+                        if re.match(r'^\d+$', tag):
+                            tag_logger.info(f"Filtered out standalone number tag: {tag}")
+                            continue
+                        # Skip very short single character tags
+                        if len(tag) < 2:
+                            tag_logger.info(f"Filtered out too short tag: {tag}")
+                            continue
+                        filtered_tags.append(tag)
+                    
                     # Limit to max_tags
-                    final_tags = tags[:max_tags]
+                    final_tags = filtered_tags[:max_tags]
                     tag_logger.info(f"FINAL TAGS GENERATED: {final_tags}")
                     tag_logger.info("="*80 + "\n")
                     return final_tags
