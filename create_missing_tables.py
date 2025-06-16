@@ -1,0 +1,213 @@
+#!/usr/bin/env python3
+"""
+Create Missing Tables Script
+Creates any missing tables from the schema for XSpace Downloader.
+"""
+
+import logging
+import sys
+from components.DatabaseManager import DatabaseManager
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# SQL statements for creating missing tables
+CREATE_TABLES = {
+    'system_messages': """
+        CREATE TABLE IF NOT EXISTS `system_messages` (
+          `id` int NOT NULL AUTO_INCREMENT,
+          `message` text NOT NULL COMMENT 'The system message content',
+          `start_date` datetime NOT NULL COMMENT 'When the message should start displaying',
+          `end_date` datetime NOT NULL COMMENT 'When the message should stop displaying',
+          `status` int NOT NULL DEFAULT '0' COMMENT 'Status: 0 = pending, 1 = displayed, -1 = deleted',
+          `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+          `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (`id`),
+          KEY `idx_status` (`status`),
+          KEY `idx_dates` (`start_date`,`end_date`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='System-wide messages for users'
+    """,
+    
+    'app_settings': """
+        CREATE TABLE IF NOT EXISTS `app_settings` (
+          `id` int NOT NULL AUTO_INCREMENT,
+          `setting_name` varchar(100) NOT NULL COMMENT 'Name of the setting',
+          `setting_value` text COMMENT 'Value of the setting',
+          `setting_type` varchar(50) DEFAULT 'string' COMMENT 'Type of setting (string, boolean, integer, json)',
+          `description` text COMMENT 'Description of the setting',
+          `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+          `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (`id`),
+          UNIQUE KEY `setting_name` (`setting_name`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Application settings'
+    """,
+    
+    'space_cost': """
+        CREATE TABLE IF NOT EXISTS `space_cost` (
+          `id` int NOT NULL AUTO_INCREMENT,
+          `space_id` varchar(255) NOT NULL COMMENT 'Space ID',
+          `user_id` int NOT NULL COMMENT 'User who incurred the cost',
+          `cost_type` varchar(50) NOT NULL COMMENT 'Type of cost: transcription, translation, compute, video_generation',
+          `amount` decimal(10,6) NOT NULL COMMENT 'Cost amount in USD',
+          `description` text COMMENT 'Description of the cost',
+          `ai_vendor` varchar(50) DEFAULT NULL COMMENT 'AI vendor used (openai, claude, etc)',
+          `ai_model` varchar(100) DEFAULT NULL COMMENT 'AI model used',
+          `input_tokens` int DEFAULT NULL COMMENT 'Number of input tokens used',
+          `output_tokens` int DEFAULT NULL COMMENT 'Number of output tokens used',
+          `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (`id`),
+          KEY `idx_space_id` (`space_id`),
+          KEY `idx_user_id` (`user_id`),
+          KEY `idx_cost_type` (`cost_type`),
+          KEY `idx_created_at` (`created_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Track AI and compute costs per space'
+    """,
+    
+    'ai_api_cost': """
+        CREATE TABLE IF NOT EXISTS `ai_api_cost` (
+          `id` int NOT NULL AUTO_INCREMENT,
+          `vendor` varchar(50) NOT NULL COMMENT 'AI vendor (openai, claude, etc)',
+          `model` varchar(100) NOT NULL COMMENT 'Model name',
+          `input_token_cost_per_million_tokens` decimal(10,4) NOT NULL COMMENT 'Cost per million input tokens in USD',
+          `output_token_cost_per_million_tokens` decimal(10,4) NOT NULL COMMENT 'Cost per million output tokens in USD',
+          `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+          `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (`id`),
+          UNIQUE KEY `vendor_model` (`vendor`,`model`),
+          KEY `idx_vendor` (`vendor`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI model pricing information'
+    """,
+    
+    'visitor_download_log': """
+        CREATE TABLE IF NOT EXISTS `visitor_download_log` (
+          `id` int NOT NULL AUTO_INCREMENT,
+          `ip_address` varchar(45) NOT NULL COMMENT 'Visitor IP address',
+          `cookie_id` varchar(100) DEFAULT NULL COMMENT 'Visitor cookie ID',
+          `space_id` varchar(255) NOT NULL COMMENT 'Space ID that was downloaded',
+          `downloaded` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Whether download was successful',
+          `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (`id`),
+          KEY `idx_ip_address` (`ip_address`),
+          KEY `idx_cookie_id` (`cookie_id`),
+          KEY `idx_space_id` (`space_id`),
+          KEY `idx_created_at` (`created_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Track visitor downloads for limiting'
+    """
+}
+
+# Default data to insert
+DEFAULT_DATA = {
+    'app_settings': [
+        ("INSERT IGNORE INTO app_settings (setting_name, setting_value, setting_type, description) VALUES (%s, %s, %s, %s)",
+         [
+            ('transcription_enabled', 'true', 'boolean', 'Enable/disable transcription service'),
+            ('video_generation_enabled', 'true', 'boolean', 'Enable/disable video generation service'),
+            ('compute_cost_per_second', '0.001', 'decimal', 'Cost per second for compute operations in USD')
+         ])
+    ]
+}
+
+def create_missing_tables():
+    """Create any missing tables from the schema."""
+    try:
+        db = DatabaseManager()
+        cursor = db.connection.cursor()
+        
+        logger.info("Checking and creating missing tables...")
+        
+        created_tables = []
+        for table_name, create_sql in CREATE_TABLES.items():
+            try:
+                # Check if table exists
+                cursor.execute(f"""
+                    SELECT COUNT(*) as count 
+                    FROM information_schema.tables 
+                    WHERE table_schema = DATABASE() 
+                    AND table_name = '{table_name}'
+                """)
+                exists = cursor.fetchone()[0] > 0
+                
+                if not exists:
+                    logger.info(f"Creating table: {table_name}")
+                    cursor.execute(create_sql)
+                    created_tables.append(table_name)
+                else:
+                    logger.info(f"Table already exists: {table_name}")
+                    
+            except Exception as e:
+                logger.error(f"Error creating table {table_name}: {e}")
+        
+        # Commit table creations
+        db.connection.commit()
+        
+        # Insert default data
+        logger.info("Inserting default data...")
+        for table_name, inserts in DEFAULT_DATA.items():
+            if table_name in created_tables or True:  # Always try to insert defaults
+                for query, data_list in inserts:
+                    for data in data_list:
+                        try:
+                            cursor.execute(query, data)
+                        except Exception as e:
+                            logger.debug(f"Could not insert default data for {table_name}: {e}")
+        
+        # Commit default data
+        db.connection.commit()
+        cursor.close()
+        
+        if created_tables:
+            logger.info(f"Successfully created tables: {', '.join(created_tables)}")
+        else:
+            logger.info("All tables already exist")
+            
+        # Also ensure the credits column exists in users table
+        try:
+            cursor = db.connection.cursor()
+            cursor.execute("""
+                SELECT COUNT(*) as count 
+                FROM information_schema.columns 
+                WHERE table_schema = DATABASE() 
+                AND table_name = 'users' 
+                AND column_name = 'credits'
+            """)
+            credits_exists = cursor.fetchone()[0] > 0
+            
+            if not credits_exists:
+                logger.info("Adding credits column to users table...")
+                cursor.execute("""
+                    ALTER TABLE users 
+                    ADD COLUMN credits DECIMAL(10,2) NOT NULL DEFAULT 5.00 
+                    COMMENT 'User credits in USD'
+                """)
+                db.connection.commit()
+                logger.info("Credits column added successfully")
+            cursor.close()
+        except Exception as e:
+            logger.error(f"Error checking/adding credits column: {e}")
+            
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error creating tables: {e}")
+        return False
+
+def main():
+    """Main function."""
+    logger.info("=" * 60)
+    logger.info("Creating missing database tables for XSpace Downloader")
+    logger.info("=" * 60)
+    
+    success = create_missing_tables()
+    if success:
+        logger.info("Database setup completed successfully")
+        sys.exit(0)
+    else:
+        logger.error("Database setup failed")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
