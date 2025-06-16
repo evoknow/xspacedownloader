@@ -4858,7 +4858,7 @@ def admin_get_users():
         # Build query
         query = """
             SELECT id, email, status, is_admin, country, login_count, 
-                   last_logged_in, created_at,
+                   last_logged_in, created_at, credits,
                    (SELECT COUNT(*) FROM spaces WHERE user_id = users.id) as space_count
             FROM users
         """
@@ -4943,6 +4943,10 @@ def admin_update_user(user_id):
         if 'is_admin' in data:
             updates.append("is_admin = %s")
             params.append(1 if data['is_admin'] else 0)
+        
+        if 'credits' in data:
+            updates.append("credits = %s")
+            params.append(float(data['credits']))
         
         if updates:
             query = f"UPDATE users SET {', '.join(updates)} WHERE id = %s"
@@ -7786,6 +7790,272 @@ def admin_administrator_guide_download():
     except Exception as e:
         logger.error(f"Error downloading administrator guide: {e}", exc_info=True)
         return f'Error downloading administrator guide: {str(e)}', 500
+
+# Cost Management API Endpoints
+@app.route('/admin/api/compute_cost', methods=['GET', 'POST'])
+def admin_compute_cost():
+    """Get or update compute cost settings."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        if request.method == 'GET':
+            # Get current compute cost setting
+            space = get_space_component()
+            cursor = space.connection.cursor(dictionary=True)
+            
+            cursor.execute("""
+                SELECT setting_value FROM app_settings 
+                WHERE setting_name = 'compute_cost_per_second'
+            """)
+            result = cursor.fetchone()
+            cursor.close()
+            
+            cost_per_second = float(result['setting_value']) if result else 0.001
+            return jsonify({'cost_per_second': cost_per_second})
+            
+        else:  # POST
+            data = request.get_json()
+            cost_per_second = float(data.get('cost_per_second', 0.001))
+            
+            space = get_space_component()
+            cursor = space.connection.cursor()
+            
+            # Update or insert the setting
+            cursor.execute("""
+                INSERT INTO app_settings (setting_name, setting_value, setting_type, description)
+                VALUES ('compute_cost_per_second', %s, 'decimal', 'Cost per second for compute operations')
+                ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+            """, (str(cost_per_second),))
+            
+            space.connection.commit()
+            cursor.close()
+            
+            logger.info(f"Admin updated compute cost to ${cost_per_second}/second")
+            
+            return jsonify({
+                'success': True,
+                'cost_per_second': cost_per_second,
+                'message': f'Compute cost updated to ${cost_per_second}/second'
+            })
+            
+    except Exception as e:
+        logger.error(f"Error managing compute cost: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/ai_costs', methods=['GET'])
+def admin_get_ai_costs():
+    """Get all AI model costs."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        cursor.execute("""
+            SELECT id, vendor, model, input_token_cost_per_million_tokens, 
+                   output_token_cost_per_million_tokens, created_at, updated_at
+            FROM ai_api_cost
+            ORDER BY vendor, model
+        """)
+        
+        costs = cursor.fetchall()
+        cursor.close()
+        
+        return jsonify({'costs': costs})
+        
+    except Exception as e:
+        logger.error(f"Error getting AI costs: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/ai_costs', methods=['POST'])
+def admin_add_ai_cost():
+    """Add or update AI model cost."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        data = request.get_json()
+        vendor = data.get('vendor')
+        model = data.get('model')
+        input_cost = float(data.get('input_cost', 0))
+        output_cost = float(data.get('output_cost', 0))
+        
+        if not vendor or not model:
+            return jsonify({'error': 'Vendor and model are required'}), 400
+        
+        space = get_space_component()
+        cursor = space.connection.cursor()
+        
+        cursor.execute("""
+            INSERT INTO ai_api_cost 
+            (vendor, model, input_token_cost_per_million_tokens, output_token_cost_per_million_tokens)
+            VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+            input_token_cost_per_million_tokens = VALUES(input_token_cost_per_million_tokens),
+            output_token_cost_per_million_tokens = VALUES(output_token_cost_per_million_tokens),
+            updated_at = NOW()
+        """, (vendor, model, input_cost, output_cost))
+        
+        space.connection.commit()
+        cursor.close()
+        
+        logger.info(f"Admin added/updated AI cost: {vendor}/{model}")
+        
+        return jsonify({
+            'success': True,
+            'message': f'AI model cost updated: {vendor}/{model}'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error adding AI cost: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/credit_stats', methods=['GET'])
+def admin_credit_stats():
+    """Get credit statistics and cost analytics."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        # Get user credit statistics
+        cursor.execute("""
+            SELECT 
+                COUNT(*) as user_count,
+                COALESCE(SUM(credits), 0) as total_credits,
+                COALESCE(AVG(credits), 0) as avg_credits,
+                COALESCE(MIN(credits), 0) as min_credits,
+                COALESCE(MAX(credits), 0) as max_credits
+            FROM users 
+            WHERE status = 1
+        """)
+        credit_stats = cursor.fetchone()
+        
+        # Get cost breakdown by type (last 30 days)
+        cursor.execute("""
+            SELECT cost_type, SUM(amount) as total_cost
+            FROM space_cost 
+            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+            GROUP BY cost_type
+        """)
+        cost_by_type = {row['cost_type']: float(row['total_cost']) for row in cursor.fetchall()}
+        
+        # Get cost breakdown by vendor (last 30 days)
+        cursor.execute("""
+            SELECT COALESCE(ai_vendor, 'compute') as vendor, SUM(amount) as total_cost
+            FROM space_cost 
+            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+            GROUP BY ai_vendor
+        """)
+        cost_by_vendor = {row['vendor']: float(row['total_cost']) for row in cursor.fetchall()}
+        
+        cursor.close()
+        
+        return jsonify({
+            'user_count': credit_stats['user_count'],
+            'total_credits': float(credit_stats['total_credits']),
+            'avg_credits': float(credit_stats['avg_credits']),
+            'min_credits': float(credit_stats['min_credits']),
+            'max_credits': float(credit_stats['max_credits']),
+            'cost_by_type': cost_by_type,
+            'cost_by_vendor': cost_by_vendor
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting credit stats: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/add_weekly_credits', methods=['POST'])
+def admin_add_weekly_credits():
+    """Add $5 credits to all active users."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        space = get_space_component()
+        cursor = space.connection.cursor()
+        
+        # Add $5 to all active users
+        cursor.execute("""
+            UPDATE users 
+            SET credits = credits + 5.00,
+                updated_at = NOW()
+            WHERE status = 1
+        """)
+        
+        users_updated = cursor.rowcount
+        space.connection.commit()
+        cursor.close()
+        
+        logger.info(f"Admin added $5 credits to {users_updated} users")
+        
+        return jsonify({
+            'success': True,
+            'users_updated': users_updated,
+            'credits_added': 5.00,
+            'total_credits_added': users_updated * 5.00,
+            'message': f'Added $5 credits to {users_updated} active users'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error adding weekly credits: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/update_openai_pricing', methods=['POST'])
+def admin_update_openai_pricing():
+    """Update OpenAI pricing from external API."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        import subprocess
+        import os
+        
+        # Run the OpenAI pricing update script
+        script_path = os.path.join(os.path.dirname(__file__), 'update_openai_pricing.py')
+        if not os.path.exists(script_path):
+            return jsonify({'error': 'OpenAI pricing update script not found'}), 404
+        
+        # Run the script and capture output
+        result = subprocess.run([
+            'python', script_path
+        ], capture_output=True, text=True, timeout=60)
+        
+        if result.returncode == 0:
+            logger.info(f"Admin successfully updated OpenAI pricing")
+            
+            # Count how many models were updated
+            lines = result.stdout.split('\n')
+            updated_count = 0
+            for line in lines:
+                if 'models updated' in line.lower():
+                    try:
+                        updated_count = int(line.split(':')[1].split('models')[0].strip())
+                    except:
+                        pass
+            
+            return jsonify({
+                'success': True,
+                'message': f'OpenAI pricing updated successfully. {updated_count} models updated.',
+                'output': result.stdout
+            })
+        else:
+            logger.error(f"OpenAI pricing update failed: {result.stderr}")
+            return jsonify({
+                'error': 'Failed to update OpenAI pricing',
+                'details': result.stderr
+            }), 500
+            
+    except subprocess.TimeoutExpired:
+        logger.error("OpenAI pricing update timed out")
+        return jsonify({'error': 'Update request timed out'}), 500
+    except Exception as e:
+        logger.error(f"Error updating OpenAI pricing: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 # Route for About page
 @app.route('/about')
