@@ -534,7 +534,6 @@
                 <div class="audio-player mb-4">
                     <div class="card">
                         <div class="card-body">
-                            <!-- Temporarily disable Plyr for testing -->
                             <audio id="audio-player" controls class="w-100" preload="metadata">
                                 <source src="/audio/{{ space.space_id }}.mp3" type="audio/mpeg">
                                 Your browser does not support the audio element.
@@ -939,7 +938,6 @@
                 </div>
                 
                 <div class="mb-3">
-                    <!-- Temporarily disable Plyr for testing -->
                     <audio id="trim-audio-preview" controls class="w-100" preload="metadata">
                         <source src="/audio/{{ space.space_id }}.mp3" type="audio/mpeg">
                         Your browser does not support the audio element.
@@ -3758,11 +3756,11 @@
 
 <!-- Initialize Plyr Players -->
 <script>
-    // DISABLED: Initialize Plyr players with custom configuration (for testing)
+    // Initialize Plyr players with custom configuration
     document.addEventListener('DOMContentLoaded', function() {
-        // DISABLED: Initialize main audio player
+        // Initialize main audio player
         const mainAudioElement = document.getElementById('audio-player');
-        if (false && mainAudioElement) { // DISABLED FOR TESTING
+        if (mainAudioElement) {
             window.mainPlayer = new Plyr(mainAudioElement, {
                 controls: [
                     'play-large',
@@ -3807,9 +3805,9 @@
             });
         }
         
-        // DISABLED: Initialize trim modal audio player
+        // Initialize trim modal audio player
         const trimAudioElement = document.getElementById('trim-audio-preview');
-        if (false && trimAudioElement) { // DISABLED FOR TESTING
+        if (trimAudioElement) {
             window.trimPlayer = new Plyr(trimAudioElement, {
                 controls: [
                     'play',
