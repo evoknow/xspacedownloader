@@ -103,6 +103,21 @@ except ImportError:
     SYSTEM_STATUS_AVAILABLE = False
     logger.warning("SystemStatus component not available - system monitoring will be limited")
 
+# Import cost tracking and visitor tracking components
+try:
+    from components.CostTracker import CostTracker
+    COST_TRACKING_AVAILABLE = True
+except ImportError:
+    COST_TRACKING_AVAILABLE = False
+    logger.warning("CostTracker component not available - cost tracking will be disabled")
+
+try:
+    from components.VisitorTracker import VisitorTracker
+    VISITOR_TRACKING_AVAILABLE = True
+except ImportError:
+    VISITOR_TRACKING_AVAILABLE = False
+    logger.warning("VisitorTracker component not available - visitor limitations will be disabled")
+
 # Application version
 __version__ = "1.1.1"
 
@@ -856,7 +871,26 @@ def index():
         # Check if we have cached data
         cached_data = get_cached_index_data()
         if cached_data:
-            return render_template('index.html', completed_spaces=cached_data)
+            # Get user credit information if logged in
+            user_credits = None
+            user_email = None
+            if session.get('user_id'):
+                try:
+                    space = get_space_component()
+                    cursor = space.connection.cursor(dictionary=True)
+                    cursor.execute("SELECT email, credits FROM users WHERE id = %s", (session['user_id'],))
+                    user_info = cursor.fetchone()
+                    cursor.close()
+                    if user_info:
+                        user_credits = float(user_info['credits'])
+                        user_email = user_info['email']
+                except Exception as e:
+                    logger.warning(f"Could not fetch user credit info: {e}")
+            
+            return render_template('index.html', 
+                                 completed_spaces=cached_data,
+                                 user_credits=user_credits,
+                                 user_email=user_email)
         
         # No valid cache, generate fresh data
         logger.info("Generating fresh index data (cache miss or expired)")
@@ -892,10 +926,28 @@ def index():
                 job['transcript_count'] = 0
                 job['title'] = ''
         
+        # Get user credit information if logged in
+        user_credits = None
+        user_email = None
+        if session.get('user_id'):
+            try:
+                cursor = space.connection.cursor(dictionary=True)
+                cursor.execute("SELECT email, credits FROM users WHERE id = %s", (session['user_id'],))
+                user_info = cursor.fetchone()
+                cursor.close()
+                if user_info:
+                    user_credits = float(user_info['credits'])
+                    user_email = user_info['email']
+            except Exception as e:
+                logger.warning(f"Could not fetch user credit info: {e}")
+        
         # Cache the data
         set_index_cache(completed_spaces)
         
-        return render_template('index.html', completed_spaces=completed_spaces)
+        return render_template('index.html', 
+                             completed_spaces=completed_spaces,
+                             user_credits=user_credits,
+                             user_email=user_email)
     except Exception as e:
         logger.error(f"Error loading completed spaces: {e}", exc_info=True)
         return render_template('index.html')
@@ -3114,8 +3166,70 @@ def after_request(response):
         pass
     return response
 
-# Global translate component instance
+# Global component instances
 translate_component = None
+cost_tracker = None
+visitor_tracker = None
+
+def get_cost_tracker():
+    """Get a CostTracker component instance."""
+    global cost_tracker
+    
+    if not COST_TRACKING_AVAILABLE:
+        return None
+        
+    try:
+        if not cost_tracker:
+            cost_tracker = CostTracker()
+            logger.info("Created new CostTracker component instance")
+        
+        return cost_tracker
+    except Exception as e:
+        logger.error(f"Error creating CostTracker instance: {e}")
+        return None
+
+def get_visitor_tracker():
+    """Get a VisitorTracker component instance."""
+    global visitor_tracker
+    
+    if not VISITOR_TRACKING_AVAILABLE:
+        return None
+        
+    try:
+        if not visitor_tracker:
+            visitor_tracker = VisitorTracker()
+            logger.info("Created new VisitorTracker component instance")
+        
+        return visitor_tracker
+    except Exception as e:
+        logger.error(f"Error creating VisitorTracker instance: {e}")
+        return None
+
+def check_user_credits(required_amount=0.0):
+    """
+    Check if user has sufficient credits for an operation.
+    
+    Args:
+        required_amount (float): Amount of credits needed
+        
+    Returns:
+        tuple: (has_sufficient_credits, current_balance, message)
+    """
+    if not session.get('user_id'):
+        return False, 0.0, "Please log in to use this feature"
+    
+    tracker = get_cost_tracker()
+    if not tracker:
+        # If cost tracking is disabled, allow operation
+        return True, float('inf'), "Cost tracking disabled"
+    
+    user_id = session['user_id']
+    current_balance = tracker.check_user_credits(user_id)
+    
+    if current_balance < required_amount:
+        return False, current_balance, f"Insufficient credits. Required: ${required_amount:.2f}, Available: ${current_balance:.2f}"
+    
+    return True, current_balance, "Sufficient credits"
 
 def get_translate_component():
     """Get a Translate component instance."""

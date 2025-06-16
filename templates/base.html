@@ -394,6 +394,26 @@
     
     <!-- Main Container -->
     <div class="main-container">
+        <!-- User Credit Display -->
+        {% if session.get('user_id') and user_credits is not none %}
+        <div class="alert alert-info d-flex align-items-center justify-content-between mb-3" style="border-left: 4px solid #17a2b8;">
+            <div>
+                <i class="bi bi-person-check-fill me-2"></i>
+                <strong>Welcome, {{ user_email.split('@')[0] }}!</strong> You are logged in.
+                <span class="ms-3">
+                    <i class="bi bi-coin me-1"></i>
+                    Current Balance: <strong>${{ "%.2f"|format(user_credits) }}</strong>
+                </span>
+            </div>
+            {% if user_credits < 1.0 %}
+            <div class="text-danger">
+                <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                <small>Low credit balance!</small>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+        
         <!-- Flash messages -->
         <div class="flash-messages">
             {% with messages = get_flashed_messages(with_categories=true) %}
