@@ -111,13 +111,27 @@ class DatabaseManager:
                 
                 logger.debug(f"Got connection from pool (attempt {attempt + 1})")
                 
-                yield connection
-                
-                # If we get here, everything worked
-                return
+                try:
+                    yield connection
+                    break  # Success, exit retry loop
+                finally:
+                    # Always return connection to pool after use
+                    if connection:
+                        try:
+                            connection.close()  # This returns it to the pool
+                        except Exception as e:
+                            logger.warning(f"Error returning connection to pool: {e}")
+                        connection = None
                 
             except mysql.connector.errors.PoolError as e:
                 logger.warning(f"Pool error on attempt {attempt + 1}: {e}")
+                if connection:
+                    try:
+                        connection.close()
+                    except:
+                        pass
+                    connection = None
+                    
                 if attempt < max_retries - 1:
                     time.sleep(retry_delay)
                     # Try to recreate the pool
@@ -149,15 +163,8 @@ class DatabaseManager:
                         connection.close()
                     except:
                         pass
+                    connection = None
                 raise
-                
-            finally:
-                # Always return connection to pool if we got one
-                if connection:
-                    try:
-                        connection.close()  # This returns it to the pool
-                    except:
-                        pass
     
     def execute_query(self, query, params=None, fetch_one=False, fetch_all=False):
         """
