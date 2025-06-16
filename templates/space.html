@@ -376,9 +376,25 @@
     /* Improve time visibility in dark mode */
     html[data-bs-theme="dark"] .plyr__time {
         color: #fff !important;
-        background: rgba(0, 0, 0, 0.3);
+        background: rgba(0, 0, 0, 0.5);
         padding: 2px 4px;
         border-radius: 3px;
+    }
+    
+    /* Mobile dark mode adjustments */
+    @media (max-width: 768px) {
+        html[data-bs-theme="dark"] .plyr__time {
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        html[data-bs-theme="dark"] .plyr__control[data-plyr="play"] {
+            background: rgba(var(--bs-primary-rgb), 0.2);
+        }
+        
+        html[data-bs-theme="dark"] .plyr__progress__container {
+            background: rgba(255,255,255,0.1);
+        }
     }
     
     html[data-bs-theme="dark"] .plyr--audio .plyr__progress__played,
@@ -392,34 +408,109 @@
             display: none;
         }
         
+        /* Complete mobile redesign */
         .plyr--audio .plyr__controls {
-            padding: 8px;
+            padding: 12px 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
         }
         
-        /* Make progress bar larger and easier to touch on mobile */
+        /* Progress bar takes full width on its own row */
         .plyr__progress {
-            margin: 0 8px;
+            width: 100%;
+            order: -1;
+            margin: 0 0 12px 0;
         }
         
         .plyr__progress input[type=range] {
             height: 44px;
-            margin: -17px 0;
+            margin: -19px 0;
         }
         
         .plyr__progress__container {
-            height: 10px;
-            margin-top: 8px;
+            height: 6px;
+            background: rgba(255,255,255,0.2);
         }
         
-        /* Reduce control button sizes slightly */
-        .plyr__control {
-            padding: 7px;
-        }
-        
-        /* Better spacing for time displays */
+        /* Time displays on same row as progress */
         .plyr__time {
-            font-size: 12px;
-            min-width: 40px;
+            font-size: 13px;
+            font-weight: 600;
+            min-width: 45px;
+            padding: 4px 8px;
+            background: rgba(0,0,0,0.1);
+            border-radius: 4px;
+            margin: 0;
+        }
+        
+        .plyr__time--current {
+            order: -3;
+            position: absolute;
+            left: 8px;
+            top: 12px;
+        }
+        
+        .plyr__time--duration {
+            order: -2;
+            position: absolute;
+            right: 8px;
+            top: 12px;
+        }
+        
+        /* Control buttons in bottom row */
+        .plyr__control {
+            padding: 10px;
+            flex: 0 0 auto;
+        }
+        
+        .plyr__control--overlaid {
+            display: none !important;
+        }
+        
+        /* Hide restart on mobile */
+        .plyr__control[data-plyr="restart"] {
+            display: none;
+        }
+        
+        /* Make play button more prominent */
+        .plyr__control[data-plyr="play"] {
+            padding: 10px 16px;
+            background: rgba(var(--bs-primary-rgb), 0.1);
+            border-radius: 6px;
+        }
+        
+        /* Hide fullscreen on audio */
+        .plyr__control[data-plyr="fullscreen"] {
+            display: none;
+        }
+        
+        /* Adjust container for absolute positioned times */
+        .plyr--audio .plyr__controls {
+            position: relative;
+            padding-top: 45px;
+        }
+    }
+    
+    /* Skip controls styling */
+    .audio-skip-controls {
+        margin-top: 1rem;
+    }
+    
+    .audio-skip-controls .btn {
+        min-width: 100px;
+        padding: 8px 16px;
+        font-weight: 500;
+    }
+    
+    @media (max-width: 576px) {
+        .audio-skip-controls .btn {
+            min-width: 60px;
+            padding: 8px 12px;
+        }
+        
+        .audio-skip-controls .btn i {
+            font-size: 1.1rem;
         }
     }
     
@@ -587,15 +678,14 @@
                                 Your browser does not support the audio element.
                             </audio>
                             
-                            <div class="mt-3 d-flex justify-content-between flex-wrap">
-                                <div class="mb-2">
-                                    <button id="skip-forward" class="btn btn-sm btn-outline-secondary me-1" title="Skip forward 30 seconds">
-                                        <i class="bi bi-skip-forward"></i> 30s
-                                    </button>
-                                    <button id="skip-backward" class="btn btn-sm btn-outline-secondary" title="Skip backward 15 seconds">
-                                        <i class="bi bi-skip-backward"></i> 15s
-                                    </button>
-                                </div>
+                            <!-- Skip controls outside Plyr for better mobile layout -->
+                            <div class="audio-skip-controls mt-3 d-flex justify-content-center gap-2">
+                                <button id="skip-backward" class="btn btn-outline-secondary" title="Skip backward 15 seconds">
+                                    <i class="bi bi-skip-backward"></i> <span class="d-none d-sm-inline">15s</span>
+                                </button>
+                                <button id="skip-forward" class="btn btn-outline-secondary" title="Skip forward 30 seconds">
+                                    <i class="bi bi-skip-forward"></i> <span class="d-none d-sm-inline">30s</span>
+                                </button>
                             </div>
                         </div>
                     </div>
