@@ -1970,11 +1970,10 @@ function displayUsers(users) {
                        onchange="updateUser(${user.id}, 'is_admin', this.checked)">
             </td>
             <td>
-                <div class="input-group input-group-sm" style="width: 120px;">
-                    <span class="input-group-text">$</span>
+                <div class="input-group input-group-sm" style="width: 100px;">
                     <input type="number" class="form-control" 
-                           value="${user.credits || 0}" 
-                           step="0.01" min="0"
+                           value="${Math.round(user.credits || 0)}" 
+                           step="1" min="0"
                            onblur="updateUserCredits(${user.id}, this.value)"
                            onkeypress="if(event.key === 'Enter') updateUserCredits(${user.id}, this.value)">
                 </div>
@@ -5710,7 +5709,7 @@ function updateUserCredits(userId, newCredits) {
     fetch(`/admin/api/users/${userId}`, {
         method: 'PUT',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({credits: parseFloat(newCredits)})
+        body: JSON.stringify({credits: Math.round(parseFloat(newCredits))})
     })
     .then(response => response.json())
     .then(data => {
@@ -5811,9 +5810,9 @@ async function loadCreditStats() {
         const avgCredits = typeof data.avg_credits === 'number' ? data.avg_credits : 0;
         const userCount = typeof data.user_count === 'number' ? data.user_count : 0;
         
-        document.getElementById('totalCredits').textContent = `$${totalCredits.toFixed(2)}`;
-        document.getElementById('avgCredits').textContent = `$${avgCredits.toFixed(2)}`;
-        document.getElementById('weeklyCreditsAdded').textContent = `$${(userCount * 5).toFixed(2)}`;
+        document.getElementById('totalCredits').textContent = `${Math.round(totalCredits)}`;
+        document.getElementById('avgCredits').textContent = `${Math.round(avgCredits)}`;
+        document.getElementById('weeklyCreditsAdded').textContent = `${userCount * 5}`;
         
         // Load cost charts if available
         if (data.cost_by_type && typeof data.cost_by_type === 'object') {
@@ -5894,7 +5893,7 @@ async function addWeeklyCredits() {
         
         const data = await response.json();
         if (data.success) {
-            showToast(`Added $5 credits to ${data.users_updated} users`, 'success');
+            showToast(`Added 5 credits to ${data.users_updated} users`, 'success');
             loadCreditStats(); // Reload stats
             loadUsers(currentPage); // Reload user list
         } else {

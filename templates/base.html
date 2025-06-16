@@ -402,7 +402,7 @@
                 <strong>Welcome, {{ user_email.split('@')[0] }}!</strong> You are logged in.
                 <span class="ms-3">
                     <i class="bi bi-coin me-1"></i>
-                    Current Balance: <strong>${{ "%.2f"|format(user_credits) }}</strong>
+                    Current Balance: <strong>{{ "%.0f"|format(user_credits) }}</strong>
                 </span>
             </div>
             {% if user_credits < 1.0 %}
