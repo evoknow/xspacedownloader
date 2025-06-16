@@ -6507,6 +6507,15 @@ def admin_service_settings():
         cursor = space.connection.cursor(dictionary=True)
         
         if request.method == 'GET':
+            # Ensure default settings exist
+            cursor.execute("""
+                INSERT IGNORE INTO app_settings (setting_name, setting_value, setting_type, description)
+                VALUES 
+                    ('transcription_enabled', 'true', 'boolean', 'Enable/disable transcription service'),
+                    ('video_generation_enabled', 'true', 'boolean', 'Enable/disable video generation service')
+            """)
+            space.connection.commit()
+            
             # Get current settings
             cursor.execute("""
                 SELECT setting_name, setting_value, setting_type, description
