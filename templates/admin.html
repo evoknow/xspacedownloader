@@ -5580,7 +5580,15 @@ async function loadSystemMessages() {
                         <td>${endDate}</td>
                         <td>${statusBadge}</td>
                         <td>
-                            <button class="btn btn-sm btn-outline-danger" onclick="deleteSystemMessage(${msg.id})">
+                            ${msg.status === 0 ? 
+                                `<button class="btn btn-sm btn-outline-success me-1" onclick="toggleSystemMessage(${msg.id}, 1)" title="Activate">
+                                    <i class="bi bi-check-circle"></i>
+                                </button>` : 
+                                `<button class="btn btn-sm btn-outline-warning me-1" onclick="toggleSystemMessage(${msg.id}, 0)" title="Deactivate">
+                                    <i class="bi bi-pause-circle"></i>
+                                </button>`
+                            }
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteSystemMessage(${msg.id})" title="Delete">
                                 <i class="bi bi-trash"></i>
                             </button>
                         </td>
@@ -5701,6 +5709,37 @@ async function deleteSystemMessage(messageId) {
     } catch (error) {
         console.error('Error deleting system message:', error);
         alert('Error deleting system message: ' + error.message);
+    }
+}
+
+async function toggleSystemMessage(messageId, newStatus) {
+    const action = newStatus === 1 ? 'activate' : 'deactivate';
+    if (!confirm(`Are you sure you want to ${action} this system message?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/admin/api/system_messages/${messageId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                status: newStatus
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            loadSystemMessages();  // Refresh the list
+        } else {
+            alert('Error: ' + result.error);
+        }
+        
+    } catch (error) {
+        console.error('Error toggling system message:', error);
+        alert('Error toggling system message: ' + error.message);
     }
 }
 

@@ -627,16 +627,19 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                         with open(log_file, 'a') as f:
                             f.write(f"Download duration: {download_duration:.2f} seconds\n")
                         
-                        # Track compute cost
+                        # Get user_id from the job before closing connection
+                        cursor.execute("SELECT user_id FROM space_download_scheduler WHERE id = %s", (job_id,))
+                        job_result = cursor.fetchone()
+                        user_id = job_result[0] if job_result else None
+                        
+                        # Close current connection before CostLogger
+                        cursor.close()
+                        conn.close()
+                        
+                        # Track compute cost with fresh connection
                         try:
-                            cost_logger = CostLogger()
-                            
-                            # Get user_id from the job
-                            cursor.execute("SELECT user_id FROM space_download_scheduler WHERE id = %s", (job_id,))
-                            job_result = cursor.fetchone()
-                            user_id = job_result[0] if job_result else None
-                            
                             if user_id:
+                                cost_logger = CostLogger()
                                 success, message, cost = cost_logger.track_compute_operation(
                                     space_id=space_id,
                                     action='mp3',
@@ -656,6 +659,16 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                             logger.error(f"Error tracking compute cost for job {job_id}: {cost_err}")
                             with open(log_file, 'a') as f:
                                 f.write(f"Error tracking compute cost: {cost_err}\n")
+                        
+                        # Re-open connection for remaining operations
+                        try:
+                            conn = mysql.connector.connect(**mysql_config)
+                            cursor = conn.cursor()
+                        except Exception as reconnect_err:
+                            logger.error(f"Error reconnecting to database: {reconnect_err}")
+                            with open(log_file, 'a') as f:
+                                f.write(f"Error reconnecting to database: {reconnect_err}\n")
+                            return None
                         
                         # Send email notification to user
                         if user_id:
@@ -718,6 +731,8 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                         cursor.execute(update_job_query, (file_size, job_id))
                         
                         conn.commit()
+                        cursor.close()
+                        conn.close()
                         
                         # Trigger cache invalidation since we updated/created a space
                         try:
@@ -729,9 +744,6 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                         except Exception as cache_err:
                             with open(log_file, 'a') as f:
                                 f.write(f"Warning: Could not trigger cache invalidation: {cache_err}\n")
-                        
-                        cursor.close()
-                        conn.close()
                         
                         with open(log_file, 'a') as f:
                             f.write(f"Database updated successfully. Job marked as completed.\n")
