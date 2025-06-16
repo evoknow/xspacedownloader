@@ -95,12 +95,29 @@ class OpenAI(AIProvider):
             
             if 'choices' in result and len(result['choices']) > 0:
                 content = result['choices'][0]['message']['content'].strip()
+                
+                # Extract token usage information
+                usage_info = result.get('usage', {})
+                prompt_tokens = usage_info.get('prompt_tokens', 0)
+                completion_tokens = usage_info.get('completion_tokens', 0)
+                total_tokens = usage_info.get('total_tokens', 0)
+                
                 logger.info("Successfully received response from OpenAI")
                 logger.info(f"========== OPENAI API RESPONSE ==========")
                 logger.info(f"Response content: {content}")
                 logger.info(f"Response length: {len(content)} characters")
+                logger.info(f"Token usage - Prompt: {prompt_tokens}, Completion: {completion_tokens}, Total: {total_tokens}")
                 logger.info(f"========================================")
-                return True, content
+                
+                # Return content with token usage information
+                return True, {
+                    'content': content,
+                    'usage': {
+                        'input_tokens': prompt_tokens,
+                        'output_tokens': completion_tokens,
+                        'total_tokens': total_tokens
+                    }
+                }
             else:
                 logger.error(f"Unexpected OpenAI response format: {result}")
                 return False, {
