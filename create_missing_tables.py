@@ -16,22 +16,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # SQL statements for creating missing tables
+# Most tables already exist, so we only need these two:
 CREATE_TABLES = {
-    'system_messages': """
-        CREATE TABLE IF NOT EXISTS `system_messages` (
-          `id` int NOT NULL AUTO_INCREMENT,
-          `message` text NOT NULL COMMENT 'The system message content',
-          `start_date` datetime NOT NULL COMMENT 'When the message should start displaying',
-          `end_date` datetime NOT NULL COMMENT 'When the message should stop displaying',
-          `status` int NOT NULL DEFAULT '0' COMMENT 'Status: 0 = pending, 1 = displayed, -1 = deleted',
-          `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-          `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-          PRIMARY KEY (`id`),
-          KEY `idx_status` (`status`),
-          KEY `idx_dates` (`start_date`,`end_date`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='System-wide messages for users'
-    """,
-    
     'app_settings': """
         CREATE TABLE IF NOT EXISTS `app_settings` (
           `id` int NOT NULL AUTO_INCREMENT,
@@ -46,56 +32,19 @@ CREATE_TABLES = {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Application settings'
     """,
     
-    'space_cost': """
-        CREATE TABLE IF NOT EXISTS `space_cost` (
+    'system_messages': """
+        CREATE TABLE IF NOT EXISTS `system_messages` (
           `id` int NOT NULL AUTO_INCREMENT,
-          `space_id` varchar(255) NOT NULL COMMENT 'Space ID',
-          `user_id` int NOT NULL COMMENT 'User who incurred the cost',
-          `cost_type` varchar(50) NOT NULL COMMENT 'Type of cost: transcription, translation, compute, video_generation',
-          `amount` decimal(10,6) NOT NULL COMMENT 'Cost amount in USD',
-          `description` text COMMENT 'Description of the cost',
-          `ai_vendor` varchar(50) DEFAULT NULL COMMENT 'AI vendor used (openai, claude, etc)',
-          `ai_model` varchar(100) DEFAULT NULL COMMENT 'AI model used',
-          `input_tokens` int DEFAULT NULL COMMENT 'Number of input tokens used',
-          `output_tokens` int DEFAULT NULL COMMENT 'Number of output tokens used',
-          `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-          PRIMARY KEY (`id`),
-          KEY `idx_space_id` (`space_id`),
-          KEY `idx_user_id` (`user_id`),
-          KEY `idx_cost_type` (`cost_type`),
-          KEY `idx_created_at` (`created_at`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Track AI and compute costs per space'
-    """,
-    
-    'ai_api_cost': """
-        CREATE TABLE IF NOT EXISTS `ai_api_cost` (
-          `id` int NOT NULL AUTO_INCREMENT,
-          `vendor` varchar(50) NOT NULL COMMENT 'AI vendor (openai, claude, etc)',
-          `model` varchar(100) NOT NULL COMMENT 'Model name',
-          `input_token_cost_per_million_tokens` decimal(10,4) NOT NULL COMMENT 'Cost per million input tokens in USD',
-          `output_token_cost_per_million_tokens` decimal(10,4) NOT NULL COMMENT 'Cost per million output tokens in USD',
+          `message` text NOT NULL COMMENT 'The system message content',
+          `start_date` datetime NOT NULL COMMENT 'When the message should start displaying',
+          `end_date` datetime NOT NULL COMMENT 'When the message should stop displaying',
+          `status` int NOT NULL DEFAULT '0' COMMENT 'Status: 0 = pending, 1 = displayed, -1 = deleted',
           `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
           `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
           PRIMARY KEY (`id`),
-          UNIQUE KEY `vendor_model` (`vendor`,`model`),
-          KEY `idx_vendor` (`vendor`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI model pricing information'
-    """,
-    
-    'visitor_download_log': """
-        CREATE TABLE IF NOT EXISTS `visitor_download_log` (
-          `id` int NOT NULL AUTO_INCREMENT,
-          `ip_address` varchar(45) NOT NULL COMMENT 'Visitor IP address',
-          `cookie_id` varchar(100) DEFAULT NULL COMMENT 'Visitor cookie ID',
-          `space_id` varchar(255) NOT NULL COMMENT 'Space ID that was downloaded',
-          `downloaded` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Whether download was successful',
-          `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-          PRIMARY KEY (`id`),
-          KEY `idx_ip_address` (`ip_address`),
-          KEY `idx_cookie_id` (`cookie_id`),
-          KEY `idx_space_id` (`space_id`),
-          KEY `idx_created_at` (`created_at`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Track visitor downloads for limiting'
+          KEY `idx_status` (`status`),
+          KEY `idx_dates` (`start_date`,`end_date`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='System-wide messages for users'
     """
 }
 
