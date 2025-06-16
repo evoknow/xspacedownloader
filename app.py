@@ -7856,7 +7856,10 @@ def admin_get_ai_costs():
         from components.DatabaseManager import DatabaseManager
         db = DatabaseManager()
         
-        with db.get_connection() as connection:
+        # Get connection directly from pool without context manager
+        connection = db.pool.get_connection()
+        
+        try:
             cursor = connection.cursor(dictionary=True)
             
             cursor.execute("""
@@ -7868,8 +7871,14 @@ def admin_get_ai_costs():
             
             costs = cursor.fetchall()
             cursor.close()
-        
-        return jsonify({'costs': costs})
+            
+            if costs is None:
+                costs = []
+            
+            return jsonify({'costs': costs})
+            
+        finally:
+            connection.close()  # Return to pool
         
     except Exception as e:
         logger.error(f"Error getting AI costs: {e}", exc_info=True)
@@ -7931,7 +7940,10 @@ def admin_credit_stats():
         from components.DatabaseManager import DatabaseManager
         db = DatabaseManager()
         
-        with db.get_connection() as connection:
+        # Get connection directly from pool without context manager
+        connection = db.pool.get_connection()
+        
+        try:
             cursor = connection.cursor(dictionary=True)
             
             # Get user credit statistics
@@ -7954,7 +7966,11 @@ def admin_credit_stats():
                 WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
                 GROUP BY cost_type
             """)
-            cost_by_type = {row['cost_type']: float(row['total_cost']) for row in cursor.fetchall()}
+            cost_type_results = cursor.fetchall()
+            
+            cost_by_type = {}
+            if cost_type_results:
+                cost_by_type = {row['cost_type']: float(row['total_cost']) for row in cost_type_results}
             
             # Get cost breakdown by vendor (last 30 days)
             cursor.execute("""
@@ -7963,19 +7979,36 @@ def admin_credit_stats():
                 WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
                 GROUP BY ai_vendor
             """)
-            cost_by_vendor = {row['vendor']: float(row['total_cost']) for row in cursor.fetchall()}
+            vendor_results = cursor.fetchall()
+            
+            cost_by_vendor = {}
+            if vendor_results:
+                cost_by_vendor = {row['vendor']: float(row['total_cost']) for row in vendor_results}
             
             cursor.close()
-        
-        return jsonify({
-            'user_count': credit_stats['user_count'],
-            'total_credits': float(credit_stats['total_credits']),
-            'avg_credits': float(credit_stats['avg_credits']),
-            'min_credits': float(credit_stats['min_credits']),
-            'max_credits': float(credit_stats['max_credits']),
-            'cost_by_type': cost_by_type,
-            'cost_by_vendor': cost_by_vendor
-        })
+            
+            # Handle case where no credit stats found
+            if not credit_stats:
+                credit_stats = {
+                    'user_count': 0,
+                    'total_credits': 0,
+                    'avg_credits': 0,
+                    'min_credits': 0,
+                    'max_credits': 0
+                }
+            
+            return jsonify({
+                'user_count': credit_stats['user_count'],
+                'total_credits': float(credit_stats['total_credits']),
+                'avg_credits': float(credit_stats['avg_credits']),
+                'min_credits': float(credit_stats['min_credits']),
+                'max_credits': float(credit_stats['max_credits']),
+                'cost_by_type': cost_by_type,
+                'cost_by_vendor': cost_by_vendor
+            })
+            
+        finally:
+            connection.close()  # Return to pool
         
     except Exception as e:
         logger.error(f"Error getting credit stats: {e}", exc_info=True)
