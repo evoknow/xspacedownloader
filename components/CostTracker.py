@@ -23,7 +23,11 @@ class CostTracker:
             config_file (str): Path to the configuration file
         """
         self.config_file = config_file
-        self.db = DatabaseManager()
+        try:
+            self.db = DatabaseManager()
+        except Exception as e:
+            logger.error(f"Failed to initialize DatabaseManager in CostTracker: {e}")
+            self.db = None
         self.compute_cost_per_second = self._get_compute_cost_per_second()
     
     def _get_compute_cost_per_second(self) -> float:
@@ -52,6 +56,10 @@ class CostTracker:
         Returns:
             dict: Cost information or None if not found
         """
+        if not self.db:
+            logger.warning("Database not available for AI cost lookup")
+            return None
+            
         try:
             cursor = self.db.connection.cursor(dictionary=True)
             query = """

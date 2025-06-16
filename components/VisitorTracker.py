@@ -17,7 +17,11 @@ class VisitorTracker:
     
     def __init__(self):
         """Initialize the VisitorTracker."""
-        self.db = DatabaseManager()
+        try:
+            self.db = DatabaseManager()
+        except Exception as e:
+            logger.error(f"Failed to initialize DatabaseManager in VisitorTracker: {e}")
+            self.db = None
     
     def get_or_create_visitor_id(self) -> str:
         """
@@ -68,6 +72,10 @@ class VisitorTracker:
         visitor_id = self.get_or_create_visitor_id()
         ip_address = self.get_visitor_ip()
         
+        if not self.db:
+            logger.warning("Database not available for visitor limit check")
+            return True, "database_unavailable"
+        
         try:
             cursor = self.db.connection.cursor(dictionary=True)
             
@@ -114,6 +122,10 @@ class VisitorTracker:
         
         visitor_id = self.get_or_create_visitor_id()
         ip_address = self.get_visitor_ip()
+        
+        if not self.db:
+            logger.warning("Database not available for visitor download recording")
+            return True
         
         try:
             cursor = self.db.connection.cursor()

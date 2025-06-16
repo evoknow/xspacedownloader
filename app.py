@@ -4744,22 +4744,38 @@ def admin_dashboard():
         space = get_space_component()
         cursor = space.connection.cursor(dictionary=True)
         
-        # Get basic stats
-        # Total users
-        cursor.execute("SELECT COUNT(*) as total FROM users")
-        total_users = cursor.fetchone()['total']
+        # Get basic stats with error handling
+        try:
+            # Total users
+            cursor.execute("SELECT COUNT(*) as total FROM users")
+            total_users = cursor.fetchone()['total']
+        except Exception as e:
+            logger.warning(f"Error getting user count: {e}")
+            total_users = 0
         
-        # Total spaces
-        cursor.execute("SELECT COUNT(*) as total FROM spaces")
-        total_spaces = cursor.fetchone()['total']
+        try:
+            # Total spaces
+            cursor.execute("SELECT COUNT(*) as total FROM spaces")
+            total_spaces = cursor.fetchone()['total']
+        except Exception as e:
+            logger.warning(f"Error getting space count: {e}")
+            total_spaces = 0
         
-        # Total downloads
-        cursor.execute("SELECT SUM(download_cnt) as total FROM spaces")
-        total_downloads = cursor.fetchone()['total'] or 0
+        try:
+            # Total downloads
+            cursor.execute("SELECT SUM(download_cnt) as total FROM spaces")
+            total_downloads = cursor.fetchone()['total'] or 0
+        except Exception as e:
+            logger.warning(f"Error getting download count: {e}")
+            total_downloads = 0
         
-        # Total plays
-        cursor.execute("SELECT SUM(playback_cnt) as total FROM spaces")
-        total_plays = cursor.fetchone()['total'] or 0
+        try:
+            # Total plays
+            cursor.execute("SELECT SUM(playback_cnt) as total FROM spaces")
+            total_plays = cursor.fetchone()['total'] or 0
+        except Exception as e:
+            logger.warning(f"Error getting play count: {e}")
+            total_plays = 0
         
         cursor.close()
         
