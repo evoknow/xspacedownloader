@@ -125,6 +125,31 @@ __version__ = "1.1.1"
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 CORS(app)
 
+# Add context processor to inject user info into all templates
+@app.context_processor
+def inject_user_info():
+    """Inject user info into all templates automatically."""
+    if session.get('user_id'):
+        try:
+            space = get_space_component()
+            cursor = space.connection.cursor(dictionary=True)
+            cursor.execute("SELECT email, credits FROM users WHERE id = %s", (session['user_id'],))
+            user_info = cursor.fetchone()
+            cursor.close()
+            if user_info:
+                return {
+                    'user_email': user_info['email'],
+                    'user_credits': float(user_info['credits'])
+                }
+        except Exception as e:
+            logger.warning(f"Could not fetch user info for context: {e}")
+    
+    # Return empty values if not logged in or error
+    return {
+        'user_email': None,
+        'user_credits': None
+    }
+
 # Secret key for sessions and flashing messages
 app.secret_key = os.environ.get('SECRET_KEY', 'xspacedownloaderdevkey')
 
@@ -871,26 +896,7 @@ def index():
         # Check if we have cached data
         cached_data = get_cached_index_data()
         if cached_data:
-            # Get user credit information if logged in
-            user_credits = None
-            user_email = None
-            if session.get('user_id'):
-                try:
-                    space = get_space_component()
-                    cursor = space.connection.cursor(dictionary=True)
-                    cursor.execute("SELECT email, credits FROM users WHERE id = %s", (session['user_id'],))
-                    user_info = cursor.fetchone()
-                    cursor.close()
-                    if user_info:
-                        user_credits = float(user_info['credits'])
-                        user_email = user_info['email']
-                except Exception as e:
-                    logger.warning(f"Could not fetch user credit info: {e}")
-            
-            return render_template('index.html', 
-                                 completed_spaces=cached_data,
-                                 user_credits=user_credits,
-                                 user_email=user_email)
+            return render_template('index.html', completed_spaces=cached_data)
         
         # No valid cache, generate fresh data
         logger.info("Generating fresh index data (cache miss or expired)")
@@ -926,28 +932,10 @@ def index():
                 job['transcript_count'] = 0
                 job['title'] = ''
         
-        # Get user credit information if logged in
-        user_credits = None
-        user_email = None
-        if session.get('user_id'):
-            try:
-                cursor = space.connection.cursor(dictionary=True)
-                cursor.execute("SELECT email, credits FROM users WHERE id = %s", (session['user_id'],))
-                user_info = cursor.fetchone()
-                cursor.close()
-                if user_info:
-                    user_credits = float(user_info['credits'])
-                    user_email = user_info['email']
-            except Exception as e:
-                logger.warning(f"Could not fetch user credit info: {e}")
-        
         # Cache the data
         set_index_cache(completed_spaces)
         
-        return render_template('index.html', 
-                             completed_spaces=completed_spaces,
-                             user_credits=user_credits,
-                             user_email=user_email)
+        return render_template('index.html', completed_spaces=completed_spaces)
     except Exception as e:
         logger.error(f"Error loading completed spaces: {e}", exc_info=True)
         return render_template('index.html')
@@ -3230,6 +3218,33 @@ def check_user_credits(required_amount=0.0):
         return False, current_balance, f"Insufficient credits. Required: ${required_amount:.2f}, Available: ${current_balance:.2f}"
     
     return True, current_balance, "Sufficient credits"
+
+def get_user_info_for_template():
+    """
+    Get user email and credits for template rendering.
+    
+    Returns:
+        dict: Dictionary with user_email and user_credits keys
+    """
+    user_info = {
+        'user_email': None,
+        'user_credits': None
+    }
+    
+    if session.get('user_id'):
+        try:
+            space = get_space_component()
+            cursor = space.connection.cursor(dictionary=True)
+            cursor.execute("SELECT email, credits FROM users WHERE id = %s", (session['user_id'],))
+            result = cursor.fetchone()
+            cursor.close()
+            if result:
+                user_info['user_email'] = result['email']
+                user_info['user_credits'] = float(result['credits'])
+        except Exception as e:
+            logger.warning(f"Could not fetch user info for template: {e}")
+    
+    return user_info
 
 def get_translate_component():
     """Get a Translate component instance."""
