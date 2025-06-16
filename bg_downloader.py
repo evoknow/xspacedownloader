@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 import mysql.connector
 from mysql.connector import Error
+from components.CostLogger import CostLogger  # For cost tracking
+from components.Email import Email  # For email notifications
 
 # Check if we're already running in a virtual environment
 # If the script is executed with venv Python (as systemd does), skip venv detection
@@ -617,6 +619,91 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                             space_url = f"https://x.com/i/spaces/{space_id}"
                             filename = f"{space_id}.{file_type}"
                             cursor.execute(insert_space_query, (space_id, space_url, filename, str(file_size)))
+                        
+                        # Calculate download duration and track compute cost
+                        download_end_time = time.time()
+                        download_duration = download_end_time - download_start_time
+                        
+                        with open(log_file, 'a') as f:
+                            f.write(f"Download duration: {download_duration:.2f} seconds\n")
+                        
+                        # Track compute cost
+                        try:
+                            cost_logger = CostLogger()
+                            
+                            # Get user_id from the job
+                            cursor.execute("SELECT user_id FROM space_download_scheduler WHERE id = %s", (job_id,))
+                            job_result = cursor.fetchone()
+                            user_id = job_result[0] if job_result else None
+                            
+                            if user_id:
+                                success, message, cost = cost_logger.track_compute_operation(
+                                    space_id=space_id,
+                                    action='mp3',
+                                    compute_time_seconds=download_duration
+                                )
+                                
+                                with open(log_file, 'a') as f:
+                                    f.write(f"Cost tracking: success={success}, message={message}, cost={cost}\n")
+                                
+                                if not success:
+                                    logger.warning(f"Cost tracking failed for job {job_id}: {message}")
+                            else:
+                                with open(log_file, 'a') as f:
+                                    f.write(f"Skipping cost tracking - no user_id for job {job_id}\n")
+                                    
+                        except Exception as cost_err:
+                            logger.error(f"Error tracking compute cost for job {job_id}: {cost_err}")
+                            with open(log_file, 'a') as f:
+                                f.write(f"Error tracking compute cost: {cost_err}\n")
+                        
+                        # Send email notification to user
+                        if user_id:
+                            try:
+                                # Get user email
+                                cursor.execute("SELECT email FROM users WHERE id = %s", (user_id,))
+                                user_result = cursor.fetchone()
+                                
+                                if user_result and user_result[0]:
+                                    user_email = user_result[0]
+                                    
+                                    # Get space title if available
+                                    cursor.execute("SELECT title FROM spaces WHERE space_id = %s", (space_id,))
+                                    space_result = cursor.fetchone()
+                                    space_title = space_result[0] if space_result and space_result[0] else f"Space {space_id}"
+                                    
+                                    # Send email notification
+                                    email = Email()
+                                    subject = f"Your space download is ready: {space_title}"
+                                    body = f"""
+                                    <h2>Your space download is complete!</h2>
+                                    <p>Hello,</p>
+                                    <p>Your requested space has been successfully downloaded and is ready to access.</p>
+                                    <ul>
+                                        <li><strong>Space:</strong> {space_title}</li>
+                                        <li><strong>Space ID:</strong> {space_id}</li>
+                                        <li><strong>Format:</strong> {file_type.upper()}</li>
+                                        <li><strong>File size:</strong> {file_size / (1024*1024):.1f} MB</li>
+                                        <li><strong>Processing time:</strong> {download_duration:.1f} seconds</li>
+                                    </ul>
+                                    <p>You can now access your space at: <a href="https://xspacedownload.com/spaces/{space_id}">View Space</a></p>
+                                    <p>Thank you for using XSpace Downloader!</p>
+                                    """
+                                    
+                                    email.send(
+                                        to=user_email,
+                                        subject=subject,
+                                        body=body,
+                                        content_type='text/html'
+                                    )
+                                    
+                                    with open(log_file, 'a') as f:
+                                        f.write(f"Email notification sent to {user_email}\n")
+                                        
+                            except Exception as email_err:
+                                logger.error(f"Error sending email notification for job {job_id}: {email_err}")
+                                with open(log_file, 'a') as f:
+                                    f.write(f"Error sending email notification: {email_err}\n")
                         
                         # 3. Update job status to completed
                         with open(log_file, 'a') as f:
@@ -1477,6 +1564,10 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                 if space_availability_check:
                     print(f"WARNING: {space_availability_check}")
                     print("Will still attempt download but may fail")
+                
+                # Track download start time for cost calculation
+                download_start_time = time.time()
+                print(f"[DEBUG DOWNLOAD] Starting download at {datetime.datetime.now()}")
                 
                 # Run yt-dlp as a subprocess and capture output
                 print(f"[DEBUG DOWNLOAD] Executing yt-dlp command...")
