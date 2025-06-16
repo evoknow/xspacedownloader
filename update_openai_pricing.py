@@ -15,14 +15,23 @@ from datetime import datetime
 from components.DatabaseManager import DatabaseManager
 
 # Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('logs/openai_pricing_update.log'),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
+def setup_logging():
+    # Create logs directory if it doesn't exist
+    logs_dir = os.path.join(os.path.dirname(__file__), 'logs')
+    os.makedirs(logs_dir, exist_ok=True)
+    
+    log_file = os.path.join(logs_dir, 'openai_pricing_update.log')
+    
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+
+setup_logging()
 logger = logging.getLogger(__name__)
 
 def fetch_openai_pricing():
@@ -62,73 +71,79 @@ def update_pricing_database(pricing_data):
         bool: True if successful, False otherwise
     """
     try:
-        # Initialize database connection
+        # Initialize database connection using context manager
         db = DatabaseManager()
-        cursor = db.connection.cursor()
         
         updated_count = 0
         skipped_count = 0
         
         logger.info("Starting database update...")
         
-        for model_name, model_data in pricing_data.items():
-            try:
-                # Extract pricing information
-                input_cost = model_data.get('input')
-                output_cost = model_data.get('output')
-                
-                # Skip if essential data is missing
-                if input_cost is None or output_cost is None:
-                    logger.warning(f"Skipping {model_name}: missing input/output pricing")
+        # Extract models from the pricing data structure
+        models_data = pricing_data.get('models', {})
+        if not models_data:
+            logger.error("No models found in pricing data")
+            return False
+        
+        with db.get_connection() as connection:
+            cursor = connection.cursor()
+            
+            for model_name, model_data in models_data.items():
+                try:
+                    # Extract pricing information
+                    input_cost = model_data.get('input')
+                    output_cost = model_data.get('output')
+                    
+                    # Skip if essential data is missing
+                    if input_cost is None or output_cost is None:
+                        logger.warning(f"Skipping {model_name}: missing input/output pricing")
+                        skipped_count += 1
+                        continue
+                    
+                    # Convert to cost per million tokens (pricing data is usually per 1K tokens)
+                    # Check if the pricing is already per million or per thousand
+                    if input_cost < 1:  # Likely per thousand tokens
+                        input_cost_per_million = input_cost * 1000
+                        output_cost_per_million = output_cost * 1000
+                    else:  # Already per million or very expensive per thousand
+                        input_cost_per_million = input_cost
+                        output_cost_per_million = output_cost
+                    
+                    # Use REPLACE INTO to insert or update
+                    query = """
+                        REPLACE INTO ai_api_cost (
+                            vendor,
+                            model,
+                            input_token_cost_per_million_tokens,
+                            output_token_cost_per_million_tokens,
+                            updated_at
+                        ) VALUES (%s, %s, %s, %s, NOW())
+                    """
+                    
+                    cursor.execute(query, (
+                        'openai',
+                        model_name,
+                        input_cost_per_million,
+                        output_cost_per_million
+                    ))
+                    
+                    updated_count += 1
+                    logger.debug(f"Updated {model_name}: input=${input_cost_per_million:.4f}, output=${output_cost_per_million:.4f} per million tokens")
+                    
+                except Exception as e:
+                    logger.error(f"Error processing model {model_name}: {e}")
                     skipped_count += 1
                     continue
-                
-                # Convert to cost per million tokens (pricing data is usually per 1K tokens)
-                # Check if the pricing is already per million or per thousand
-                if input_cost < 1:  # Likely per thousand tokens
-                    input_cost_per_million = input_cost * 1000
-                    output_cost_per_million = output_cost * 1000
-                else:  # Already per million or very expensive per thousand
-                    input_cost_per_million = input_cost
-                    output_cost_per_million = output_cost
-                
-                # Use REPLACE INTO to insert or update
-                query = """
-                    REPLACE INTO ai_api_cost (
-                        vendor,
-                        model,
-                        input_token_cost_per_million_tokens,
-                        output_token_cost_per_million_tokens,
-                        updated_at
-                    ) VALUES (%s, %s, %s, %s, NOW())
-                """
-                
-                cursor.execute(query, (
-                    'openai',
-                    model_name,
-                    input_cost_per_million,
-                    output_cost_per_million
-                ))
-                
-                updated_count += 1
-                logger.debug(f"Updated {model_name}: input=${input_cost_per_million:.4f}, output=${output_cost_per_million:.4f} per million tokens")
-                
-            except Exception as e:
-                logger.error(f"Error processing model {model_name}: {e}")
-                skipped_count += 1
-                continue
-        
-        # Commit all changes
-        db.connection.commit()
-        cursor.close()
+            
+            # Commit all changes
+            connection.commit()
+            cursor.close()
         
         logger.info(f"Database update completed: {updated_count} models updated, {skipped_count} skipped")
         return True
         
     except Exception as e:
         logger.error(f"Database error: {e}")
-        if 'cursor' in locals():
-            cursor.close()
         return False
 
 def main():

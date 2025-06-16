@@ -8021,9 +8021,17 @@ def admin_update_openai_pricing():
             return jsonify({'error': 'OpenAI pricing update script not found'}), 404
         
         # Run the script and capture output
+        # Check if we're in a virtual environment and use the correct Python
+        python_executable = sys.executable
+        
+        # If we're in a venv, make sure to use that Python
+        venv_python = os.path.join(os.path.dirname(__file__), 'venv', 'bin', 'python')
+        if os.path.exists(venv_python):
+            python_executable = venv_python
+        
         result = subprocess.run([
-            'python', script_path
-        ], capture_output=True, text=True, timeout=60)
+            python_executable, script_path
+        ], capture_output=True, text=True, timeout=60, cwd=os.path.dirname(__file__))
         
         if result.returncode == 0:
             logger.info(f"Admin successfully updated OpenAI pricing")
