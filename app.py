@@ -7864,7 +7864,7 @@ def admin_get_ai_costs():
             
             cursor.execute("""
                 SELECT id, vendor, model, input_token_cost_per_million_tokens, 
-                       output_token_cost_per_million_tokens, created_at, updated_at
+                       output_token_cost_per_million_tokens, updated_at
                 FROM ai_api_cost
                 ORDER BY vendor, model
             """)
@@ -7959,31 +7959,35 @@ def admin_credit_stats():
             """)
             credit_stats = cursor.fetchone()
             
-            # Get cost breakdown by type (last 30 days)
+            # Get cost breakdown by type (last 30 days) - calculate from individual columns
             cursor.execute("""
-                SELECT cost_type, SUM(amount) as total_cost
+                SELECT 
+                    SUM(mp3_compute_cost) as mp3_total,
+                    SUM(mp4_compute_cost) as mp4_total,
+                    SUM(transcription_cost) as transcription_total,
+                    SUM(translation_cost) as translation_total
                 FROM space_cost 
                 WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-                GROUP BY cost_type
             """)
-            cost_type_results = cursor.fetchall()
+            cost_result = cursor.fetchone()
             
             cost_by_type = {}
-            if cost_type_results:
-                cost_by_type = {row['cost_type']: float(row['total_cost']) for row in cost_type_results}
+            if cost_result:
+                cost_by_type = {
+                    'mp3_compute': float(cost_result['mp3_total'] or 0),
+                    'mp4_compute': float(cost_result['mp4_total'] or 0),
+                    'transcription': float(cost_result['transcription_total'] or 0),
+                    'translation': float(cost_result['translation_total'] or 0)
+                }
             
-            # Get cost breakdown by vendor (last 30 days)
-            cursor.execute("""
-                SELECT COALESCE(ai_vendor, 'compute') as vendor, SUM(amount) as total_cost
-                FROM space_cost 
-                WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-                GROUP BY ai_vendor
-            """)
-            vendor_results = cursor.fetchall()
+            # For vendor breakdown, combine compute costs as 'compute' vendor
+            total_compute = cost_by_type.get('mp3_compute', 0) + cost_by_type.get('mp4_compute', 0)
+            total_ai = cost_by_type.get('transcription', 0) + cost_by_type.get('translation', 0)
             
-            cost_by_vendor = {}
-            if vendor_results:
-                cost_by_vendor = {row['vendor']: float(row['total_cost']) for row in vendor_results}
+            cost_by_vendor = {
+                'compute': total_compute,
+                'openai': total_ai  # Assuming transcription/translation use OpenAI
+            }
             
             cursor.close()
             
