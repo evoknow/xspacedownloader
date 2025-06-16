@@ -3437,7 +3437,7 @@ def api_translate():
         # Perform translation
         logger.info(f"Starting AI translation from {source_lang} to {target_lang}")
         logger.info(f"Include timecodes parameter: {include_timecodes}")
-        success, result = translator.translate(text, source_lang, target_lang)
+        success, result = translator.translate(text, source_lang, target_lang, space_id)
         
         if not success:
             error_msg = 'Translation failed'
@@ -3664,8 +3664,9 @@ def api_transcript_summary(transcript_id):
         if not translator:
             return jsonify({'error': 'Could not initialize AI service'}), 500
             
-        # Generate summary
-        success, result = translator.summary(transcript_text, max_length)
+        # Generate summary with cost tracking
+        space_id = transcript_record['space_id']
+        success, result = translator.summary(transcript_text, max_length, space_id=space_id)
         
         if not success:
             return jsonify({'error': 'Summary generation failed', 'details': result}), 400

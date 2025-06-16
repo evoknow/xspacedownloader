@@ -40,6 +40,7 @@ except Exception as e:
 # Import components
 try:
     from components.SpeechToText import SpeechToText
+    from components.CostLogger import CostLogger
 except ImportError as e:
     logger.error(f"Failed to import required components: {e}")
     sys.exit(1)
@@ -985,6 +986,70 @@ class TranscriptionWorker:
                 transcription_end_time = time.time()
                 transcription_duration = transcription_end_time - transcription_start_time
                 logger.info(f"Transcription completed in {transcription_duration:.1f} seconds")
+                
+                # Track cost for AI transcription if using OpenAI
+                try:
+                    admin_requested = job_data.get('admin_requested', False)
+                    user_id = job_data.get('user_id')
+                    
+                    # Only track costs for user-requested transcriptions or if user_id is available
+                    if not admin_requested and user_id:
+                        # Check if this was an OpenAI transcription by looking at the model used
+                        model_used = job_data.get('model', 'tiny')
+                        stt_provider = getattr(self.stt, 'provider', 'local')
+                        
+                        if stt_provider == 'openai' and hasattr(result, 'get') and result.get('usage'):
+                            # OpenAI transcription with usage data
+                            usage = result['usage']
+                            input_tokens = usage.get('input_tokens', 0)
+                            output_tokens = usage.get('output_tokens', 0)
+                            
+                            cost_logger = CostLogger()
+                            success, message, cost = cost_logger.track_ai_operation(
+                                space_id=space_id,
+                                action='transcription',
+                                vendor='openai',
+                                model=getattr(self.stt, 'model_name', 'gpt-4o-mini-transcribe'),
+                                input_tokens=input_tokens,
+                                output_tokens=output_tokens
+                            )
+                            
+                            if success:
+                                logger.info(f"Cost tracking successful for transcription: {cost} credits deducted")
+                            else:
+                                logger.warning(f"Cost tracking failed for transcription: {message}")
+                        elif stt_provider == 'openai':
+                            # OpenAI transcription without usage data - estimate cost
+                            # Estimate tokens based on audio duration (rough approximation)
+                            estimated_input_tokens = int(transcription_duration * 10)  # ~10 tokens per second of audio
+                            estimated_output_tokens = len(result.get('text', '').split()) if isinstance(result, dict) and result.get('text') else 0
+                            
+                            cost_logger = CostLogger()
+                            success, message, cost = cost_logger.track_ai_operation(
+                                space_id=space_id,
+                                action='transcription',
+                                vendor='openai', 
+                                model=getattr(self.stt, 'model_name', 'gpt-4o-mini-transcribe'),
+                                input_tokens=estimated_input_tokens,
+                                output_tokens=estimated_output_tokens
+                            )
+                            
+                            if success:
+                                logger.info(f"Cost tracking successful for transcription (estimated): {cost} credits deducted")
+                            else:
+                                logger.warning(f"Cost tracking failed for transcription: {message}")
+                        else:
+                            logger.info(f"Skipping cost tracking for local transcription model: {model_used}")
+                    else:
+                        if admin_requested:
+                            logger.info("Skipping cost tracking for admin-requested transcription")
+                        else:
+                            logger.info("Skipping cost tracking - no user_id provided")
+                            
+                except Exception as cost_err:
+                    logger.error(f"Error in transcription cost tracking: {cost_err}")
+                    import traceback
+                    logger.debug(f"Cost tracking traceback: {traceback.format_exc()}")
                 
                 # Save result to temp file
                 with open(temp_file, 'w') as f:

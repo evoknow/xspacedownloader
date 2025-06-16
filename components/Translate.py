@@ -6,7 +6,7 @@ import os
 import json
 import logging
 from typing import Dict, List, Optional, Union, Tuple
-from .AI import AI
+from .CostAwareAI import CostAwareAI
 
 # Configure logging
 logging.basicConfig(
@@ -34,11 +34,11 @@ class Translate:
         self.api_url = "AI-powered translation"  # Descriptive value for web API
         
         try:
-            self.ai = AI(config_file)
-            logger.info(f"Translation component initialized using AI provider: {self.ai.get_provider_name()}")
+            self.ai = CostAwareAI()
+            logger.info(f"Translation component initialized using CostAware AI provider: {self.ai.get_provider_name()}")
             self.api_key = "AI-configured"
         except Exception as e:
-            logger.error(f"Failed to initialize AI component: {e}")
+            logger.error(f"Failed to initialize CostAware AI component: {e}")
             self.ai = None
             self.api_key = None
             self.api_url = "AI component not available - check API keys"
@@ -73,7 +73,7 @@ class Translate:
         """
         return self.available_languages
     
-    def translate(self, text: str, source_lang: str, target_lang: str) -> Tuple[bool, Union[str, Dict]]:
+    def translate(self, text: str, source_lang: str, target_lang: str, space_id: str = None) -> Tuple[bool, Union[str, Dict]]:
         """
         Translate text from source language to target language.
         
@@ -81,6 +81,7 @@ class Translate:
             text (str): The text to translate
             source_lang (str): The source language code (e.g., 'en', 'es')
             target_lang (str): The target language code (e.g., 'en', 'es')
+            space_id (str, optional): Space ID for cost tracking
             
         Returns:
             Tuple[bool, Union[str, Dict]]: A tuple containing:
@@ -103,7 +104,11 @@ class Translate:
         problematic_languages = ['bn', 'ar', 'hi', 'th', 'ko', 'ja']
         
         try:
-            success, result = self.ai.translate(source_lang, target_lang, text)
+            # Use cost tracking version if space_id is provided
+            if space_id:
+                success, result = self.ai.translate_with_cost_tracking(space_id, source_lang, target_lang, text)
+            else:
+                success, result = self.ai.translate(source_lang, target_lang, text)
             
             # If translation failed or is for a problematic language, try with Claude if available
             if (not success or target_lang.lower() in problematic_languages) and hasattr(self, '_try_claude_fallback'):
@@ -208,7 +213,7 @@ class Translate:
             logger.error(f"Language detection error: {e}")
             return False, {"error": f"Language detection error: {str(e)}"}
     
-    def summary(self, content: str, max_length: int = None, language: str = None) -> Tuple[bool, Union[str, Dict]]:
+    def summary(self, content: str, max_length: int = None, language: str = None, space_id: str = None) -> Tuple[bool, Union[str, Dict]]:
         """
         Generate a summary of the given content using AI.
         
@@ -216,6 +221,7 @@ class Translate:
             content (str): Content to summarize
             max_length (int, optional): Maximum length of summary in words
             language (str, optional): Language for the summary output
+            space_id (str, optional): Space ID for cost tracking
             
         Returns:
             Tuple[bool, Union[str, Dict]]: Success flag and summary or error dict
@@ -230,18 +236,22 @@ class Translate:
             return False, {"error": "No content provided for summarization"}
         
         try:
-            # Pass language parameter if AI provider supports it
-            # Check if the AI provider's summary method accepts language parameter
-            import inspect
-            sig = inspect.signature(self.ai.summary)
-            params = sig.parameters
-            
-            if 'language' in params:
-                # AI provider supports language parameter
-                return self.ai.summary(content, max_length, language)
+            # Use cost tracking version if space_id is provided
+            if space_id:
+                return self.ai.summary_with_cost_tracking(space_id, content, max_length)
             else:
-                # Fallback to basic summary without language
-                return self.ai.summary(content, max_length)
+                # Pass language parameter if AI provider supports it
+                # Check if the AI provider's summary method accepts language parameter
+                import inspect
+                sig = inspect.signature(self.ai.summary)
+                params = sig.parameters
+                
+                if 'language' in params:
+                    # AI provider supports language parameter
+                    return self.ai.summary(content, max_length, language)
+                else:
+                    # Fallback to basic summary without language
+                    return self.ai.summary(content, max_length)
         except Exception as e:
             logger.error(f"Summarization error: {e}")
             return False, {"error": f"Summarization error: {str(e)}"}

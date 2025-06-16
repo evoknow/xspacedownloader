@@ -81,7 +81,18 @@ class CostAwareAI:
                 
                 if not cost_success:
                     logger.warning(f"Translation successful but cost tracking failed: {cost_message}")
-                    return False, {'error': cost_message}
+                    # Don't fail the translation if only cost tracking failed - just log the warning
+                    logger.warning(f"Continuing with translation despite cost tracking failure")
+            
+            # Ensure we return just the string content, not an object
+            if isinstance(translated_content, dict):
+                # If it's still a dict, try to extract the actual content
+                if 'content' in translated_content:
+                    translated_content = translated_content['content']
+                elif 'translated_text' in translated_content:
+                    translated_content = translated_content['translated_text']
+                else:
+                    translated_content = str(translated_content)
             
             return True, translated_content
             
@@ -125,7 +136,18 @@ class CostAwareAI:
                 
                 if not cost_success:
                     logger.warning(f"Summary successful but cost tracking failed: {cost_message}")
-                    return False, {'error': cost_message}
+                    # Don't fail the summary if only cost tracking failed - just log the warning
+                    logger.warning(f"Continuing with summary despite cost tracking failure")
+            
+            # Ensure we return just the string content, not an object
+            if isinstance(summary_content, dict):
+                # If it's still a dict, try to extract the actual content
+                if 'content' in summary_content:
+                    summary_content = summary_content['content']
+                elif 'summary' in summary_content:
+                    summary_content = summary_content['summary']
+                else:
+                    summary_content = str(summary_content)
             
             return True, summary_content
             

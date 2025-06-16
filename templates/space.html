@@ -3004,6 +3004,23 @@
         
         // Function to parse summary into individual points
         function parseSummaryIntoPoints(summary) {
+            // Ensure summary is a string
+            if (typeof summary !== 'string') {
+                console.error('Summary is not a string:', summary);
+                // Try to extract summary content if it's an object
+                if (typeof summary === 'object' && summary !== null) {
+                    if (summary.content) {
+                        summary = summary.content;
+                    } else if (summary.summary) {
+                        summary = summary.summary;
+                    } else {
+                        summary = JSON.stringify(summary);
+                    }
+                } else {
+                    summary = String(summary || 'Unable to parse summary');
+                }
+            }
+            
             // Split by bullet points, numbered lists, or sentences
             let points = [];
             
