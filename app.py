@@ -129,9 +129,23 @@ CORS(app)
 @app.context_processor
 def inject_user_info():
     """Inject user info into all templates automatically."""
+    # Skip for API routes to avoid unnecessary database queries
+    if request.endpoint and (request.endpoint.startswith('api_') or '/api/' in request.path):
+        return {
+            'user_email': None,
+            'user_credits': None
+        }
+    
     if session.get('user_id'):
         try:
             space = get_space_component()
+            if not space:
+                logger.warning("Space component not available for user info context")
+                return {
+                    'user_email': None,
+                    'user_credits': None
+                }
+            
             cursor = space.connection.cursor(dictionary=True)
             cursor.execute("SELECT email, credits FROM users WHERE id = %s", (session['user_id'],))
             user_info = cursor.fetchone()
@@ -6668,22 +6682,67 @@ def admin_service_settings():
         cursor = space.connection.cursor(dictionary=True)
         
         if request.method == 'GET':
-            # Ensure default settings exist
-            cursor.execute("""
-                INSERT IGNORE INTO app_settings (setting_name, setting_value, setting_type, description)
-                VALUES 
-                    ('transcription_enabled', 'true', 'boolean', 'Enable/disable transcription service'),
-                    ('video_generation_enabled', 'true', 'boolean', 'Enable/disable video generation service')
-            """)
-            space.connection.commit()
-            
-            # Get current settings
-            cursor.execute("""
-                SELECT setting_name, setting_value, setting_type, description
-                FROM app_settings
-                WHERE setting_name IN ('transcription_enabled', 'video_generation_enabled')
-            """)
-            settings = cursor.fetchall()
+            try:
+                # Check if table exists first
+                cursor.execute("""
+                    SELECT COUNT(*) as count 
+                    FROM information_schema.tables 
+                    WHERE table_schema = DATABASE() 
+                    AND table_name = 'app_settings'
+                """)
+                table_exists = cursor.fetchone()['count'] > 0
+                
+                if not table_exists:
+                    logger.warning("app_settings table does not exist")
+                    cursor.close()
+                    return jsonify({
+                        'settings': {
+                            'transcription_enabled': {'value': True, 'type': 'boolean', 'description': 'Transcription service enabled by default'},
+                            'video_generation_enabled': {'value': True, 'type': 'boolean', 'description': 'Video generation enabled by default'}
+                        }
+                    })
+                
+                # Try to ensure default settings exist
+                try:
+                    cursor.execute("""
+                        INSERT IGNORE INTO app_settings (setting_name, setting_value, setting_type, description)
+                        VALUES 
+                            ('transcription_enabled', 'true', 'boolean', 'Enable/disable transcription service'),
+                            ('video_generation_enabled', 'true', 'boolean', 'Enable/disable video generation service')
+                    """)
+                    space.connection.commit()
+                except Exception as insert_error:
+                    logger.warning(f"Could not insert default settings: {insert_error}")
+                    # Continue anyway - maybe they already exist
+                
+                # Get current settings
+                cursor.execute("""
+                    SELECT setting_name, setting_value, setting_type, description
+                    FROM app_settings
+                    WHERE setting_name IN ('transcription_enabled', 'video_generation_enabled')
+                """)
+                settings = cursor.fetchall()
+                
+                # If no settings found, return defaults
+                if not settings:
+                    cursor.close()
+                    return jsonify({
+                        'settings': {
+                            'transcription_enabled': {'value': True, 'type': 'boolean', 'description': 'Transcription service enabled by default'},
+                            'video_generation_enabled': {'value': True, 'type': 'boolean', 'description': 'Video generation enabled by default'}
+                        }
+                    })
+                    
+            except Exception as query_error:
+                logger.error(f"Error querying app_settings: {query_error}")
+                cursor.close()
+                # Return defaults on any error
+                return jsonify({
+                    'settings': {
+                        'transcription_enabled': {'value': True, 'type': 'boolean', 'description': 'Transcription service enabled by default'},
+                        'video_generation_enabled': {'value': True, 'type': 'boolean', 'description': 'Video generation enabled by default'}
+                    }
+                })
             
             # Convert to dictionary
             settings_dict = {}
