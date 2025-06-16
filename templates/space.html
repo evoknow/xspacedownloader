@@ -534,7 +534,7 @@
                 <div class="audio-player mb-4">
                     <div class="card">
                         <div class="card-body">
-                            <audio id="audio-player" controls class="w-100" preload="metadata">
+                            <audio id="audio-player" class="w-100" preload="metadata">
                                 <source src="/audio/{{ space.space_id }}.mp3" type="audio/mpeg">
                                 Your browser does not support the audio element.
                             </audio>
@@ -938,7 +938,7 @@
                 </div>
                 
                 <div class="mb-3">
-                    <audio id="trim-audio-preview" controls class="w-100" preload="metadata">
+                    <audio id="trim-audio-preview" class="w-100" preload="metadata">
                         <source src="/audio/{{ space.space_id }}.mp3" type="audio/mpeg">
                         Your browser does not support the audio element.
                     </audio>
@@ -3756,12 +3756,23 @@
 
 <!-- Initialize Plyr Players -->
 <script>
-    // Initialize Plyr players with custom configuration
-    document.addEventListener('DOMContentLoaded', function() {
+    // Wait for Plyr to load
+    function initializePlyrPlayers() {
+        if (typeof Plyr === 'undefined') {
+            console.log('Waiting for Plyr to load...');
+            setTimeout(initializePlyrPlayers, 100);
+            return;
+        }
+        
+        console.log('Plyr loaded, initializing players...');
+        
         // Initialize main audio player
         const mainAudioElement = document.getElementById('audio-player');
-        if (mainAudioElement) {
-            window.mainPlayer = new Plyr(mainAudioElement, {
+        console.log('Main audio element found:', !!mainAudioElement);
+        
+        if (mainAudioElement && typeof Plyr !== 'undefined') {
+            try {
+                window.mainPlayer = new Plyr(mainAudioElement, {
                 controls: [
                     'play-large',
                     'restart',
@@ -3803,12 +3814,22 @@
                     updateTimeDisplay();
                 }
             });
+            
+            console.log('Main Plyr player initialized successfully');
+            } catch (error) {
+                console.error('Error initializing main Plyr player:', error);
+            }
+        } else if (!mainAudioElement) {
+            console.warn('Main audio element not found');
+        } else if (typeof Plyr === 'undefined') {
+            console.error('Plyr library not loaded');
         }
         
         // Initialize trim modal audio player
         const trimAudioElement = document.getElementById('trim-audio-preview');
-        if (trimAudioElement) {
-            window.trimPlayer = new Plyr(trimAudioElement, {
+        if (trimAudioElement && typeof Plyr !== 'undefined') {
+            try {
+                window.trimPlayer = new Plyr(trimAudioElement, {
                 controls: [
                     'play',
                     'progress',
@@ -3822,8 +3843,20 @@
                 keyboard: { focused: true, global: false },
                 tooltips: { controls: true, seek: true }
             });
+                console.log('Trim Plyr player initialized successfully');
+            } catch (error) {
+                console.error('Error initializing trim Plyr player:', error);
+            }
         }
-    });
+    }
+    
+    // Initialize on DOMContentLoaded
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializePlyrPlayers);
+    } else {
+        // DOM already loaded
+        initializePlyrPlayers();
+    }
     
     // Helper function to get the actual media element
     window.getMediaElement = function(player) {
