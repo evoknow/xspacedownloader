@@ -5754,14 +5754,22 @@ async function loadAICosts() {
         const data = await response.json();
         
         const tbody = document.querySelector('#aiCostsTable tbody');
+        
+        // Check if response contains error
+        if (data.error) {
+            console.error('API Error:', data.error);
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error loading AI costs: ' + data.error + '</td></tr>';
+            return;
+        }
+        
         if (data.costs && data.costs.length > 0) {
             tbody.innerHTML = data.costs.map(cost => `
                 <tr>
-                    <td>${cost.vendor}</td>
-                    <td>${cost.model}</td>
-                    <td>$${cost.input_token_cost_per_million_tokens}</td>
-                    <td>$${cost.output_token_cost_per_million_tokens}</td>
-                    <td>${new Date(cost.updated_at).toLocaleDateString()}</td>
+                    <td>${cost.vendor || 'Unknown'}</td>
+                    <td>${cost.model || 'Unknown'}</td>
+                    <td>$${typeof cost.input_token_cost_per_million_tokens === 'number' ? cost.input_token_cost_per_million_tokens.toFixed(6) : '0.000000'}</td>
+                    <td>$${typeof cost.output_token_cost_per_million_tokens === 'number' ? cost.output_token_cost_per_million_tokens.toFixed(6) : '0.000000'}</td>
+                    <td>${cost.updated_at ? new Date(cost.updated_at).toLocaleDateString() : 'Unknown'}</td>
                     <td>
                         <button class="btn btn-sm btn-primary" onclick="editAICost(${cost.id})">
                             <i class="bi bi-pencil"></i>
@@ -5777,6 +5785,10 @@ async function loadAICosts() {
         }
     } catch (error) {
         console.error('Error loading AI costs:', error);
+        const tbody = document.querySelector('#aiCostsTable tbody');
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error loading AI costs</td></tr>';
+        }
     }
 }
 
@@ -5785,20 +5797,37 @@ async function loadCreditStats() {
         const response = await fetch('/admin/api/credit_stats');
         const data = await response.json();
         
-        document.getElementById('totalCredits').textContent = `$${data.total_credits.toFixed(2)}`;
-        document.getElementById('avgCredits').textContent = `$${data.avg_credits.toFixed(2)}`;
-        document.getElementById('weeklyCreditsAdded').textContent = `$${(data.user_count * 5).toFixed(2)}`;
+        // Check if response contains error
+        if (data.error) {
+            console.error('API Error:', data.error);
+            document.getElementById('totalCredits').textContent = 'Error loading';
+            document.getElementById('avgCredits').textContent = 'Error loading';
+            document.getElementById('weeklyCreditsAdded').textContent = 'Error loading';
+            return;
+        }
+        
+        // Safely handle potentially undefined values
+        const totalCredits = typeof data.total_credits === 'number' ? data.total_credits : 0;
+        const avgCredits = typeof data.avg_credits === 'number' ? data.avg_credits : 0;
+        const userCount = typeof data.user_count === 'number' ? data.user_count : 0;
+        
+        document.getElementById('totalCredits').textContent = `$${totalCredits.toFixed(2)}`;
+        document.getElementById('avgCredits').textContent = `$${avgCredits.toFixed(2)}`;
+        document.getElementById('weeklyCreditsAdded').textContent = `$${(userCount * 5).toFixed(2)}`;
         
         // Load cost charts if available
-        if (data.cost_by_type) {
+        if (data.cost_by_type && typeof data.cost_by_type === 'object') {
             renderCostByTypeChart(data.cost_by_type);
         }
-        if (data.cost_by_vendor) {
+        if (data.cost_by_vendor && typeof data.cost_by_vendor === 'object') {
             renderCostByVendorChart(data.cost_by_vendor);
         }
         
     } catch (error) {
         console.error('Error loading credit stats:', error);
+        document.getElementById('totalCredits').textContent = 'Error loading';
+        document.getElementById('avgCredits').textContent = 'Error loading';
+        document.getElementById('weeklyCreditsAdded').textContent = 'Error loading';
     }
 }
 
