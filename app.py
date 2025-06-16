@@ -4791,7 +4791,23 @@ def admin_dashboard():
                              is_localhost=is_localhost)
         
     except Exception as e:
-        logger.error(f"Error in admin dashboard: {e}", exc_info=True)
+        # Log the full traceback for debugging
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"Error in admin dashboard: {e}")
+        logger.error(f"Full traceback:\n{error_details}")
+        
+        # Also write to a specific admin error log for easier debugging
+        try:
+            with open('logs/admin_errors.log', 'a') as f:
+                f.write(f"\n{'='*60}\n")
+                f.write(f"Admin Dashboard Error - {datetime.datetime.now()}\n")
+                f.write(f"User: {session.get('user_id')} (Admin: {session.get('is_admin')})\n")
+                f.write(f"Error: {e}\n")
+                f.write(f"Traceback:\n{error_details}\n")
+        except:
+            pass
+            
         flash('An error occurred loading the admin dashboard.', 'error')
         return redirect(url_for('index'))
 
