@@ -992,8 +992,8 @@ class TranscriptionWorker:
                     admin_requested = job_data.get('admin_requested', False)
                     user_id = job_data.get('user_id')
                     
-                    # Only track costs for user-requested transcriptions or if user_id is available
-                    if not admin_requested and user_id:
+                    # Track costs if user_id is available (including admin users)
+                    if user_id and user_id > 0:
                         # Check if this was an OpenAI transcription by looking at the model used
                         model_used = job_data.get('model', 'tiny')
                         stt_provider = getattr(self.stt, 'provider', 'local')
@@ -1041,10 +1041,10 @@ class TranscriptionWorker:
                         else:
                             logger.info(f"Skipping cost tracking for local transcription model: {model_used}")
                     else:
-                        if admin_requested:
-                            logger.info("Skipping cost tracking for admin-requested transcription")
+                        if not user_id or user_id <= 0:
+                            logger.info("Skipping cost tracking - no valid user_id provided")
                         else:
-                            logger.info("Skipping cost tracking - no user_id provided")
+                            logger.info(f"Skipping cost tracking - unexpected condition: user_id={user_id}, admin_requested={admin_requested}")
                             
                 except Exception as cost_err:
                     logger.error(f"Error in transcription cost tracking: {cost_err}")

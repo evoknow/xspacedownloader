@@ -5510,7 +5510,8 @@ def admin_re_transcribe(space_id):
             'overwrite': overwrite,
             'created_at': datetime.now().isoformat(),
             'status': 'pending',
-            'admin_requested': True
+            'admin_requested': True,
+            'user_id': session.get('user_id', 0)  # Include admin user_id for cost tracking
         }
         
         # Save job file
