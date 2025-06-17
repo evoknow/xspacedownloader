@@ -5569,8 +5569,20 @@ document.getElementById('serviceSettingsForm').addEventListener('submit', async 
 // System Messages Functions
 async function loadSystemMessages() {
     console.log('Loading system messages...');
+    console.log('Function called at:', new Date().toISOString());
+    
+    const tableDiv = document.getElementById('systemMessagesTable');
+    console.log('Table div found:', tableDiv ? 'Yes' : 'No');
+    
+    if (!tableDiv) {
+        console.error('systemMessagesTable element not found!');
+        return;
+    }
+    
     try {
+        console.log('Fetching from /admin/api/system_messages...');
         const response = await fetch('/admin/api/system_messages');
+        console.log('Response status:', response.status);
         
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -5578,8 +5590,7 @@ async function loadSystemMessages() {
         
         const result = await response.json();
         console.log('System messages response:', result);
-        
-        const tableDiv = document.getElementById('systemMessagesTable');
+        console.log('Number of messages:', result.messages ? result.messages.length : 0);
         
         if (result.messages && result.messages.length > 0) {
             let tableHTML = `
@@ -5597,13 +5608,16 @@ async function loadSystemMessages() {
                         <tbody>
             `;
             
-            result.messages.forEach(msg => {
+            result.messages.forEach((msg, index) => {
+                console.log(`Processing message ${index + 1}:`, msg);
+                
                 const statusBadge = msg.status === 1 ? 
                     '<span class="badge bg-success">Active</span>' : 
                     '<span class="badge bg-secondary">Pending</span>';
                 
                 const startDate = new Date(msg.start_date).toLocaleString();
                 const endDate = new Date(msg.end_date).toLocaleString();
+                console.log(`Dates - Start: ${startDate}, End: ${endDate}`);
                 
                 tableHTML += `
                     <tr>
@@ -5634,7 +5648,9 @@ async function loadSystemMessages() {
                 </div>
             `;
             
+            console.log('Setting table HTML, length:', tableHTML.length);
             tableDiv.innerHTML = tableHTML;
+            console.log('Table HTML set successfully');
         } else {
             tableDiv.innerHTML = `
                 <div class="text-center py-4 text-muted">
