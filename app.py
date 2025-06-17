@@ -6862,25 +6862,41 @@ def admin_system_messages():
         cursor = space.connection.cursor(dictionary=True)
         
         if request.method == 'GET':
-            # Get all non-deleted messages
-            cursor.execute("""
-                SELECT id, message, start_date, end_date, status,
-                       created_at, updated_at
-                FROM system_messages
-                WHERE status != -1
-                ORDER BY start_date DESC
-            """)
-            messages = cursor.fetchall()
-            
-            # Convert datetime objects to strings
-            for msg in messages:
-                msg['start_date'] = msg['start_date'].isoformat() if msg['start_date'] else None
-                msg['end_date'] = msg['end_date'].isoformat() if msg['end_date'] else None
-                msg['created_at'] = msg['created_at'].isoformat() if msg['created_at'] else None
-                msg['updated_at'] = msg['updated_at'].isoformat() if msg['updated_at'] else None
-            
-            cursor.close()
-            return jsonify({'messages': messages})
+            try:
+                # Get all non-deleted messages
+                cursor.execute("""
+                    SELECT id, message, start_date, end_date, status,
+                           created_at, updated_at
+                    FROM system_messages
+                    WHERE status != -1
+                    ORDER BY start_date DESC
+                """)
+                messages = cursor.fetchall()
+                logger.info(f"Admin system messages query returned {len(messages)} messages")
+                
+                # Log first message structure for debugging
+                if messages:
+                    logger.info(f"First message keys: {list(messages[0].keys())}")
+                
+                # Convert datetime objects to strings
+                for msg in messages:
+                    msg['start_date'] = msg['start_date'].isoformat() if msg['start_date'] else None
+                    msg['end_date'] = msg['end_date'].isoformat() if msg['end_date'] else None
+                    msg['created_at'] = msg['created_at'].isoformat() if msg['created_at'] else None
+                    msg['updated_at'] = msg['updated_at'].isoformat() if msg['updated_at'] else None
+                
+                cursor.close()
+                return jsonify({'messages': messages})
+            except Exception as query_error:
+                logger.error(f"Error executing admin system messages query: {query_error}", exc_info=True)
+                cursor.close()
+                # Fallback to simple query if full query fails
+                cursor = space.connection.cursor(dictionary=True)
+                cursor.execute("SELECT id, message FROM system_messages WHERE status != -1")
+                messages = cursor.fetchall()
+                cursor.close()
+                logger.warning("Falling back to simple system messages query")
+                return jsonify({'messages': messages})
         
         else:  # POST - Create new message
             data = request.get_json()
@@ -6891,7 +6907,7 @@ def admin_system_messages():
             
             cursor.execute("""
                 INSERT INTO system_messages (message, start_date, end_date, status)
-                VALUES (%s, %s, %s, 0)
+                VALUES (%s, %s, %s, 1)
             """, (data['message'], data['start_date'], data['end_date']))
             
             message_id = cursor.lastrowid
