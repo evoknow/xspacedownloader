@@ -681,6 +681,68 @@ class VideoGenerator:
                 video_logger.info(f"FFmpeg success! Return code: 0")
                 video_logger.info(f"Output video path: {video_path}")
                 
+                # Track compute cost for MP4 video generation
+                try:
+                    from .DatabaseManager import DatabaseManager
+                    
+                    user_id = job_data.get('user_id')
+                    space_id = job_data.get('space_id')
+                    
+                    if user_id and space_id:
+                        db = DatabaseManager()
+                        with db.get_connection() as conn:
+                            cursor = conn.cursor()
+                            
+                            # Get compute cost per second from config (fallback to 0.001)
+                            try:
+                                cursor.execute("""
+                                    SELECT setting_value FROM app_settings 
+                                    WHERE setting_name = 'compute_cost_per_second'
+                                """)
+                                cost_result = cursor.fetchone()
+                                cost_per_second = float(cost_result[0]) if cost_result else 0.001
+                            except:
+                                cost_per_second = 0.001  # Default fallback
+                                
+                            total_cost = duration * cost_per_second
+                            
+                            # Get user balance
+                            cursor.execute("SELECT credits FROM users WHERE id = %s", (user_id,))
+                            balance_result = cursor.fetchone()
+                            balance_before = float(balance_result[0]) if balance_result else 0.0
+                            
+                            # Check if user has sufficient credits
+                            if balance_before >= total_cost:
+                                # Deduct credits
+                                balance_after = balance_before - total_cost
+                                cursor.execute("""
+                                    UPDATE users 
+                                    SET credits = %s 
+                                    WHERE id = %s
+                                """, (balance_after, user_id))
+                                
+                                # Record compute transaction
+                                cursor.execute("""
+                                    INSERT INTO computes 
+                                    (user_id, cookie_id, space_id, action, compute_time_seconds, 
+                                     cost_per_second, total_cost, balance_before, balance_after)
+                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                """, (user_id, None, space_id, "mp4_generation", duration,
+                                      cost_per_second, total_cost, balance_before, balance_after))
+                                
+                                conn.commit()
+                                video_logger.info(f"COST TRACKING: mp4_generation cost tracked - ${total_cost:.6f} for {duration:.2f}s (User {user_id}: ${balance_before:.2f} -> ${balance_after:.2f})")
+                            else:
+                                video_logger.warning(f"COST TRACKING: Insufficient credits for user {user_id} - required ${total_cost:.6f}, available ${balance_before:.2f}")
+                            
+                            cursor.close()
+                    else:
+                        video_logger.info(f"COST TRACKING: Video generation by visitor - ${duration * 0.001:.6f} for {duration:.2f}s (not charged)")
+                
+                except Exception as cost_err:
+                    video_logger.error(f"Error tracking video generation cost: {cost_err}")
+                    # Don't fail video generation if cost tracking fails
+                
                 # Update progress
                 job_data['progress'] = 90
                 with open(job_file, 'w') as f:

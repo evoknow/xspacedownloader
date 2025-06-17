@@ -1004,40 +1004,92 @@ class TranscriptionWorker:
                             input_tokens = usage.get('input_tokens', 0)
                             output_tokens = usage.get('output_tokens', 0)
                             
-                            cost_logger = CostLogger()
-                            success, message, cost = cost_logger.track_ai_operation(
-                                space_id=space_id,
-                                action='transcription',
-                                vendor='openai',
-                                model=getattr(self.stt, 'model_name', 'gpt-4o-mini-transcribe'),
-                                input_tokens=input_tokens,
-                                output_tokens=output_tokens
-                            )
-                            
-                            if success:
-                                logger.info(f"Cost tracking successful for transcription: {cost} credits deducted")
-                            else:
-                                logger.warning(f"Cost tracking failed for transcription: {message}")
+                            # Track AI cost directly via database (background process doesn't have Flask session)
+                            try:
+                                cost_logger = CostLogger()
+                                cost = cost_logger.calculate_cost('openai', getattr(self.stt, 'model_name', 'gpt-4o-mini-transcribe'), input_tokens, output_tokens)
+                                
+                                with cost_logger.db.get_connection() as conn:
+                                    cursor = conn.cursor()
+                                    
+                                    # Get user balance
+                                    cursor.execute("SELECT credits FROM users WHERE id = %s", (user_id,))
+                                    balance_result = cursor.fetchone()
+                                    balance_before = float(balance_result[0]) if balance_result else 0.0
+                                    
+                                    # Check if user has sufficient credits
+                                    if balance_before >= cost:
+                                        # Deduct credits
+                                        balance_after = balance_before - cost
+                                        cursor.execute("""
+                                            UPDATE users 
+                                            SET credits = %s 
+                                            WHERE id = %s
+                                        """, (balance_after, user_id))
+                                        
+                                        # Record AI transaction
+                                        cursor.execute("""
+                                            INSERT INTO transactions 
+                                            (user_id, cookie_id, space_id, action, ai_model, input_tokens, 
+                                             output_tokens, cost, balance_before, balance_after)
+                                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                        """, (user_id, None, space_id, 'transcription', f"openai/{getattr(self.stt, 'model_name', 'gpt-4o-mini-transcribe')}", 
+                                              input_tokens, output_tokens, cost, balance_before, balance_after))
+                                        
+                                        conn.commit()
+                                        logger.info(f"COST TRACKING: transcription cost tracked - ${cost:.6f} for {input_tokens}+{output_tokens} tokens (User {user_id}: ${balance_before:.2f} -> ${balance_after:.2f})")
+                                    else:
+                                        logger.warning(f"COST TRACKING: Insufficient credits for user {user_id} - required ${cost:.6f}, available ${balance_before:.2f}")
+                                    
+                                    cursor.close()
+                            except Exception as track_err:
+                                logger.error(f"Error tracking transcription cost: {track_err}")
                         elif stt_provider == 'openai':
                             # OpenAI transcription without usage data - estimate cost
                             # Estimate tokens based on audio duration (rough approximation)
                             estimated_input_tokens = int(transcription_duration * 10)  # ~10 tokens per second of audio
                             estimated_output_tokens = len(result.get('text', '').split()) if isinstance(result, dict) and result.get('text') else 0
                             
-                            cost_logger = CostLogger()
-                            success, message, cost = cost_logger.track_ai_operation(
-                                space_id=space_id,
-                                action='transcription',
-                                vendor='openai', 
-                                model=getattr(self.stt, 'model_name', 'gpt-4o-mini-transcribe'),
-                                input_tokens=estimated_input_tokens,
-                                output_tokens=estimated_output_tokens
-                            )
-                            
-                            if success:
-                                logger.info(f"Cost tracking successful for transcription (estimated): {cost} credits deducted")
-                            else:
-                                logger.warning(f"Cost tracking failed for transcription: {message}")
+                            # Track AI cost directly via database (background process doesn't have Flask session)
+                            try:
+                                cost_logger = CostLogger()
+                                cost = cost_logger.calculate_cost('openai', getattr(self.stt, 'model_name', 'gpt-4o-mini-transcribe'), estimated_input_tokens, estimated_output_tokens)
+                                
+                                with cost_logger.db.get_connection() as conn:
+                                    cursor = conn.cursor()
+                                    
+                                    # Get user balance
+                                    cursor.execute("SELECT credits FROM users WHERE id = %s", (user_id,))
+                                    balance_result = cursor.fetchone()
+                                    balance_before = float(balance_result[0]) if balance_result else 0.0
+                                    
+                                    # Check if user has sufficient credits
+                                    if balance_before >= cost:
+                                        # Deduct credits
+                                        balance_after = balance_before - cost
+                                        cursor.execute("""
+                                            UPDATE users 
+                                            SET credits = %s 
+                                            WHERE id = %s
+                                        """, (balance_after, user_id))
+                                        
+                                        # Record AI transaction
+                                        cursor.execute("""
+                                            INSERT INTO transactions 
+                                            (user_id, cookie_id, space_id, action, ai_model, input_tokens, 
+                                             output_tokens, cost, balance_before, balance_after)
+                                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                        """, (user_id, None, space_id, 'transcription', f"openai/{getattr(self.stt, 'model_name', 'gpt-4o-mini-transcribe')}", 
+                                              estimated_input_tokens, estimated_output_tokens, cost, balance_before, balance_after))
+                                        
+                                        conn.commit()
+                                        logger.info(f"COST TRACKING: transcription cost tracked (estimated) - ${cost:.6f} for {estimated_input_tokens}+{estimated_output_tokens} tokens (User {user_id}: ${balance_before:.2f} -> ${balance_after:.2f})")
+                                    else:
+                                        logger.warning(f"COST TRACKING: Insufficient credits for user {user_id} - required ${cost:.6f}, available ${balance_before:.2f}")
+                                    
+                                    cursor.close()
+                            except Exception as track_err:
+                                logger.error(f"Error tracking transcription cost (estimated): {track_err}")
                         else:
                             logger.info(f"Skipping cost tracking for local transcription model: {model_used}")
                     else:

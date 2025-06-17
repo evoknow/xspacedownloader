@@ -33,4 +33,10 @@
 8. Sharing to allow /space/<spaceid> or MP4 sharing
 
 
+9. Home page should have an "ad" section that admin can manage to inject HTML snippet
+
+10. /u/<xusername> should show alll the spaces that <xusername> has hosted or spoken
+
+11. Allow user to verify their x account (requires X API integration)
+
 	
