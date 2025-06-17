@@ -1932,6 +1932,24 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('spaceSearch').addEventListener('keypress', function(e) {
         if (e.key === 'Enter') searchSpaces();
     });
+    
+    // Check if settings tab is active on page load or via URL hash
+    if (document.getElementById('settings-tab').classList.contains('active') || 
+        window.location.hash === '#settings') {
+        // If hash is #settings, activate the tab
+        if (window.location.hash === '#settings') {
+            const settingsTab = new bootstrap.Tab(document.getElementById('settings-tab'));
+            settingsTab.show();
+        }
+        // Load settings content
+        setTimeout(() => {
+            loadTrackingConfig();
+            loadTranscriptionConfig();
+            loadBrandingConfig();
+            loadSystemMessages();
+            loadServiceSettings();
+        }, 100);
+    }
 });
 
 // User Management Functions
