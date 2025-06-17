@@ -5611,28 +5611,51 @@ async function loadSystemMessages() {
             result.messages.forEach((msg, index) => {
                 console.log(`Processing message ${index + 1}:`, msg);
                 
-                const statusBadge = msg.status === 1 ? 
-                    '<span class="badge bg-success">Active</span>' : 
-                    '<span class="badge bg-secondary">Pending</span>';
+                // Check if message is currently visible (active and within date range)
+                const now = new Date();
+                const startDate = msg.start_date ? new Date(msg.start_date) : null;
+                const endDate = msg.end_date ? new Date(msg.end_date) : null;
+                const isWithinDateRange = startDate && endDate ? (now >= startDate && now <= endDate) : false;
+                const isCurrentlyVisible = msg.status === 1 && isWithinDateRange;
                 
-                const startDate = new Date(msg.start_date).toLocaleString();
-                const endDate = new Date(msg.end_date).toLocaleString();
-                console.log(`Dates - Start: ${startDate}, End: ${endDate}`);
+                let statusBadge = '';
+                if (msg.status === undefined) {
+                    // Handle case where status is missing
+                    statusBadge = '<span class="badge bg-warning">Unknown Status</span>';
+                } else if (msg.status === 1) {
+                    if (!startDate || !endDate) {
+                        statusBadge = '<span class="badge bg-info">Active (No Dates)</span>';
+                    } else if (isWithinDateRange) {
+                        statusBadge = '<span class="badge bg-success">Active & Visible</span>';
+                    } else if (now < startDate) {
+                        statusBadge = '<span class="badge bg-warning">Active (Future)</span>';
+                    } else {
+                        statusBadge = '<span class="badge bg-secondary">Active (Expired)</span>';
+                    }
+                } else {
+                    statusBadge = '<span class="badge bg-secondary">Inactive</span>';
+                }
+                
+                const startDateStr = startDate ? startDate.toLocaleString() : 'Not Available';
+                const endDateStr = endDate ? endDate.toLocaleString() : 'Not Available';
+                console.log(`Dates - Start: ${startDateStr}, End: ${endDateStr}`);
                 
                 tableHTML += `
-                    <tr>
+                    <tr${isCurrentlyVisible ? ' class="table-success"' : ''}>
                         <td>${msg.message}</td>
-                        <td>${startDate}</td>
-                        <td>${endDate}</td>
+                        <td>${startDateStr}</td>
+                        <td>${endDateStr}</td>
                         <td>${statusBadge}</td>
                         <td>
-                            ${msg.status === 0 ? 
-                                `<button class="btn btn-sm btn-outline-success me-1" onclick="toggleSystemMessage(${msg.id}, 1)" title="Activate">
-                                    <i class="bi bi-check-circle"></i>
-                                </button>` : 
-                                `<button class="btn btn-sm btn-outline-warning me-1" onclick="toggleSystemMessage(${msg.id}, 0)" title="Deactivate">
-                                    <i class="bi bi-pause-circle"></i>
-                                </button>`
+                            ${msg.status !== undefined ? 
+                                (msg.status === 0 ? 
+                                    `<button class="btn btn-sm btn-outline-success me-1" onclick="toggleSystemMessage(${msg.id}, 1)" title="Activate">
+                                        <i class="bi bi-check-circle"></i>
+                                    </button>` : 
+                                    `<button class="btn btn-sm btn-outline-warning me-1" onclick="toggleSystemMessage(${msg.id}, 0)" title="Deactivate">
+                                        <i class="bi bi-pause-circle"></i>
+                                    </button>`) :
+                                '<span class="text-muted">No actions available</span>'
                             }
                             <button class="btn btn-sm btn-outline-danger" onclick="deleteSystemMessage(${msg.id})" title="Delete">
                                 <i class="bi bi-trash"></i>
