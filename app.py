@@ -24,7 +24,17 @@ from flask_limiter.util import get_remote_address
 try:
     from load_env import load_env
     load_env()
+    # Also try loading from htdocs directory if current directory doesn't work
+    if not os.getenv('OPENAI_API_KEY') and not os.getenv('ANTHROPIC_API_KEY'):
+        load_env('../htdocs/.env')
     print("Environment variables loaded from .env file")
+    # Verify critical env vars are loaded
+    if os.getenv('OPENAI_API_KEY'):
+        print("✓ OPENAI_API_KEY loaded successfully")
+    elif os.getenv('ANTHROPIC_API_KEY'):
+        print("✓ ANTHROPIC_API_KEY loaded successfully")
+    else:
+        print("⚠ Warning: No AI API keys found in environment")
 except ImportError:
     print("load_env module not found - using system environment variables only")
 
@@ -3371,6 +3381,15 @@ def api_translate():
         if text:
             logger.info(f"First 300 chars: {text[:300]}...")
             logger.info(f"Last 300 chars: ...{text[-300:]}")
+        
+        # Check if translator component is available
+        translator = get_translate_component()
+        logger.info(f"Translator available: {translator is not None}")
+        if translator:
+            logger.info(f"Translator AI available: {translator.ai is not None}")
+            if translator.ai:
+                logger.info(f"AI provider: {translator.ai.get_provider_name()}")
+        
         logger.info(f"=========================================")
         
         # Validate required fields
@@ -3437,7 +3456,17 @@ def api_translate():
         # Perform translation
         logger.info(f"Starting AI translation from {source_lang} to {target_lang}")
         logger.info(f"Include timecodes parameter: {include_timecodes}")
-        success, result = translator.translate(text, source_lang, target_lang, space_id)
+        
+        try:
+            success, result = translator.translate(text, source_lang, target_lang, space_id)
+            logger.info(f"Translation call completed - Success: {success}")
+            if not success:
+                logger.error(f"Translation failed with result: {result}")
+        except Exception as translate_exception:
+            logger.error(f"Translation threw exception: {translate_exception}")
+            import traceback
+            logger.error(f"Translation traceback: {traceback.format_exc()}")
+            return jsonify({'error': f'Translation error: {str(translate_exception)}'}), 500
         
         if not success:
             error_msg = 'Translation failed'
@@ -7948,6 +7977,131 @@ def admin_add_ai_cost():
         
     except Exception as e:
         logger.error(f"Error adding AI cost: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/ai_costs/<int:cost_id>', methods=['GET'])
+def get_ai_cost(cost_id):
+    """Get a specific AI cost entry."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        from components.DatabaseManager import DatabaseManager
+        db_manager = DatabaseManager()
+        connection = db_manager.get_connection()
+        cursor = connection.cursor(dictionary=True)
+        
+        cursor.execute("""
+            SELECT id, vendor, model, input_token_cost_per_million_tokens, 
+                   output_token_cost_per_million_tokens, created_at, updated_at
+            FROM ai_model_costs 
+            WHERE id = %s
+        """, (cost_id,))
+        
+        cost = cursor.fetchone()
+        cursor.close()
+        
+        if not cost:
+            return jsonify({'error': 'AI cost entry not found'}), 404
+        
+        return jsonify({
+            'success': True,
+            'cost': cost
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting AI cost: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/ai_costs/<int:cost_id>', methods=['PUT'])
+def update_ai_cost(cost_id):
+    """Update a specific AI cost entry."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        data = request.get_json()
+        vendor = data.get('vendor', '').strip()
+        model = data.get('model', '').strip()
+        input_cost = float(data.get('input_token_cost_per_million_tokens', 0))
+        output_cost = float(data.get('output_token_cost_per_million_tokens', 0))
+        
+        if not vendor or not model:
+            return jsonify({'error': 'Vendor and model are required'}), 400
+        
+        if input_cost < 0 or output_cost < 0:
+            return jsonify({'error': 'Costs cannot be negative'}), 400
+        
+        from components.DatabaseManager import DatabaseManager
+        db_manager = DatabaseManager()
+        connection = db_manager.get_connection()
+        cursor = connection.cursor()
+        
+        # Check if the cost entry exists
+        cursor.execute("SELECT id FROM ai_model_costs WHERE id = %s", (cost_id,))
+        if not cursor.fetchone():
+            cursor.close()
+            return jsonify({'error': 'AI cost entry not found'}), 404
+        
+        # Update the entry
+        cursor.execute("""
+            UPDATE ai_model_costs 
+            SET vendor = %s, model = %s, 
+                input_token_cost_per_million_tokens = %s, 
+                output_token_cost_per_million_tokens = %s,
+                updated_at = NOW()
+            WHERE id = %s
+        """, (vendor, model, input_cost, output_cost, cost_id))
+        
+        connection.commit()
+        cursor.close()
+        
+        logger.info(f"Admin updated AI cost ID {cost_id}: {vendor}/{model}")
+        
+        return jsonify({
+            'success': True,
+            'message': f'AI model cost updated: {vendor}/{model}'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error updating AI cost: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/ai_costs/<int:cost_id>', methods=['DELETE'])
+def delete_ai_cost(cost_id):
+    """Delete a specific AI cost entry."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        from components.DatabaseManager import DatabaseManager
+        db_manager = DatabaseManager()
+        connection = db_manager.get_connection()
+        cursor = connection.cursor()
+        
+        # Check if the cost entry exists
+        cursor.execute("SELECT vendor, model FROM ai_model_costs WHERE id = %s", (cost_id,))
+        result = cursor.fetchone()
+        if not result:
+            cursor.close()
+            return jsonify({'error': 'AI cost entry not found'}), 404
+        
+        vendor, model = result
+        
+        # Delete the entry
+        cursor.execute("DELETE FROM ai_model_costs WHERE id = %s", (cost_id,))
+        connection.commit()
+        cursor.close()
+        
+        logger.info(f"Admin deleted AI cost ID {cost_id}: {vendor}/{model}")
+        
+        return jsonify({
+            'success': True,
+            'message': f'AI model cost deleted: {vendor}/{model}'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error deleting AI cost: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/admin/api/credit_stats', methods=['GET'])

@@ -6020,8 +6020,8 @@ async function editAICost(id) {
             document.getElementById('aiCostId').value = data.cost.id;
             document.getElementById('aiVendor').value = data.cost.vendor || '';
             document.getElementById('aiModel').value = data.cost.model || '';
-            document.getElementById('aiInputCost').value = data.cost.input_token_cost_per_million_tokens || 0;
-            document.getElementById('aiOutputCost').value = data.cost.output_token_cost_per_million_tokens || 0;
+            document.getElementById('inputCost').value = data.cost.input_token_cost_per_million_tokens || 0;
+            document.getElementById('outputCost').value = data.cost.output_token_cost_per_million_tokens || 0;
             
             // Show the modal
             const modal = new bootstrap.Modal(document.getElementById('addAICostModal'));
@@ -6039,8 +6039,8 @@ async function saveAICost() {
     const id = document.getElementById('aiCostId').value;
     const vendor = document.getElementById('aiVendor').value;
     const model = document.getElementById('aiModel').value;
-    const inputCost = parseFloat(document.getElementById('aiInputCost').value);
-    const outputCost = parseFloat(document.getElementById('aiOutputCost').value);
+    const inputCost = parseFloat(document.getElementById('inputCost').value);
+    const outputCost = parseFloat(document.getElementById('outputCost').value);
     
     if (!vendor || !model || isNaN(inputCost) || isNaN(outputCost)) {
         showToast('Please fill in all fields with valid values', 'danger');
