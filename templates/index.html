@@ -39,6 +39,11 @@
             height: auto;
         }
     }
+    
+    #space_url::placeholder {
+        color: #adb5bd;
+        opacity: 1;
+    }
 </style>
 {% endblock %}
 
@@ -50,9 +55,6 @@
                 <h4 class="mb-0"><i class="bi bi-download"></i> Download X Space</h4>
             </div>
             <div class="card-body">
-                <p class="lead">
-                    Enter an X Space URL. Download runs in background—you can browse freely.
-                </p>
                 
                 <form action="{{ url_for('submit_space') }}" method="POST" class="mt-4">
                     <div class="row">

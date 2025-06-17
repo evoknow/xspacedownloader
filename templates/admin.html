@@ -838,7 +838,7 @@
                                 <button class="btn btn-sm btn-success" onclick="updateOpenAIPricing()">
                                     <i class="bi bi-arrow-clockwise"></i> Update OpenAI Pricing
                                 </button>
-                                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addAICostModal">
+                                <button class="btn btn-sm btn-primary" onclick="openAddAICostModal()">
                                     <i class="bi bi-plus"></i> Add Model
                                 </button>
                             </div>
@@ -1355,9 +1355,14 @@
                     <div class="card mb-4">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <h6 class="mb-0"><i class="bi bi-megaphone"></i> System Messages</h6>
-                            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addSystemMessageModal">
-                                <i class="bi bi-plus"></i> Add Message
-                            </button>
+                            <div>
+                                <button type="button" class="btn btn-secondary btn-sm me-2" onclick="loadSystemMessages()">
+                                    <i class="bi bi-arrow-clockwise"></i> Refresh
+                                </button>
+                                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addSystemMessageModal">
+                                    <i class="bi bi-plus"></i> Add Message
+                                </button>
+                            </div>
                         </div>
                         <div class="card-body">
                             <p class="mb-3">Manage system-wide messages that appear to all users.</p>
@@ -2712,6 +2717,8 @@ document.getElementById('settings-tab').addEventListener('shown.bs.tab', functio
     loadTrackingConfig();
     loadTranscriptionConfig();
     loadBrandingConfig();
+    loadSystemMessages();
+    loadServiceSettings();
 });
 
 // Transcription Configuration
@@ -5543,9 +5550,16 @@ document.getElementById('serviceSettingsForm').addEventListener('submit', async 
 
 // System Messages Functions
 async function loadSystemMessages() {
+    console.log('Loading system messages...');
     try {
         const response = await fetch('/admin/api/system_messages');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const result = await response.json();
+        console.log('System messages response:', result);
         
         const tableDiv = document.getElementById('systemMessagesTable');
         
@@ -5649,7 +5663,12 @@ async function saveSystemMessage() {
             })
         });
         
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const result = await response.json();
+        console.log('Save system message response:', result);
         
         if (result.success) {
             // Close modal
@@ -5662,15 +5681,19 @@ async function saveSystemMessage() {
             // Reload messages
             loadSystemMessages();
             
-            // Show success message
-            const alert = document.createElement('div');
-            alert.className = 'alert alert-success alert-dismissible fade show';
-            alert.innerHTML = `
-                <i class="bi bi-check-circle"></i> System message created successfully!
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            `;
-            
-            document.querySelector('#systemMessagesTable').parentNode.insertBefore(alert, document.querySelector('#systemMessagesTable'));
+            // Show success message using showToast if available
+            if (typeof showToast === 'function') {
+                showToast('System message created successfully!', 'success');
+            } else {
+                const alert = document.createElement('div');
+                alert.className = 'alert alert-success alert-dismissible fade show';
+                alert.innerHTML = `
+                    <i class="bi bi-check-circle"></i> System message created successfully!
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                `;
+                
+                document.querySelector('#systemMessagesTable').parentNode.insertBefore(alert, document.querySelector('#systemMessagesTable'));
+            }
             
             setTimeout(() => {
                 if (alert.parentNode) {
@@ -5679,12 +5702,22 @@ async function saveSystemMessage() {
             }, 5000);
             
         } else {
-            alert('Error: ' + result.error);
+            const errorMsg = result.error || 'Failed to save system message';
+            console.error('Save failed:', errorMsg);
+            if (typeof showToast === 'function') {
+                showToast('Error: ' + errorMsg, 'danger');
+            } else {
+                alert('Error: ' + errorMsg);
+            }
         }
         
     } catch (error) {
         console.error('Error saving system message:', error);
-        alert('Error saving system message: ' + error.message);
+        if (typeof showToast === 'function') {
+            showToast('Error saving system message: ' + error.message, 'danger');
+        } else {
+            alert('Error saving system message: ' + error.message);
+        }
     }
 }
 
@@ -5944,6 +5977,116 @@ async function addWeeklyCredits() {
     }
 }
 
+async function deleteAICost(id) {
+    if (!confirm('Are you sure you want to delete this AI model cost?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/admin/api/ai_costs/${id}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            showToast('AI model cost deleted successfully', 'success');
+            loadAICosts(); // Reload the table
+        } else {
+            showToast('Failed to delete AI model cost: ' + (data.error || 'Unknown error'), 'danger');
+        }
+    } catch (error) {
+        console.error('Error deleting AI model cost:', error);
+        showToast('Error deleting AI model cost', 'danger');
+    }
+}
+
+function openAddAICostModal() {
+    // Reset the form for new entry
+    document.getElementById('aiCostForm').reset();
+    document.getElementById('aiCostId').value = '';
+    
+    // Show the modal
+    const modal = new bootstrap.Modal(document.getElementById('addAICostModal'));
+    modal.show();
+}
+
+async function editAICost(id) {
+    try {
+        const response = await fetch(`/admin/api/ai_costs/${id}`);
+        const data = await response.json();
+        
+        if (data.cost) {
+            // Populate the form with existing data
+            document.getElementById('aiCostId').value = data.cost.id;
+            document.getElementById('aiVendor').value = data.cost.vendor || '';
+            document.getElementById('aiModel').value = data.cost.model || '';
+            document.getElementById('aiInputCost').value = data.cost.input_token_cost_per_million_tokens || 0;
+            document.getElementById('aiOutputCost').value = data.cost.output_token_cost_per_million_tokens || 0;
+            
+            // Show the modal
+            const modal = new bootstrap.Modal(document.getElementById('addAICostModal'));
+            modal.show();
+        } else {
+            showToast('Failed to load AI model cost details', 'danger');
+        }
+    } catch (error) {
+        console.error('Error loading AI model cost:', error);
+        showToast('Error loading AI model cost details', 'danger');
+    }
+}
+
+async function saveAICost() {
+    const id = document.getElementById('aiCostId').value;
+    const vendor = document.getElementById('aiVendor').value;
+    const model = document.getElementById('aiModel').value;
+    const inputCost = parseFloat(document.getElementById('aiInputCost').value);
+    const outputCost = parseFloat(document.getElementById('aiOutputCost').value);
+    
+    if (!vendor || !model || isNaN(inputCost) || isNaN(outputCost)) {
+        showToast('Please fill in all fields with valid values', 'danger');
+        return;
+    }
+    
+    try {
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `/admin/api/ai_costs/${id}` : '/admin/api/ai_costs';
+        
+        const response = await fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                vendor: vendor,
+                model: model,
+                input_token_cost_per_million_tokens: inputCost,
+                output_token_cost_per_million_tokens: outputCost
+            })
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            showToast(`AI model cost ${id ? 'updated' : 'created'} successfully`, 'success');
+            
+            // Hide the modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('addAICostModal'));
+            modal.hide();
+            
+            // Reset the form
+            document.getElementById('aiCostForm').reset();
+            document.getElementById('aiCostId').value = '';
+            
+            // Reload the table
+            loadAICosts();
+        } else {
+            showToast(`Failed to ${id ? 'update' : 'create'} AI model cost: ` + (data.error || 'Unknown error'), 'danger');
+        }
+    } catch (error) {
+        console.error('Error saving AI model cost:', error);
+        showToast('Error saving AI model cost', 'danger');
+    }
+}
+
 function renderCostByTypeChart(data) {
     const ctx = document.getElementById('costByTypeChart').getContext('2d');
     new Chart(ctx, {
@@ -6001,10 +6144,7 @@ function renderCostByVendorChart(data) {
 // Load data when settings tab is shown
 document.addEventListener('DOMContentLoaded', function() {
     // Load service settings when settings tab is shown
-    document.getElementById('settings-tab').addEventListener('shown.bs.tab', function() {
-        loadServiceSettings();
-        loadSystemMessages();
-    });
+    // Note: loadSystemMessages is already called in the other settings-tab listener
     
     // Load cost settings when costs tab is shown
     document.getElementById('costs-tab').addEventListener('shown.bs.tab', function() {
