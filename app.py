@@ -8004,26 +8004,27 @@ def get_ai_cost(cost_id):
     try:
         from components.DatabaseManager import DatabaseManager
         db_manager = DatabaseManager()
-        connection = db_manager.get_connection()
-        cursor = connection.cursor(dictionary=True)
         
-        cursor.execute("""
-            SELECT id, vendor, model, input_token_cost_per_million_tokens, 
-                   output_token_cost_per_million_tokens, created_at, updated_at
-            FROM ai_model_costs 
-            WHERE id = %s
-        """, (cost_id,))
-        
-        cost = cursor.fetchone()
-        cursor.close()
-        
-        if not cost:
-            return jsonify({'error': 'AI cost entry not found'}), 404
-        
-        return jsonify({
-            'success': True,
-            'cost': cost
-        })
+        with db_manager.get_connection() as connection:
+            cursor = connection.cursor(dictionary=True)
+            
+            cursor.execute("""
+                SELECT id, vendor, model, input_token_cost_per_million_tokens, 
+                       output_token_cost_per_million_tokens, created_at, updated_at
+                FROM ai_model_costs 
+                WHERE id = %s
+            """, (cost_id,))
+            
+            cost = cursor.fetchone()
+            cursor.close()
+            
+            if not cost:
+                return jsonify({'error': 'AI cost entry not found'}), 404
+            
+            return jsonify({
+                'success': True,
+                'cost': cost
+            })
         
     except Exception as e:
         logger.error(f"Error getting AI cost: {e}", exc_info=True)
@@ -8050,34 +8051,35 @@ def update_ai_cost(cost_id):
         
         from components.DatabaseManager import DatabaseManager
         db_manager = DatabaseManager()
-        connection = db_manager.get_connection()
-        cursor = connection.cursor()
         
-        # Check if the cost entry exists
-        cursor.execute("SELECT id FROM ai_model_costs WHERE id = %s", (cost_id,))
-        if not cursor.fetchone():
+        with db_manager.get_connection() as connection:
+            cursor = connection.cursor()
+            
+            # Check if the cost entry exists
+            cursor.execute("SELECT id FROM ai_model_costs WHERE id = %s", (cost_id,))
+            if not cursor.fetchone():
+                cursor.close()
+                return jsonify({'error': 'AI cost entry not found'}), 404
+            
+            # Update the entry
+            cursor.execute("""
+                UPDATE ai_model_costs 
+                SET vendor = %s, model = %s, 
+                    input_token_cost_per_million_tokens = %s, 
+                    output_token_cost_per_million_tokens = %s,
+                    updated_at = NOW()
+                WHERE id = %s
+            """, (vendor, model, input_cost, output_cost, cost_id))
+            
+            connection.commit()
             cursor.close()
-            return jsonify({'error': 'AI cost entry not found'}), 404
-        
-        # Update the entry
-        cursor.execute("""
-            UPDATE ai_model_costs 
-            SET vendor = %s, model = %s, 
-                input_token_cost_per_million_tokens = %s, 
-                output_token_cost_per_million_tokens = %s,
-                updated_at = NOW()
-            WHERE id = %s
-        """, (vendor, model, input_cost, output_cost, cost_id))
-        
-        connection.commit()
-        cursor.close()
-        
-        logger.info(f"Admin updated AI cost ID {cost_id}: {vendor}/{model}")
-        
-        return jsonify({
-            'success': True,
-            'message': f'AI model cost updated: {vendor}/{model}'
-        })
+            
+            logger.info(f"Admin updated AI cost ID {cost_id}: {vendor}/{model}")
+            
+            return jsonify({
+                'success': True,
+                'message': f'AI model cost updated: {vendor}/{model}'
+            })
         
     except Exception as e:
         logger.error(f"Error updating AI cost: {e}", exc_info=True)
@@ -8092,29 +8094,30 @@ def delete_ai_cost(cost_id):
     try:
         from components.DatabaseManager import DatabaseManager
         db_manager = DatabaseManager()
-        connection = db_manager.get_connection()
-        cursor = connection.cursor()
         
-        # Check if the cost entry exists
-        cursor.execute("SELECT vendor, model FROM ai_model_costs WHERE id = %s", (cost_id,))
-        result = cursor.fetchone()
-        if not result:
+        with db_manager.get_connection() as connection:
+            cursor = connection.cursor()
+            
+            # Check if the cost entry exists
+            cursor.execute("SELECT vendor, model FROM ai_model_costs WHERE id = %s", (cost_id,))
+            result = cursor.fetchone()
+            if not result:
+                cursor.close()
+                return jsonify({'error': 'AI cost entry not found'}), 404
+            
+            vendor, model = result
+            
+            # Delete the entry
+            cursor.execute("DELETE FROM ai_model_costs WHERE id = %s", (cost_id,))
+            connection.commit()
             cursor.close()
-            return jsonify({'error': 'AI cost entry not found'}), 404
-        
-        vendor, model = result
-        
-        # Delete the entry
-        cursor.execute("DELETE FROM ai_model_costs WHERE id = %s", (cost_id,))
-        connection.commit()
-        cursor.close()
-        
-        logger.info(f"Admin deleted AI cost ID {cost_id}: {vendor}/{model}")
-        
-        return jsonify({
-            'success': True,
-            'message': f'AI model cost deleted: {vendor}/{model}'
-        })
+            
+            logger.info(f"Admin deleted AI cost ID {cost_id}: {vendor}/{model}")
+            
+            return jsonify({
+                'success': True,
+                'message': f'AI model cost deleted: {vendor}/{model}'
+            })
         
     except Exception as e:
         logger.error(f"Error deleting AI cost: {e}", exc_info=True)
