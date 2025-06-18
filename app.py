@@ -3357,6 +3357,11 @@ def api_translate():
     
     if not TRANSLATE_AVAILABLE:
         return jsonify({'error': 'Translation service is not available'}), 503
+    
+    # Check if user is logged in
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Authentication required'}), 401
         
     try:
         # Validate request
@@ -3370,6 +3375,10 @@ def api_translate():
         target_lang = data.get('target_lang')
         space_id = data.get('space_id')  # Optional: for database storage
         include_timecodes = data.get('include_timecodes', False)
+        
+        # If no space_id provided, create user-level tracking ID
+        if not space_id:
+            space_id = f"user_{user_id}_translate"
         
         # Debug logging
         logger.info(f"========== TRANSLATION REQUEST ==========")
@@ -5274,7 +5283,12 @@ def generate_video(space_id):
         if not check_service_enabled('video_generation_enabled'):
             return jsonify({'error': 'Video generation service is temporarily disabled'}), 503
         
-        # Get space details to verify space exists
+        # Check if user is logged in
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'error': 'Authentication required'}), 401
+        
+        # Get space details to verify space exists and check ownership
         space = get_space_component()
         cursor = space.connection.cursor(dictionary=True)
         cursor.execute("SELECT user_id, cookie_id FROM spaces WHERE space_id = %s", (space_id,))
@@ -5284,8 +5298,25 @@ def generate_video(space_id):
         if not space_details:
             return jsonify({'error': 'Space not found'}), 404
         
-        # Allow any user to generate videos for any space
-        # Video generation is a public feature available to all users
+        # Check user credits before starting expensive video generation
+        try:
+            from components.CostLogger import CostLogger
+            cost_logger = CostLogger()
+            
+            # Check if user has sufficient credits (estimate $0.10 minimum for video generation)
+            user_credits = cost_logger.get_user_credits(user_id)
+            min_required_credits = 0.10  # Minimum estimated cost
+            
+            if user_credits < min_required_credits:
+                return jsonify({
+                    'error': 'Insufficient credits for video generation',
+                    'current_credits': user_credits,
+                    'required_credits': min_required_credits
+                }), 402  # Payment Required
+                
+        except Exception as e:
+            logger.warning(f"Could not check user credits for video generation: {e}")
+            # Continue anyway if credit check fails to avoid breaking existing functionality
         
         # Check if audio file exists
         download_dir = app.config['DOWNLOAD_DIR']
