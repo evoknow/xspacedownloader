@@ -53,6 +53,24 @@
 .pagination li a:hover {
     background-color: #e9ecef;
 }
+
+/* Space ID link styling */
+.text-decoration-none code {
+    color: inherit;
+}
+
+.text-decoration-none:hover code {
+    text-decoration: underline;
+}
+
+.text-decoration-none .bi-box-arrow-up-right {
+    opacity: 0.6;
+    font-size: 0.75rem;
+}
+
+.text-decoration-none:hover .bi-box-arrow-up-right {
+    opacity: 1;
+}
 </style>
 {% endblock %}
 
@@ -3716,7 +3734,7 @@ function displayDownloadQueue() {
     } else {
         pendingTbody.innerHTML = data.pending.map(job => `
             <tr>
-                <td><code>${job.space_id}</code></td>
+                <td><a href="/spaces/${job.space_id}" target="_blank" class="text-decoration-none"><code>${job.space_id}</code> <i class="bi bi-box-arrow-up-right small"></i></a></td>
                 <td>${job.user_id || 'Anonymous'}</td>
                 <td>
                     <select class="form-select form-select-sm" onchange="updateJobPriority(${job.id}, this.value)" style="width: auto;">
@@ -3747,7 +3765,7 @@ function displayDownloadQueue() {
     } else {
         progressTbody.innerHTML = data.in_progress.map(job => `
             <tr>
-                <td><code>${job.space_id}</code></td>
+                <td><a href="/spaces/${job.space_id}" target="_blank" class="text-decoration-none"><code>${job.space_id}</code> <i class="bi bi-box-arrow-up-right small"></i></a></td>
                 <td>${job.user_id || 'Anonymous'}</td>
                 <td><span class="badge ${getPriorityBadgeClass(job.priority)}">${job.priority_label}</span></td>
                 <td>
@@ -3781,7 +3799,7 @@ function displayDownloadQueue() {
         completedTbody.innerHTML = recentCompleted.map(job => `
             <tr>
                 <td><small>${job.id}</small></td>
-                <td><code>${job.space_id}</code></td>
+                <td><a href="/spaces/${job.space_id}" target="_blank" class="text-decoration-none"><code>${job.space_id}</code> <i class="bi bi-box-arrow-up-right small"></i></a></td>
                 <td><small class="text-muted">${formatDate(job.start_time)}</small></td>
                 <td><small class="text-muted">${formatDate(job.end_time)}</small></td>
                 <td><span class="badge bg-secondary">${job.file_type || 'mp3'}</span></td>
@@ -3806,7 +3824,7 @@ function displayDownloadQueue() {
         failedTbody.innerHTML = recentFailed.map(job => `
             <tr>
                 <td><small>${job.id}</small></td>
-                <td><code>${job.space_id}</code></td>
+                <td><a href="/spaces/${job.space_id}" target="_blank" class="text-decoration-none"><code>${job.space_id}</code> <i class="bi bi-box-arrow-up-right small"></i></a></td>
                 <td><small class="text-muted">${formatDate(job.start_time)}</small></td>
                 <td><small class="text-danger" title="${job.error_message || ''}">${(job.error_message || 'Unknown error').substring(0, 50)}${job.error_message && job.error_message.length > 50 ? '...' : ''}</small></td>
                 <td><span class="badge bg-secondary">${job.file_type || 'mp3'}</span></td>
@@ -3847,7 +3865,7 @@ function displayTranscriptionQueue() {
         tbody.innerHTML = allJobs.map(job => `
             <tr>
                 <td><code>${job.job_id || job.id}</code></td>
-                <td><code>${job.space_id}</code></td>
+                <td><a href="/spaces/${job.space_id}" target="_blank" class="text-decoration-none"><code>${job.space_id}</code> <i class="bi bi-box-arrow-up-right small"></i></a></td>
                 <td><span class="badge bg-info">${job.model || job.options?.model || 'Unknown'}</span></td>
                 <td><span class="badge bg-secondary">${job.language || job.options?.language || 'Auto'}</span></td>
                 <td><span class="badge ${getJobStatusBadgeClass(job.status)}">${job.status}</span></td>
@@ -3903,7 +3921,7 @@ function displayTranslationQueue() {
         tbody.innerHTML = allJobs.map(job => `
             <tr>
                 <td><code>${job.job_id || job.id}</code></td>
-                <td><code>${job.space_id}</code></td>
+                <td><a href="/spaces/${job.space_id}" target="_blank" class="text-decoration-none"><code>${job.space_id}</code> <i class="bi bi-box-arrow-up-right small"></i></a></td>
                 <td><span class="badge bg-primary">${job.source_language || 'Auto'}</span></td>
                 <td><span class="badge bg-success">${job.target_language || job.options?.translate_to || 'en'}</span></td>
                 <td><span class="badge ${getJobStatusBadgeClass(job.status)}">${job.status}</span></td>
@@ -3959,7 +3977,7 @@ function displayVideoQueue() {
         tbody.innerHTML = allJobs.map(job => `
             <tr>
                 <td><code>${job.job_id || job.id}</code></td>
-                <td><code>${job.space_id}</code></td>
+                <td><a href="/spaces/${job.space_id}" target="_blank" class="text-decoration-none"><code>${job.space_id}</code> <i class="bi bi-box-arrow-up-right small"></i></a></td>
                 <td>${job.user_id || 'Anonymous'}</td>
                 <td><span class="badge ${getJobStatusBadgeClass(job.status)}">${job.status}</span></td>
                 <td>
@@ -4099,7 +4117,7 @@ function viewJobDetails(jobId) {
                                     </tr>
                                     <tr>
                                         <td><strong>Space ID:</strong></td>
-                                        <td><code>${job.space_id}</code></td>
+                                        <td><a href="/spaces/${job.space_id}" target="_blank" class="text-decoration-none"><code>${job.space_id}</code> <i class="bi bi-box-arrow-up-right small"></i></a></td>
                                     </tr>
                                     <tr>
                                         <td><strong>Status:</strong></td>
