@@ -6,7 +6,7 @@ Wrapper around AI components that tracks costs and deducts credits from user bal
 """
 
 import logging
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 from .AI import AI
 from .CostLogger import CostLogger
 
@@ -228,3 +228,7 @@ class CostAwareAI:
     def generate_text(self, prompt: str, max_tokens: int = 150) -> Dict:
         """Backward compatibility generate_text method without cost tracking."""
         return self.ai.generate_text(prompt, max_tokens)
+    
+    def get_supported_languages(self) -> List[Dict[str, str]]:
+        """Get supported languages from the underlying AI provider."""
+        return self.ai.get_supported_languages() if hasattr(self.ai, 'get_supported_languages') else []

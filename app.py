@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 # app.py - Flask app for XSpace Downloader
 
+# Load environment variables from .env file
+from load_env import load_env
+load_env()
+
 import re
 import os
 import sys
