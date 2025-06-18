@@ -2593,7 +2593,8 @@
                     
                     const requestBody = {
                         text: currentText,
-                        max_length: 200
+                        max_length: 200,
+                        space_id: '{{ space.space_id }}'
                         // No language parameter needed - AI will use the language of the input text
                     };
                     

@@ -3590,6 +3590,11 @@ def api_summary():
         return jsonify({'error': 'AI service is not available'}), 503
         
     try:
+        # Check if user is logged in
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'error': 'Authentication required'}), 401
+            
         # Validate request
         if not request.is_json:
             return jsonify({'error': 'Request must be JSON'}), 400
@@ -3599,6 +3604,7 @@ def api_summary():
         text = data.get('text')
         max_length = data.get('max_length')  # Optional parameter
         language = data.get('language')  # Optional language parameter (now ignored)
+        space_id = data.get('space_id')  # Optional space_id for context
         
         # Validate required fields
         if not text:
@@ -3609,8 +3615,15 @@ def api_summary():
         if not translator:
             return jsonify({'error': 'Could not initialize AI service'}), 500
             
-        # Generate summary with language parameter
-        success, result = translator.summary(text, max_length, language)
+        # Generate summary with cost tracking
+        # If space_id is provided, use it for context; otherwise use user_id as fallback
+        if space_id:
+            success, result = translator.summary(text, max_length, language, space_id=space_id)
+        else:
+            # For user-level summaries, we'll track costs without space context
+            # Use a special space_id format to indicate user-level operation
+            user_space_id = f"user_{user_id}_summary"
+            success, result = translator.summary(text, max_length, language, space_id=user_space_id)
         
         if not success:
             return jsonify({'error': 'Summary generation failed', 'details': result}), 400
