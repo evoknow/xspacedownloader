@@ -8003,31 +8003,34 @@ def get_ai_cost(cost_id):
     
     try:
         from components.DatabaseManager import DatabaseManager
-        db_manager = DatabaseManager()
+        db = DatabaseManager()
         
-        cost = None
+        # Get connection directly from pool without context manager
+        connection = db.pool.get_connection()
         
-        with db_manager.get_connection() as connection:
+        try:
             cursor = connection.cursor(dictionary=True)
             
             cursor.execute("""
                 SELECT id, vendor, model, input_token_cost_per_million_tokens, 
                        output_token_cost_per_million_tokens, created_at, updated_at
-                FROM ai_model_costs 
+                FROM ai_api_cost 
                 WHERE id = %s
             """, (cost_id,))
             
             cost = cursor.fetchone()
             cursor.close()
-        
-        # Handle result after the with block completes
-        if not cost:
-            return jsonify({'error': 'AI cost entry not found'}), 404
-        
-        return jsonify({
-            'success': True,
-            'cost': cost
-        })
+            
+            if not cost:
+                return jsonify({'error': 'AI cost entry not found'}), 404
+            
+            return jsonify({
+                'success': True,
+                'cost': cost
+            })
+            
+        finally:
+            connection.close()  # Return to pool
         
     except Exception as e:
         logger.error(f"Error getting AI cost: {e}", exc_info=True)
@@ -8053,46 +8056,43 @@ def update_ai_cost(cost_id):
             return jsonify({'error': 'Costs cannot be negative'}), 400
         
         from components.DatabaseManager import DatabaseManager
-        db_manager = DatabaseManager()
+        db = DatabaseManager()
         
-        entry_exists = False
-        success = False
+        # Get connection directly from pool without context manager
+        connection = db.pool.get_connection()
         
-        with db_manager.get_connection() as connection:
+        try:
             cursor = connection.cursor()
             
             # Check if the cost entry exists
-            cursor.execute("SELECT id FROM ai_model_costs WHERE id = %s", (cost_id,))
-            if cursor.fetchone():
-                entry_exists = True
-                
-                # Update the entry
-                cursor.execute("""
-                    UPDATE ai_model_costs 
-                    SET vendor = %s, model = %s, 
-                        input_token_cost_per_million_tokens = %s, 
-                        output_token_cost_per_million_tokens = %s,
-                        updated_at = NOW()
-                    WHERE id = %s
-                """, (vendor, model, input_cost, output_cost, cost_id))
-                
-                connection.commit()
-                success = True
+            cursor.execute("SELECT id FROM ai_api_cost WHERE id = %s", (cost_id,))
+            if not cursor.fetchone():
+                cursor.close()
+                connection.close()
+                return jsonify({'error': 'AI cost entry not found'}), 404
             
+            # Update the entry
+            cursor.execute("""
+                UPDATE ai_api_cost 
+                SET vendor = %s, model = %s, 
+                    input_token_cost_per_million_tokens = %s, 
+                    output_token_cost_per_million_tokens = %s,
+                    updated_at = NOW()
+                WHERE id = %s
+            """, (vendor, model, input_cost, output_cost, cost_id))
+            
+            connection.commit()
             cursor.close()
-        
-        # Handle results after the with block completes
-        if not entry_exists:
-            return jsonify({'error': 'AI cost entry not found'}), 404
-        
-        if success:
+            
             logger.info(f"Admin updated AI cost ID {cost_id}: {vendor}/{model}")
+            
             return jsonify({
                 'success': True,
                 'message': f'AI model cost updated: {vendor}/{model}'
             })
-        else:
-            return jsonify({'error': 'Failed to update AI cost entry'}), 500
+            
+        finally:
+            connection.close()  # Return to pool
         
     except Exception as e:
         logger.error(f"Error updating AI cost: {e}", exc_info=True)
@@ -8106,42 +8106,38 @@ def delete_ai_cost(cost_id):
     
     try:
         from components.DatabaseManager import DatabaseManager
-        db_manager = DatabaseManager()
+        db = DatabaseManager()
         
-        vendor = None
-        model = None
-        success = False
+        # Get connection directly from pool without context manager
+        connection = db.pool.get_connection()
         
-        with db_manager.get_connection() as connection:
+        try:
             cursor = connection.cursor()
             
             # Check if the cost entry exists
-            cursor.execute("SELECT vendor, model FROM ai_model_costs WHERE id = %s", (cost_id,))
+            cursor.execute("SELECT vendor, model FROM ai_api_cost WHERE id = %s", (cost_id,))
             result = cursor.fetchone()
             if not result:
                 cursor.close()
-                # Don't return here - let the with block complete
-            else:
-                vendor, model = result
-                
-                # Delete the entry
-                cursor.execute("DELETE FROM ai_model_costs WHERE id = %s", (cost_id,))
-                connection.commit()
-                cursor.close()
-                success = True
-        
-        # Handle results after the with block completes
-        if not vendor or not model:
-            return jsonify({'error': 'AI cost entry not found'}), 404
-        
-        if success:
+                connection.close()
+                return jsonify({'error': 'AI cost entry not found'}), 404
+            
+            vendor, model = result
+            
+            # Delete the entry
+            cursor.execute("DELETE FROM ai_api_cost WHERE id = %s", (cost_id,))
+            connection.commit()
+            cursor.close()
+            
             logger.info(f"Admin deleted AI cost ID {cost_id}: {vendor}/{model}")
+            
             return jsonify({
                 'success': True,
                 'message': f'AI model cost deleted: {vendor}/{model}'
             })
-        else:
-            return jsonify({'error': 'Failed to delete AI cost entry'}), 500
+            
+        finally:
+            connection.close()  # Return to pool
         
     except Exception as e:
         logger.error(f"Error deleting AI cost: {e}", exc_info=True)
