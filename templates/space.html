@@ -2132,7 +2132,7 @@
                 }
                 
                 // Poll for updated transcript
-                fetch(`/api/transcript/${spaceId}`)
+                fetch(`/api/transcripts/${spaceId}`)
                     .then(response => response.json())
                     .then(data => {
                         if (data.language && data.language.startsWith(targetLang.split('-')[0])) {
