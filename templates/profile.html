@@ -3,9 +3,9 @@
 {% block title %}Profile - XSpace Downloader{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
+<div class="mt-4">
     <div class="row">
-        <div class="col-md-8 mx-auto">
+        <div class="col-lg-10 mx-auto">
             <div class="card">
                 <div class="card-header">
                     <h2 class="card-title mb-0">
@@ -57,7 +57,7 @@
 
                     <!-- Transaction History -->
                     <div class="mt-4">
-                        <h5>Credit Usage History</h5>
+                        <h5>Usage History</h5>
                         
                         {% if compute_transactions or ai_transactions %}
                             <div class="table-responsive">
@@ -66,9 +66,9 @@
                                         <tr>
                                             <th>Date</th>
                                             <th>Type</th>
-                                            <th>Description</th>
+                                            <th class="d-none d-md-table-cell">Description</th>
                                             <th>Amount</th>
-                                            <th>Balance After</th>
+                                            <th class="d-none d-md-table-cell">Balance After</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -79,7 +79,7 @@
                                             <td>
                                                 <span class="badge bg-warning">Compute</span>
                                             </td>
-                                            <td>
+                                            <td class="d-none d-md-table-cell">
                                                 {{ transaction.action|title }} 
                                                 {% if transaction.space_id %}
                                                     <small class="text-muted">({{ transaction.space_id[:20] }}...)</small>
@@ -92,7 +92,7 @@
                                             <td>
                                                 <span class="text-danger">-{{ transaction.total_cost|int }}</span>
                                             </td>
-                                            <td>{{ transaction.balance_after|int }}</td>
+                                            <td class="d-none d-md-table-cell">{{ transaction.balance_after|int }}</td>
                                         </tr>
                                         {% endfor %}
                                         
@@ -103,7 +103,7 @@
                                             <td>
                                                 <span class="badge bg-info">AI</span>
                                             </td>
-                                            <td>
+                                            <td class="d-none d-md-table-cell">
                                                 {{ transaction.action|title }}
                                                 {% if transaction.ai_model %}
                                                     <small class="text-muted">({{ transaction.ai_model }})</small>
@@ -118,7 +118,7 @@
                                             <td>
                                                 <span class="text-danger">-{{ transaction.cost|int }}</span>
                                             </td>
-                                            <td>{{ transaction.balance_after|int if transaction.balance_after else '-' }}</td>
+                                            <td class="d-none d-md-table-cell">{{ transaction.balance_after|int if transaction.balance_after else '-' }}</td>
                                         </tr>
                                         {% endfor %}
                                     </tbody>
