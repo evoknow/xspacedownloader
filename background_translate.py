@@ -22,9 +22,8 @@ project_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, project_dir)
 
 # Import components
-from components.Space import Space
 from components.Translate import Translate
-from components.CostAwareAI import CostAwareAI
+from components.DatabaseManager import DatabaseManager
 
 # Configure logging
 logging.basicConfig(
@@ -48,7 +47,8 @@ class BackgroundTranslate:
         
         # Initialize components
         try:
-            self.space = Space()
+            self.db_manager = DatabaseManager()
+            self.connection = self.db_manager.get_connection()
             self.translator = Translate()
             logger.info("Background translation worker initialized successfully")
         except Exception as e:
@@ -110,7 +110,7 @@ class BackgroundTranslate:
             logger.info(f"Translation completed, saving to database for job {job_id}")
             
             # Save translation to database
-            cursor = self.space.connection.cursor()
+            cursor = self.connection.cursor()
             
             try:
                 # Insert the translated transcript
@@ -125,7 +125,7 @@ class BackgroundTranslate:
                     datetime.datetime.now()
                 ))
                 
-                self.space.connection.commit()
+                self.connection.commit()
                 logger.info(f"Translation saved to database for space {space_id} in {target_lang}")
                 
                 # Update job status to completed
@@ -145,7 +145,7 @@ class BackgroundTranslate:
                 
             except Exception as db_error:
                 logger.error(f"Database error for job {job_id}: {db_error}")
-                self.space.connection.rollback()
+                self.connection.rollback()
                 
                 job_data['status'] = 'failed'
                 job_data['error'] = f"Database error: {str(db_error)}"

@@ -8527,16 +8527,18 @@ def transcribe_space(space_id):
                 try:
                     with open(job_file, 'r') as f:
                         job_data = json.load(f)
-                        # Check if this job is for the same space and is still pending/in_progress
+                        # Check if this job is for the same space and is still pending/in_progress/processing
                         if (job_data.get('space_id') == space_id and 
-                            job_data.get('status') in ['pending', 'in_progress']):
+                            job_data.get('status') in ['pending', 'in_progress', 'processing']):
                             existing_job = job_data
+                            logger.warning(f"Found existing job {job_data.get('id')} for space {space_id} with status {job_data.get('status')}")
                             break
                 except Exception as e:
                     logger.error(f"Error reading job file {job_file}: {e}")
         
         # If there's already a pending/in_progress job, don't create a new one
         if existing_job:
+            logger.warning(f"Rejecting duplicate transcription request for space {space_id} - existing job: {existing_job.get('id')}")
             if request.is_json:
                 return jsonify({
                     'error': 'A transcription job is already in progress for this space',
