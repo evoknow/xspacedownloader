@@ -261,6 +261,7 @@ class UpdateManager:
         self.run_command(['pkill', '-f', 'bg_downloader.py'], check=False)
         self.run_command(['pkill', '-f', 'background_transcribe.py'], check=False)
         self.run_command(['pkill', '-f', 'bg_progress_watcher.py'], check=False)
+        self.run_command(['pkill', '-f', 'background_translate.py'], check=False)
         
         # Wait a moment for processes to stop
         import time
@@ -346,6 +347,33 @@ class UpdateManager:
                 print(f"✓ bg_progress_watcher is running (PID: {result.stdout.strip()})")
             else:
                 print("✗ bg_progress_watcher failed to start")
+        
+        # Start background translation worker manually
+        print("Starting background_translate...")
+        translate_cmd = [
+            'sudo', '-u', self.nginx_user, 'nohup',
+            f'{self.production_dir}/venv/bin/python',
+            f'{self.production_dir}/background_translate.py'
+        ]
+        
+        if self.dry_run:
+            print(f"[DRY RUN] Would execute: {' '.join(translate_cmd)} > /dev/null 2>&1 &")
+        else:
+            # Use subprocess to start in background
+            subprocess.Popen(
+                translate_cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                cwd=self.production_dir
+            )
+            
+            # Check if it started
+            time.sleep(3)
+            result = self.run_command(['pgrep', '-f', 'background_translate.py'], check=False)
+            if result and result.stdout.strip():
+                print(f"✓ background_translate is running (PID: {result.stdout.strip()})")
+            else:
+                print("✗ background_translate failed to start")
     
     def update(self):
         """Run the complete update process."""
