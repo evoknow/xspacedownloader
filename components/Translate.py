@@ -105,7 +105,7 @@ class Translate:
         
         try:
             # Use cost tracking version if space_id is provided
-            if space_id:
+            if space_id and hasattr(self.ai, 'translate_with_cost_tracking'):
                 success, result = self.ai.translate_with_cost_tracking(space_id, source_lang, target_lang, text)
             else:
                 success, result = self.ai.translate(source_lang, target_lang, text)
