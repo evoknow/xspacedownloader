@@ -1459,6 +1459,16 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                                             conn = connect(**mysql_config)
                                             cursor = conn.cursor()
                                             
+                                            # Get job details for cost tracking
+                                            cursor.execute("""
+                                                SELECT user_id, start_time 
+                                                FROM space_download_scheduler 
+                                                WHERE id = %s
+                                            """, (job_id,))
+                                            job_details = cursor.fetchone()
+                                            user_id = job_details[0] if job_details else None
+                                            start_time = job_details[1] if job_details and job_details[1] else None
+                                            
                                             # Update job with final file size and 100% progress
                                             cursor.execute("""
                                                 UPDATE space_download_scheduler 
@@ -1481,6 +1491,42 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                                             conn.close()
                                             
                                             print(f"HEARTBEAT: Final update - job completed with size={file_size} bytes")
+                                            
+                                            # Track compute cost if user_id and start_time available
+                                            if user_id and start_time:
+                                                try:
+                                                    import sys
+                                                    import os
+                                                    
+                                                    # Add the parent directory to sys.path to import CostLogger
+                                                    current_dir = os.path.dirname(os.path.abspath(__file__))
+                                                    sys.path.append(current_dir)
+                                                    
+                                                    from components.CostLogger import CostLogger
+                                                    
+                                                    # Calculate download duration
+                                                    from datetime import datetime
+                                                    if isinstance(start_time, str):
+                                                        start_time_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                                                    else:
+                                                        start_time_dt = start_time
+                                                    
+                                                    end_time_dt = datetime.now()
+                                                    download_duration = (end_time_dt - start_time_dt).total_seconds()
+                                                    
+                                                    cost_logger = CostLogger()
+                                                    success, message, cost = cost_logger.track_compute_operation(
+                                                        space_id=space_id,
+                                                        action='mp3',
+                                                        compute_time_seconds=download_duration
+                                                    )
+                                                    
+                                                    print(f"HEARTBEAT: Cost tracking - success={success}, message={message}, cost={cost}, duration={download_duration:.2f}s")
+                                                    
+                                                except Exception as cost_err:
+                                                    print(f"HEARTBEAT: Error tracking compute cost: {cost_err}")
+                                            else:
+                                                print(f"HEARTBEAT: Skipping cost tracking - user_id={user_id}, start_time={start_time}")
                                 except Exception as db_err:
                                     print(f"Error in heartbeat final update: {db_err}")
                                 
@@ -1689,10 +1735,10 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                             conn = mysql.connector.connect(**mysql_config)
                             cursor = conn.cursor()
                             
-                            # Ensure job starts with a known size value
+                            # Ensure job starts with a known size value and store start time
                             initial_size_query = """
                             UPDATE space_download_scheduler
-                            SET progress_in_size = 1024, updated_at = NOW()
+                            SET progress_in_size = 1024, updated_at = NOW(), start_time = NOW()
                             WHERE id = %s AND (progress_in_size IS NULL OR progress_in_size < 1024)
                             """
                             cursor.execute(initial_size_query, (job_id,))
