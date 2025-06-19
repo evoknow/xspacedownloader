@@ -262,7 +262,13 @@ class OpenAI(AIProvider):
             logger.info("Auto-chunking due to token limit exceeded")
             return self._translate_in_chunks(content, from_language, to_language, is_complex_target)
         
-        return success, result
+        # Extract content from result if it's a dictionary with usage info
+        if success and isinstance(result, dict) and 'content' in result:
+            # Return the content with usage info preserved for cost tracking
+            return success, result
+        else:
+            # Return as-is for error cases or string results
+            return success, result
     
     def _translate_in_chunks(self, content: str, from_language: str, to_language: str, is_complex: bool = False) -> Tuple[bool, Union[str, Dict]]:
         """
@@ -440,7 +446,13 @@ CRITICAL RULES:
                     logger.info(f"Max tokens: 200, temperature: 0.1")
                     logger.info(f"====================================================================")
                     
-                    success, translated_text = self._make_request(messages, max_tokens=200, temperature=0.1)
+                    success, response = self._make_request(messages, max_tokens=200, temperature=0.1)
+                    
+                    # Extract the actual text content from the response
+                    if success and isinstance(response, dict):
+                        translated_text = response.get('content', '')
+                    else:
+                        translated_text = response if isinstance(response, str) else str(response)
                     
                     # LOG THE AI RESPONSE
                     logger.info(f"========== AI RESPONSE (Line with timecode {timecode}) ==========")
@@ -478,7 +490,13 @@ CRITICAL RULES:
                         {"role": "user", "content": prompt}
                     ]
                     
-                    success, translated_text = self._make_request(messages, max_tokens=200, temperature=0.1)
+                    success, response = self._make_request(messages, max_tokens=200, temperature=0.1)
+                    
+                    # Extract the actual text content from the response
+                    if success and isinstance(response, dict):
+                        translated_text = response.get('content', '')
+                    else:
+                        translated_text = response if isinstance(response, str) else str(response)
                     
                     if success:
                         translated_lines.append(translated_text.strip())
