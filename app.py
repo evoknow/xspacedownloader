@@ -1957,10 +1957,49 @@ def api_queue_status():
         # Sort transcript jobs by created_at
         transcript_jobs.sort(key=lambda x: x.get('created_at', ''))
         
+        # Get translation jobs
+        translation_jobs = []
+        translation_jobs_dir = Path('translation_jobs')
+        if translation_jobs_dir.exists():
+            for job_file in translation_jobs_dir.glob('*.json'):
+                try:
+                    with open(job_file, 'r') as f:
+                        job_data = json.load(f)
+                        # Only include pending or in_progress translation jobs
+                        if job_data.get('status') in ['pending', 'in_progress']:
+                            # Get space details for title
+                            space_details = space.get_space(job_data.get('space_id'))
+                            if space_details:
+                                title = space_details.get('title', f"Space {job_data.get('space_id')}")
+                            else:
+                                title = f"Space {job_data.get('space_id')}"
+                            
+                            # Get target language name
+                            target_lang = job_data.get('target_lang', 'Unknown')
+                            
+                            translation_jobs.append({
+                                'id': job_data.get('id'),
+                                'space_id': job_data.get('space_id'),
+                                'title': title,
+                                'status': job_data.get('status'),
+                                'status_label': f'Pending Translation to {target_lang}' if job_data.get('status') == 'pending' else f'Translating to {target_lang}',
+                                'status_class': 'info' if job_data.get('status') == 'pending' else 'primary',
+                                'created_at': job_data.get('created_at', ''),
+                                'progress_percent': job_data.get('progress', 0),
+                                'target_lang': target_lang,
+                                'type': 'translation'
+                            })
+                except Exception as e:
+                    logger.error(f"Error reading translation job file {job_file}: {e}")
+        
+        # Sort translation jobs by created_at
+        translation_jobs.sort(key=lambda x: x.get('created_at', ''))
+        
         return jsonify({
             'jobs': queue_jobs,
             'transcript_jobs': transcript_jobs,
-            'total': len(queue_jobs) + len(transcript_jobs)
+            'translation_jobs': translation_jobs,
+            'total': len(queue_jobs) + len(transcript_jobs) + len(translation_jobs)
         })
         
     except Exception as e:

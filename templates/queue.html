@@ -9,8 +9,8 @@
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h4>
                     <i class="bi bi-hourglass-split"></i> Queue Status
-                    {% if queue_jobs or transcript_jobs %}
-                    <span class="badge bg-secondary">{{ (queue_jobs|length) + (transcript_jobs|length) }} active</span>
+                    {% if queue_jobs or transcript_jobs or translation_jobs %}
+                    <span class="badge bg-secondary">{{ (queue_jobs|length) + (transcript_jobs|length) + (translation_jobs|length) }} active</span>
                     {% endif %}
                 </h4>
                 <div>
@@ -192,7 +192,7 @@
                 </h5>
                 <div class="list-group" id="translation-list">
                     {% for job in translation_jobs %}
-                    <div class="list-group-item" data-transcript-job-id="{{ job.id }}">
+                    <div class="list-group-item" data-translation-job-id="{{ job.id }}">
                         <div class="d-flex justify-content-between align-items-start">
                             <div class="flex-grow-1">
                                 <h6 class="mb-1">
@@ -264,11 +264,11 @@
                 </div>
                 {% endif %}
                 
-                {% if not queue_jobs and not transcript_jobs %}
+                {% if not queue_jobs and not transcript_jobs and not translation_jobs %}
                 <div class="text-center py-5">
                     <i class="bi bi-inbox display-1 text-muted"></i>
                     <h5 class="mt-3 text-muted">No active jobs</h5>
-                    <p class="text-muted">All downloads and transcriptions have been completed.</p>
+                    <p class="text-muted">All downloads, transcriptions, and translations have been completed.</p>
                     <a href="{{ url_for('index') }}" class="btn btn-primary mt-3 text-white">
                         <i class="bi bi-plus-circle"></i> Download a Space
                     </a>
@@ -333,8 +333,9 @@
             // Check if we need to reload the page (if jobs have been added/removed)
             const currentJobCount = document.querySelectorAll('[data-job-id]').length;
             const currentTranscriptCount = document.querySelectorAll('[data-transcript-job-id]').length;
-            const totalJobs = (data.jobs ? data.jobs.length : 0) + (data.transcript_jobs ? data.transcript_jobs.length : 0);
-            const currentTotal = currentJobCount + currentTranscriptCount;
+            const currentTranslationCount = document.querySelectorAll('[data-translation-job-id]').length;
+            const totalJobs = (data.jobs ? data.jobs.length : 0) + (data.transcript_jobs ? data.transcript_jobs.length : 0) + (data.translation_jobs ? data.translation_jobs.length : 0);
+            const currentTotal = currentJobCount + currentTranscriptCount + currentTranslationCount;
             
             if (totalJobs !== currentTotal) {
                 location.reload();
@@ -430,6 +431,31 @@
                     }
                     
                     // Update progress if transcribing
+                    if (job.status === 'in_progress' && job.progress_percent) {
+                        const progressBar = jobElement.querySelector('.progress-bar');
+                        if (progressBar) {
+                            progressBar.style.width = `${job.progress_percent}%`;
+                            progressBar.setAttribute('aria-valuenow', job.progress_percent);
+                            progressBar.textContent = `${job.progress_percent}%`;
+                        }
+                    }
+                });
+            }
+            
+            // Update translation jobs
+            if (data.translation_jobs) {
+                data.translation_jobs.forEach(job => {
+                    const jobElement = document.querySelector(`[data-translation-job-id="${job.id}"]`);
+                    if (!jobElement) return;
+                    
+                    // Update status badge
+                    const statusBadge = jobElement.querySelector('.badge');
+                    if (statusBadge) {
+                        statusBadge.className = `badge bg-${job.status_class}`;
+                        statusBadge.textContent = job.status_label;
+                    }
+                    
+                    // Update progress if translating
                     if (job.status === 'in_progress' && job.progress_percent) {
                         const progressBar = jobElement.querySelector('.progress-bar');
                         if (progressBar) {
