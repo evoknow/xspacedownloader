@@ -1036,6 +1036,14 @@ class TranscriptionWorker:
                                         """, (user_id, None, space_id, 'transcription', f"openai/{getattr(self.stt, 'model_name', 'gpt-4o-mini-transcribe')}", 
                                               input_tokens, output_tokens, cost, balance_before, balance_after))
                                         
+                                        # Update space_cost table
+                                        cursor.execute("""
+                                            INSERT INTO space_cost (space_id, transcription_cost) 
+                                            VALUES (%s, %s) 
+                                            ON DUPLICATE KEY UPDATE 
+                                            transcription_cost = transcription_cost + %s
+                                        """, (space_id, cost, cost))
+                                        
                                         conn.commit()
                                         logger.info(f"COST TRACKING: transcription cost tracked - ${cost:.6f} for {input_tokens}+{output_tokens} tokens (User {user_id}: ${balance_before:.2f} -> ${balance_after:.2f})")
                                     else:
@@ -1081,6 +1089,14 @@ class TranscriptionWorker:
                                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                                         """, (user_id, None, space_id, 'transcription', f"openai/{getattr(self.stt, 'model_name', 'gpt-4o-mini-transcribe')}", 
                                               estimated_input_tokens, estimated_output_tokens, cost, balance_before, balance_after))
+                                        
+                                        # Update space_cost table
+                                        cursor.execute("""
+                                            INSERT INTO space_cost (space_id, transcription_cost) 
+                                            VALUES (%s, %s) 
+                                            ON DUPLICATE KEY UPDATE 
+                                            transcription_cost = transcription_cost + %s
+                                        """, (space_id, cost, cost))
                                         
                                         conn.commit()
                                         logger.info(f"COST TRACKING: transcription cost tracked (estimated) - ${cost:.6f} for {estimated_input_tokens}+{estimated_output_tokens} tokens (User {user_id}: ${balance_before:.2f} -> ${balance_after:.2f})")

@@ -8650,6 +8650,9 @@ def transcribe_space(space_id):
         # Generate a unique job ID
         job_id = str(uuid.uuid4())
         
+        # Get user_id for cost tracking
+        user_id = session.get('user_id', 0)
+        
         # Create job data
         job_data = {
             'id': job_id,
@@ -8660,7 +8663,8 @@ def transcribe_space(space_id):
             'status': 'pending',
             'progress': 0,
             'created_at': datetime.datetime.now().isoformat(),
-            'updated_at': datetime.datetime.now().isoformat()
+            'updated_at': datetime.datetime.now().isoformat(),
+            'user_id': user_id  # Include user_id for cost tracking in background process
         }
         
         # Save job data to file
