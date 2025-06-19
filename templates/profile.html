@@ -86,7 +86,7 @@
                                                 {% endif %}
                                                 <br>
                                                 <small class="text-muted">
-                                                    {{ "%.1f"|format(transaction.compute_time_seconds) }}s @ {{ "%.6f"|format(transaction.cost_per_second) }}/s
+                                                    {{ transaction.compute_time_seconds }}s @ {{ transaction.cost_per_second }}/s
                                                 </small>
                                             </td>
                                             <td>
