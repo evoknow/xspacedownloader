@@ -26,7 +26,7 @@
                                     <th>Balance:</th>
                                     <td>
                                         <span class="badge bg-success fs-6">
-                                            ${{ "%.0f"|format(user_info.credits) }}
+                                            {{ user_info.credits }}
                                         </span>
                                     </td>
                                 </tr>
@@ -86,13 +86,13 @@
                                                 {% endif %}
                                                 <br>
                                                 <small class="text-muted">
-                                                    {{ "%.1f"|format(transaction.compute_time_seconds) }}s @ ${{ "%.6f"|format(transaction.cost_per_second) }}/s
+                                                    {{ "%.1f"|format(transaction.compute_time_seconds) }}s @ {{ "%.6f"|format(transaction.cost_per_second) }}/s
                                                 </small>
                                             </td>
                                             <td>
-                                                <span class="text-danger">-${{ "%.0f"|format(transaction.total_cost) }}</span>
+                                                <span class="text-danger">-{{ transaction.total_cost }}</span>
                                             </td>
-                                            <td>${{ "%.0f"|format(transaction.balance_after) }}</td>
+                                            <td>{{ transaction.balance_after }}</td>
                                         </tr>
                                         {% endfor %}
                                         
@@ -116,9 +116,9 @@
                                                 {% endif %}
                                             </td>
                                             <td>
-                                                <span class="text-danger">-${{ "%.0f"|format(transaction.cost) }}</span>
+                                                <span class="text-danger">-{{ transaction.cost }}</span>
                                             </td>
-                                            <td>${{ "%.0f"|format(transaction.balance_after) if transaction.balance_after else '-' }}</td>
+                                            <td>{{ transaction.balance_after if transaction.balance_after else '-' }}</td>
                                         </tr>
                                         {% endfor %}
                                     </tbody>
