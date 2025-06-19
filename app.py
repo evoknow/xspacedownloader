@@ -4342,22 +4342,23 @@ def profile():
         """, (user_id,))
         compute_transactions = cursor.fetchall()
         
-        # Get transaction history from transactions table (if exists)
+        # Get transaction history from transactions table (AI operations)
         cursor.execute("""
-            SELECT transaction_type, amount, description, created_at
+            SELECT action, ai_model, input_tokens, output_tokens, cost, 
+                   balance_before, balance_after, created_at, space_id
             FROM transactions 
             WHERE user_id = %s 
             ORDER BY created_at DESC 
             LIMIT 50
         """, (user_id,))
-        other_transactions = cursor.fetchall()
+        ai_transactions = cursor.fetchall()
         
         cursor.close()
         
         return render_template('profile.html', 
                              user_info=user_info, 
                              compute_transactions=compute_transactions,
-                             other_transactions=other_transactions)
+                             ai_transactions=ai_transactions)
                              
     except Exception as e:
         logger.error(f"Error loading profile: {e}", exc_info=True)

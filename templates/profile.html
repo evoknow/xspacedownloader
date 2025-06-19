@@ -59,7 +59,7 @@
                     <div class="mt-4">
                         <h5>Credit Usage History</h5>
                         
-                        {% if compute_transactions or other_transactions %}
+                        {% if compute_transactions or ai_transactions %}
                             <div class="table-responsive">
                                 <table class="table table-striped">
                                     <thead>
@@ -96,29 +96,36 @@
                                         </tr>
                                         {% endfor %}
                                         
-                                        <!-- Other transactions -->
-                                        {% for transaction in other_transactions %}
+                                        <!-- AI transactions -->
+                                        {% for transaction in ai_transactions %}
                                         <tr>
                                             <td>{{ transaction.created_at.strftime('%m/%d/%Y %I:%M %p') if transaction.created_at else 'N/A' }}</td>
                                             <td>
-                                                <span class="badge bg-info">{{ transaction.transaction_type|title }}</span>
+                                                <span class="badge bg-info">AI</span>
                                             </td>
-                                            <td>{{ transaction.description or 'N/A' }}</td>
                                             <td>
-                                                {% if transaction.amount > 0 %}
-                                                    <span class="text-success">+${{ "%.0f"|format(transaction.amount) }}</span>
-                                                {% else %}
-                                                    <span class="text-danger">${{ "%.0f"|format(transaction.amount) }}</span>
+                                                {{ transaction.action|title }}
+                                                {% if transaction.ai_model %}
+                                                    <small class="text-muted">({{ transaction.ai_model }})</small>
+                                                {% endif %}
+                                                {% if transaction.space_id %}
+                                                    <br><small class="text-muted">{{ transaction.space_id[:20] }}...</small>
+                                                {% endif %}
+                                                {% if transaction.input_tokens and transaction.output_tokens %}
+                                                    <br><small class="text-muted">{{ transaction.input_tokens }} in + {{ transaction.output_tokens }} out tokens</small>
                                                 {% endif %}
                                             </td>
-                                            <td>-</td>
+                                            <td>
+                                                <span class="text-danger">-${{ "%.0f"|format(transaction.cost) }}</span>
+                                            </td>
+                                            <td>${{ "%.0f"|format(transaction.balance_after) if transaction.balance_after else '-' }}</td>
                                         </tr>
                                         {% endfor %}
                                     </tbody>
                                 </table>
                             </div>
                             
-                            {% if (compute_transactions|length + other_transactions|length) >= 50 %}
+                            {% if (compute_transactions|length + ai_transactions|length) >= 50 %}
                                 <div class="alert alert-info">
                                     <i class="bi bi-info-circle"></i>
                                     Showing the last 50 transactions. Contact support if you need a complete history.
