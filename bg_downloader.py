@@ -1110,7 +1110,7 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                                                         except:
                                                             cost_per_second = 0.001  # Default fallback
                                                             
-                                                        total_cost = round(duration_seconds * cost_per_second)
+                                                        total_cost = max(1, round(duration_seconds * cost_per_second))
                                                         
                                                         # Get user balance if logged in user
                                                         if user_id and user_id != 0:
@@ -1520,7 +1520,7 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                                                     cost_per_second = float(cost_result['setting_value']) if cost_result else 0.001
                                                     
                                                     # Calculate total cost
-                                                    total_cost = round(download_duration * cost_per_second)
+                                                    total_cost = max(1, round(download_duration * cost_per_second))
                                                     
                                                     print(f"HEARTBEAT: Cost calculation - duration={download_duration:.2f}s, cost_per_sec=${cost_per_second:.6f}, total_cost=${total_cost:.6f}")
                                                     
@@ -2642,7 +2642,7 @@ def check_active_processes() -> None:
                         cost_per_second = float(cost_result['setting_value']) if cost_result else 0.001
                         
                         # Calculate total cost
-                        total_cost = round(download_duration * cost_per_second)
+                        total_cost = max(1, round(download_duration * cost_per_second))
                         
                         logger.info(f"DAEMON: Cost calculation for job {job_id} - duration={download_duration:.2f}s, cost_per_sec=${cost_per_second:.6f}, total_cost=${total_cost:.6f}")
                         

@@ -136,8 +136,8 @@ class CostLogger:
         output_cost = (output_tokens / 1000000) * costs['output_cost_per_million']
         total_cost = input_cost + output_cost
         
-        # Round to nearest integer to maintain integer balance
-        return round(total_cost)
+        # Round to nearest integer to maintain integer balance, minimum 1 cent
+        return max(1, round(total_cost))
     
     def get_user_balance(self, user_id: int) -> float:
         """

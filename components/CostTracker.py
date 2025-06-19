@@ -113,8 +113,8 @@ class CostTracker:
         output_cost_usd = (output_tokens / 1_000_000) * output_cost
         total_cost = input_cost_usd + output_cost_usd
         
-        # Round to nearest integer to maintain integer balance
-        total_cost = round(total_cost)
+        # Round to nearest integer to maintain integer balance, minimum 1 cent
+        total_cost = max(1, round(total_cost))
         
         logger.debug(f"AI cost calculation: {input_tokens} input + {output_tokens} output tokens = ${total_cost:.6f}")
         
@@ -131,8 +131,8 @@ class CostTracker:
             float: Cost in USD
         """
         cost = duration_seconds * self.compute_cost_per_second
-        # Round to nearest integer to maintain integer balance
-        cost = round(cost)
+        # Round to nearest integer to maintain integer balance, minimum 1 cent
+        cost = max(1, round(cost))
         logger.debug(f"Compute cost calculation: {duration_seconds}s × ${self.compute_cost_per_second}/s = ${cost:.6f}")
         return cost
     
