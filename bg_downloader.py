@@ -1099,9 +1099,52 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                                                             start_time = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
                                                         duration_seconds = (end_time - start_time).total_seconds()
                                                         
-                                                        # Cost tracking is handled by the CostLogger component in fork_download_process
+                                                        # Track compute cost directly via database
                                                         action = f"mp3_download" if file_type == 'mp3' else f"{file_type}_download"
-                                                        print(f"DOWNLOAD COMPLETION: {action} completed for {space_id} in {duration_seconds:.2f}s - cost tracking handled by CostLogger")
+                                                        
+                                                        # Get compute cost per second from config (fallback to 0.001)
+                                                        try:
+                                                            cursor.execute("""
+                                                                SELECT setting_value FROM app_settings 
+                                                                WHERE setting_name = 'compute_cost_per_second'
+                                                            """)
+                                                            cost_result = cursor.fetchone()
+                                                            cost_per_second = float(cost_result[0]) if cost_result else 0.001
+                                                        except:
+                                                            cost_per_second = 0.001  # Default fallback
+                                                            
+                                                        total_cost = max(1, round(duration_seconds * cost_per_second))
+                                                        
+                                                        # Get user balance if logged in user
+                                                        if user_id and user_id != 0:
+                                                            cursor.execute("SELECT credits FROM users WHERE id = %s", (user_id,))
+                                                            balance_result = cursor.fetchone()
+                                                            balance_before = float(balance_result[0]) if balance_result else 0.0
+                                                            
+                                                            # Check if user has sufficient credits
+                                                            if balance_before >= total_cost:
+                                                                # Deduct credits
+                                                                balance_after = balance_before - total_cost
+                                                                cursor.execute("""
+                                                                    UPDATE users 
+                                                                    SET credits = %s 
+                                                                    WHERE id = %s
+                                                                """, (balance_after, user_id))
+                                                                
+                                                                # Record compute transaction
+                                                                cursor.execute("""
+                                                                    INSERT INTO computes 
+                                                                    (user_id, cookie_id, space_id, action, compute_time_seconds, 
+                                                                     cost_per_second, total_cost, balance_before, balance_after)
+                                                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                                                """, (user_id, cookie_id, space_id, action, duration_seconds,
+                                                                      cost_per_second, total_cost, balance_before, balance_after))
+                                                                
+                                                                print(f"COST TRACKING: {action} cost tracked - ${total_cost:.6f} for {duration_seconds:.2f}s (User {user_id}: ${balance_before:.2f} -> ${balance_after:.2f})")
+                                                            else:
+                                                                print(f"COST TRACKING: Insufficient credits for user {user_id} - required ${total_cost:.6f}, available ${balance_before:.2f}")
+                                                        else:
+                                                            print(f"COST TRACKING: {action} by visitor {cookie_id} - ${total_cost:.6f} for {duration_seconds:.2f}s (not charged)")
                                                     
                                                 except Exception as cost_err:
                                                     print(f"Error tracking compute cost: {cost_err}")
