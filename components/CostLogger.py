@@ -400,7 +400,7 @@ class CostLogger:
             self.cost_logger.error(f"Error recording compute transaction: {e}")
             return False
     
-    def track_compute_operation(self, space_id: str, action: str, compute_time_seconds: float) -> Tuple[bool, str, float]:
+    def track_compute_operation(self, space_id: str, action: str, compute_time_seconds: float, user_id: Optional[int] = None, cookie_id: Optional[str] = None) -> Tuple[bool, str, float]:
         """
         Track compute operation cost and deduct from user balance.
         
@@ -408,11 +408,17 @@ class CostLogger:
             space_id: Space ID
             action: Action type (mp3, mp4)
             compute_time_seconds: Compute time in seconds
+            user_id: Optional user ID (for background processes)
+            cookie_id: Optional cookie ID (for background processes)
             
         Returns:
             tuple: (success, message, cost)
         """
-        user_id, cookie_id = self.get_user_info()
+        # Use provided user_id/cookie_id or get from session
+        if user_id is None or cookie_id is None:
+            session_user_id, session_cookie_id = self.get_user_info()
+            user_id = user_id or session_user_id
+            cookie_id = cookie_id or session_cookie_id
         cost_per_second = self.get_compute_cost_per_second()
         total_cost = round(compute_time_seconds * cost_per_second, 6)
         

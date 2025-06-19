@@ -627,10 +627,11 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                         with open(log_file, 'a') as f:
                             f.write(f"Download duration: {download_duration:.2f} seconds\n")
                         
-                        # Get user_id from the job before closing connection
-                        cursor.execute("SELECT user_id FROM space_download_scheduler WHERE id = %s", (job_id,))
+                        # Get user_id and cookie_id from the job before closing connection
+                        cursor.execute("SELECT user_id, cookie_id FROM space_download_scheduler WHERE id = %s", (job_id,))
                         job_result = cursor.fetchone()
                         user_id = job_result[0] if job_result else None
+                        cookie_id = job_result[1] if job_result else None
                         
                         # Close current connection before CostLogger
                         cursor.close()
@@ -643,7 +644,9 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                                 success, message, cost = cost_logger.track_compute_operation(
                                     space_id=space_id,
                                     action='mp3',
-                                    compute_time_seconds=download_duration
+                                    compute_time_seconds=download_duration,
+                                    user_id=user_id,
+                                    cookie_id=cookie_id
                                 )
                                 
                                 with open(log_file, 'a') as f:
