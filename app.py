@@ -8586,6 +8586,140 @@ def transcribe_space(space_id):
         flash(f'An error occurred: {str(e)}', 'error')
         return redirect(url_for('space_page', space_id=space_id))
 
+@app.route('/api/translate/queue', methods=['POST'])
+def queue_translation():
+    """Queue a translation job for background processing."""
+    try:
+        # Check if translation service is enabled
+        if not check_service_enabled('transcription_enabled'):
+            return jsonify({'error': 'Translation service is temporarily disabled'}), 503
+        
+        if not TRANSLATE_AVAILABLE:
+            return jsonify({'error': 'Translation service is not available'}), 503
+        
+        # Check if user is logged in
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'error': 'Authentication required'}), 401
+        
+        # Validate request
+        if not request.is_json:
+            return jsonify({'error': 'Request must be JSON'}), 400
+        
+        # Get request data
+        data = request.json
+        space_id = data.get('space_id')
+        source_lang = data.get('source_lang', 'auto')
+        target_lang = data.get('target_lang')
+        
+        # Validate required fields
+        if not space_id:
+            return jsonify({'error': 'Missing space_id parameter'}), 400
+        if not target_lang:
+            return jsonify({'error': 'Missing target_lang parameter'}), 400
+        
+        # Check if transcript exists for this space
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        # Check for English transcript first
+        query = "SELECT * FROM space_transcripts WHERE space_id = %s AND language LIKE 'en%'"
+        cursor.execute(query, (space_id,))
+        transcript = cursor.fetchone()
+        
+        if not transcript:
+            cursor.close()
+            return jsonify({'error': 'No transcript found for this space'}), 404
+        
+        # Format target language consistently
+        if target_lang and len(target_lang) == 2:
+            target_lang_formatted = f"{target_lang}-{target_lang.upper()}"
+        else:
+            target_lang_formatted = target_lang
+        
+        # Check if translation already exists
+        query = "SELECT * FROM space_transcripts WHERE space_id = %s AND language = %s"
+        cursor.execute(query, (space_id, target_lang_formatted))
+        existing_translation = cursor.fetchone()
+        
+        # If no exact match, try language family match
+        if not existing_translation and '-' in target_lang_formatted:
+            base_language = target_lang_formatted.split('-')[0]
+            query = "SELECT * FROM space_transcripts WHERE space_id = %s AND language LIKE %s"
+            cursor.execute(query, (space_id, f"{base_language}-%"))
+            existing_translation = cursor.fetchone()
+        
+        cursor.close()
+        
+        if existing_translation:
+            return jsonify({
+                'error': 'Translation already exists',
+                'existing_language': existing_translation['language']
+            }), 409
+        
+        # Create translation jobs directory if it doesn't exist
+        os.makedirs('./translation_jobs', exist_ok=True)
+        
+        # Check for existing pending jobs
+        from pathlib import Path
+        translation_jobs_dir = Path('./translation_jobs')
+        existing_job = None
+        
+        if translation_jobs_dir.exists():
+            for job_file in translation_jobs_dir.glob('*.json'):
+                try:
+                    with open(job_file, 'r') as f:
+                        job_data = json.load(f)
+                        if (job_data.get('space_id') == space_id and 
+                            job_data.get('target_lang') == target_lang_formatted and
+                            job_data.get('status') in ['pending', 'in_progress']):
+                            existing_job = job_data
+                            break
+                except Exception as e:
+                    logger.error(f"Error reading translation job file {job_file}: {e}")
+        
+        if existing_job:
+            return jsonify({
+                'error': 'Translation job already in progress',
+                'job_id': existing_job.get('id'),
+                'status': existing_job.get('status')
+            }), 409
+        
+        # Create translation job
+        import uuid
+        import datetime
+        
+        job_id = str(uuid.uuid4())
+        job_data = {
+            'id': job_id,
+            'space_id': space_id,
+            'user_id': user_id,
+            'source_lang': source_lang,
+            'target_lang': target_lang_formatted,
+            'transcript_text': transcript['transcript'],
+            'status': 'pending',
+            'progress': 0,
+            'created_at': datetime.datetime.now().isoformat(),
+            'updated_at': datetime.datetime.now().isoformat()
+        }
+        
+        # Save job file
+        job_file = Path(f'./translation_jobs/{job_id}.json')
+        with open(job_file, 'w') as f:
+            json.dump(job_data, f)
+        
+        logger.info(f"Created translation job {job_id} for space {space_id} to {target_lang_formatted}")
+        
+        return jsonify({
+            'job_id': job_id,
+            'status': 'pending',
+            'message': 'Translation job queued for background processing'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error queuing translation: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     # Get host and port from environment or use defaults
     host = os.environ.get('HOST', '0.0.0.0')  # Listen on all interfaces

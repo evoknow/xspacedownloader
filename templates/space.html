@@ -2099,6 +2099,119 @@
         }
         
         // Function to translate transcript content
+        function pollTranslationJob(jobId, spaceId, targetLang) {
+            const transcriptContent = document.querySelector('#transcript-content');
+            let pollCount = 0;
+            const maxPolls = 60; // 5 minutes max (5 second intervals)
+            
+            function pollStatus() {
+                pollCount++;
+                
+                // Update progress message
+                transcriptContent.innerHTML = `
+                    <div class="alert alert-info">
+                        <div class="d-flex align-items-center">
+                            <div class="spinner-border text-primary me-3" role="status" aria-hidden="true" style="width: 1.5rem; height: 1.5rem;"></div>
+                            <div>
+                                <strong>Processing translation...</strong><br>
+                                <small>Translating transcript to ${getLanguageName(targetLang)}. Please wait... (${pollCount}/${maxPolls})</small>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Check if we've exceeded max polls
+                if (pollCount >= maxPolls) {
+                    transcriptContent.innerHTML = `
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            Translation is taking longer than expected. Please check back later or refresh the page.
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // Poll for updated transcript
+                fetch(`/api/transcript/${spaceId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.language && data.language.startsWith(targetLang.split('-')[0])) {
+                            // Translation completed! Display it
+                            const formattedText = formatTranscriptWithTimecodes(data.transcript);
+                            
+                            transcriptContent.innerHTML = `
+                                <div class="transcript-text translated" data-target-lang="${data.language}">
+                                    <div class="alert alert-success mb-3">
+                                        <small>
+                                            <i class="bi bi-check-circle"></i> 
+                                            Translation completed! This transcript has been translated to ${getLanguageName(data.language)}.
+                                            <a href="#" id="show-original">Show original</a>
+                                        </small>
+                                    </div>
+                                    ${formattedText}
+                                </div>
+                            `;
+                            
+                            // Store original text for show/hide functionality
+                            transcriptContent.setAttribute('data-original-text', originalTranscriptText);
+                            transcriptContent.setAttribute('data-translation-lang', data.language);
+                            
+                            // Add event listener to "Show original" link
+                            document.getElementById('show-original').addEventListener('click', function(e) {
+                                e.preventDefault();
+                                const originalText = originalTranscriptText;
+                                const formattedOriginalText = formatTranscriptWithTimecodes(originalText);
+                                transcriptContent.innerHTML = `
+                                    <div class="transcript-text">
+                                        <div class="alert alert-info mb-3">
+                                            <small>
+                                                <i class="bi bi-info-circle"></i> 
+                                                Showing original transcript.
+                                                <a href="#" id="show-translated">Show translation</a>
+                                            </small>
+                                        </div>
+                                        ${formattedOriginalText}
+                                    </div>
+                                `;
+                                
+                                // Add event listener to go back to translation
+                                document.getElementById('show-translated').addEventListener('click', function(e) {
+                                    e.preventDefault();
+                                    const translatedText = transcriptContent.getAttribute('data-translation-text');
+                                    const formattedTranslatedText = formatTranscriptWithTimecodes(translatedText);
+                                    transcriptContent.innerHTML = `
+                                        <div class="transcript-text translated" data-target-lang="${data.language}">
+                                            <div class="alert alert-success mb-3">
+                                                <small>
+                                                    <i class="bi bi-check-circle"></i> 
+                                                    Translation completed! This transcript has been translated to ${getLanguageName(data.language)}.
+                                                    <a href="#" id="show-original">Show original</a>
+                                                </small>
+                                            </div>
+                                            ${formattedTranslatedText}
+                                        </div>
+                                    `;
+                                });
+                            });
+                            
+                            // Store translated text for later use
+                            transcriptContent.setAttribute('data-translation-text', data.transcript);
+                            
+                        } else {
+                            // Translation not complete yet, continue polling
+                            setTimeout(pollStatus, 5000); // Poll every 5 seconds
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error polling translation status:', error);
+                        setTimeout(pollStatus, 5000); // Continue polling on error
+                    });
+            }
+            
+            // Start polling
+            setTimeout(pollStatus, 2000); // Wait 2 seconds before first poll
+        }
+        
         function translateTranscript(sourceText, sourceLang, targetLang) {
             // Show loading indicator
             transcriptContent.innerHTML = `
@@ -2161,18 +2274,29 @@
                     throw error;
                 })
                 .then(() => {
-                    // If service is available, proceed with the translation
-                        return fetch('/api/translate', {
+                    // Show queuing message
+                    transcriptContent.innerHTML = `
+                        <div class="alert alert-info">
+                            <div class="d-flex align-items-center">
+                                <div class="spinner-border text-primary me-3" role="status" aria-hidden="true" style="width: 1.5rem; height: 1.5rem;"></div>
+                                <div>
+                                    <strong>Queuing translation...</strong><br>
+                                    <small>Translation job is being queued for background processing. This may take a few moments.</small>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Queue the translation job
+                    return fetch('/api/translate/queue', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
-                            text: textToTranslate,
-                            source_lang: sourceLang,
-                            target_lang: targetLang,
                             space_id: spaceId,
-                            include_timecodes: hasTimecodes
+                            source_lang: sourceLang,
+                            target_lang: targetLang
                         })
                     });
                 })
@@ -2253,62 +2377,18 @@
                                 </div>
                             </div>
                         `;
+                    } else if (data.job_id) {
+                        // Job queued successfully, start polling for status
+                        console.log(`Translation job ${data.job_id} queued for space ${spaceId}`);
+                        pollTranslationJob(data.job_id, spaceId, targetLang);
                     } else {
-                        // Use translated text directly - backend should preserve timecodes
-                        let finalTranslatedText = data.translated_text;
-                        
-                        // Clean up any residual segment markers (backup safety)
-                        if (finalTranslatedText.includes('###SEGMENT_')) {
-                            finalTranslatedText = finalTranslatedText.replace(/###SEGMENT_\d+###\s*/g, '');
-                            console.log('Cleaned up residual segment markers');
-                        }
-                        
-                        // Format and display the translated text with timecode support
-                        const formattedText = formatTranscriptWithTimecodes(finalTranslatedText);
-                        
+                        // Handle unexpected response
                         transcriptContent.innerHTML = `
-                            <div class="transcript-text translated" data-target-lang="${data.target_lang}">
-                                <div class="alert alert-info mb-3">
-                                    <small>
-                                        <i class="bi bi-info-circle"></i> 
-                                        This transcript has been translated from ${getLanguageName(data.source_lang)} to ${getLanguageName(data.target_lang)}.
-                                        <a href="#" id="show-original">Show original</a>
-                                    </small>
-                                </div>
-                                ${formattedText}
+                            <div class="alert alert-warning">
+                                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                Unexpected response from translation service. Please try again.
                             </div>
                         `;
-                    
-                        // Store original text and target language in a more reliable way
-                        transcriptContent.setAttribute('data-original-text', sourceText);
-                        transcriptContent.setAttribute('data-translation-lang', data.target_lang);
-                        
-                        // Keep the translate dropdown value to maintain the selected language
-                        // Don't clear it so we can reference it later
-                        const translateSelect = document.getElementById('translate-target-lang');
-                        if (translateSelect) {
-                            translateSelect.value = data.target_lang;
-                        }
-                        
-                        // Add event listener to "Show original" link
-                        document.getElementById('show-original').addEventListener('click', function(e) {
-                            e.preventDefault();
-                            const originalText = fullTranscriptText || transcriptContent.getAttribute('data-original-text');
-                            const formattedOriginalText = originalText.replace(/\n/g, '</p><p>');
-                            transcriptContent.innerHTML = `
-                                <div class="transcript-text">
-                                    <div class="alert alert-success mb-3">
-                                        <small>
-                                            <i class="bi bi-check-circle"></i> 
-                                            Showing original transcript.
-                                        </small>
-                                    </div>
-                                    <p>${formattedOriginalText}</p>
-                                </div>
-                            `;
-                            // Keep the translation dropdown value - don't reset it
-                            // This allows the summarize button to know which language is displayed
-                        });
                     }
                 })
                 .catch(error => {
