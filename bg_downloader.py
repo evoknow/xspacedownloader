@@ -2602,6 +2602,78 @@ def check_active_processes() -> None:
                 
             # Process completed
             logger.info(f"Process {pid} for job {job_id} completed with status {status}")
+            
+            # Track compute cost for completed download
+            if status == 0:  # Only track cost for successful downloads
+                try:
+                    # Get job details including start/end time and user_id
+                    connection = db_pool.get_connection()
+                    cursor = connection.cursor(dictionary=True)
+                    
+                    cursor.execute("""
+                        SELECT user_id, space_id, start_time, end_time 
+                        FROM space_download_scheduler 
+                        WHERE id = %s
+                    """, (job_id,))
+                    job_details = cursor.fetchone()
+                    
+                    if job_details and job_details['user_id'] and job_details['start_time'] and job_details['end_time']:
+                        user_id = job_details['user_id']
+                        space_id = job_details['space_id']
+                        
+                        # Calculate duration
+                        start_time = job_details['start_time']
+                        end_time = job_details['end_time']
+                        if isinstance(start_time, str):
+                            start_time = datetime.datetime.fromisoformat(start_time)
+                        if isinstance(end_time, str):
+                            end_time = datetime.datetime.fromisoformat(end_time)
+                        
+                        download_duration = (end_time - start_time).total_seconds()
+                        
+                        # Get current user balance
+                        cursor.execute("SELECT credits FROM users WHERE id = %s", (user_id,))
+                        user_result = cursor.fetchone()
+                        current_balance = float(user_result['credits']) if user_result else 0.0
+                        
+                        # Get compute cost per second
+                        cursor.execute("SELECT setting_value FROM app_settings WHERE setting_name = 'compute_cost_per_second'")
+                        cost_result = cursor.fetchone()
+                        cost_per_second = float(cost_result['setting_value']) if cost_result else 0.001
+                        
+                        # Calculate total cost
+                        total_cost = round(download_duration * cost_per_second, 6)
+                        
+                        logger.info(f"DAEMON: Cost calculation for job {job_id} - duration={download_duration:.2f}s, cost_per_sec=${cost_per_second:.6f}, total_cost=${total_cost:.6f}")
+                        
+                        # Check if user has sufficient credits
+                        if current_balance >= total_cost:
+                            # Deduct credits
+                            new_balance = current_balance - total_cost
+                            cursor.execute("UPDATE users SET credits = %s WHERE id = %s", (new_balance, user_id))
+                            
+                            # Record compute transaction
+                            cursor.execute("""
+                                INSERT INTO computes 
+                                (user_id, cookie_id, space_id, action, compute_time_seconds, 
+                                 cost_per_second, total_cost, balance_before, balance_after)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            """, (user_id, None, space_id, 'mp3', download_duration,
+                                  cost_per_second, total_cost, current_balance, new_balance))
+                            
+                            connection.commit()
+                            logger.info(f"DAEMON: Cost tracked successfully for job {job_id} - deducted ${total_cost:.6f}, balance: ${current_balance:.2f} -> ${new_balance:.2f}")
+                        else:
+                            logger.warning(f"DAEMON: Insufficient credits for job {job_id} - required ${total_cost:.6f}, available ${current_balance:.2f}")
+                    else:
+                        logger.info(f"DAEMON: Skipping cost tracking for job {job_id} - missing required data")
+                    
+                    cursor.close()
+                    connection.close()
+                    
+                except Exception as cost_err:
+                    logger.error(f"DAEMON: Error tracking compute cost for job {job_id}: {cost_err}")
+            
             completed_jobs.append(job_id)
             
         except ChildProcessError:
