@@ -4305,6 +4305,65 @@ def logout():
     flash('You have been logged out successfully.', 'info')
     return redirect(url_for('index'))
 
+# Route for user profile
+@app.route('/profile')
+def profile():
+    """Display user profile with balance and transaction history."""
+    if not session.get('user_id'):
+        flash('Please log in to view your profile.', 'error')
+        return redirect(url_for('index'))
+    
+    try:
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        user_id = session.get('user_id')
+        
+        # Get user information
+        cursor.execute("""
+            SELECT email, credits, created_at, last_logged_in, login_count, country
+            FROM users 
+            WHERE id = %s
+        """, (user_id,))
+        user_info = cursor.fetchone()
+        
+        if not user_info:
+            flash('User not found.', 'error')
+            return redirect(url_for('index'))
+        
+        # Get transaction history from computes table
+        cursor.execute("""
+            SELECT action, compute_time_seconds, cost_per_second, total_cost, 
+                   balance_before, balance_after, created_at, space_id
+            FROM computes 
+            WHERE user_id = %s 
+            ORDER BY created_at DESC 
+            LIMIT 50
+        """, (user_id,))
+        compute_transactions = cursor.fetchall()
+        
+        # Get transaction history from transactions table (if exists)
+        cursor.execute("""
+            SELECT transaction_type, amount, description, created_at
+            FROM transactions 
+            WHERE user_id = %s 
+            ORDER BY created_at DESC 
+            LIMIT 50
+        """, (user_id,))
+        other_transactions = cursor.fetchall()
+        
+        cursor.close()
+        
+        return render_template('profile.html', 
+                             user_info=user_info, 
+                             compute_transactions=compute_transactions,
+                             other_transactions=other_transactions)
+                             
+    except Exception as e:
+        logger.error(f"Error loading profile: {e}", exc_info=True)
+        flash('Error loading profile. Please try again.', 'error')
+        return redirect(url_for('index'))
+
 # Route for setup wizard
 @app.route('/setup', methods=['GET', 'POST'])
 def setup():

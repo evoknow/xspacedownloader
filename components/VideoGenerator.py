@@ -704,7 +704,7 @@ class VideoGenerator:
                             except:
                                 cost_per_second = 0.001  # Default fallback
                                 
-                            total_cost = duration * cost_per_second
+                            total_cost = round(duration * cost_per_second)
                             
                             # Get user balance
                             cursor.execute("SELECT credits FROM users WHERE id = %s", (user_id,))
