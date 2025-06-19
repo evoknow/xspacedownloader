@@ -1495,15 +1495,6 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                                             # Track compute cost if user_id and start_time available
                                             if user_id and start_time:
                                                 try:
-                                                    import sys
-                                                    import os
-                                                    
-                                                    # Add the parent directory to sys.path to import CostLogger
-                                                    current_dir = os.path.dirname(os.path.abspath(__file__))
-                                                    sys.path.append(current_dir)
-                                                    
-                                                    from components.CostLogger import CostLogger
-                                                    
                                                     # Calculate download duration
                                                     from datetime import datetime
                                                     if isinstance(start_time, str):
@@ -1514,14 +1505,47 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                                                     end_time_dt = datetime.now()
                                                     download_duration = (end_time_dt - start_time_dt).total_seconds()
                                                     
-                                                    cost_logger = CostLogger()
-                                                    success, message, cost = cost_logger.track_compute_operation(
-                                                        space_id=space_id,
-                                                        action='mp3',
-                                                        compute_time_seconds=download_duration
-                                                    )
+                                                    # Direct database cost tracking (no Flask session required)
+                                                    cost_conn = connect(**mysql_config)
+                                                    cost_cursor = cost_conn.cursor(dictionary=True)
                                                     
-                                                    print(f"HEARTBEAT: Cost tracking - success={success}, message={message}, cost={cost}, duration={download_duration:.2f}s")
+                                                    # Get current user balance
+                                                    cost_cursor.execute("SELECT credits FROM users WHERE id = %s", (user_id,))
+                                                    user_result = cost_cursor.fetchone()
+                                                    current_balance = float(user_result['credits']) if user_result else 0.0
+                                                    
+                                                    # Get compute cost per second
+                                                    cost_cursor.execute("SELECT setting_value FROM app_settings WHERE setting_name = 'compute_cost_per_second'")
+                                                    cost_result = cost_cursor.fetchone()
+                                                    cost_per_second = float(cost_result['setting_value']) if cost_result else 0.001
+                                                    
+                                                    # Calculate total cost
+                                                    total_cost = round(download_duration * cost_per_second, 6)
+                                                    
+                                                    print(f"HEARTBEAT: Cost calculation - duration={download_duration:.2f}s, cost_per_sec=${cost_per_second:.6f}, total_cost=${total_cost:.6f}")
+                                                    
+                                                    # Check if user has sufficient credits
+                                                    if current_balance >= total_cost:
+                                                        # Deduct credits
+                                                        new_balance = current_balance - total_cost
+                                                        cost_cursor.execute("UPDATE users SET credits = %s WHERE id = %s", (new_balance, user_id))
+                                                        
+                                                        # Record compute transaction
+                                                        cost_cursor.execute("""
+                                                            INSERT INTO computes 
+                                                            (user_id, cookie_id, space_id, action, compute_time_seconds, 
+                                                             cost_per_second, total_cost, balance_before, balance_after)
+                                                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                                        """, (user_id, None, space_id, 'mp3', download_duration,
+                                                              cost_per_second, total_cost, current_balance, new_balance))
+                                                        
+                                                        cost_conn.commit()
+                                                        print(f"HEARTBEAT: Cost tracked successfully - deducted ${total_cost:.6f}, balance: ${current_balance:.2f} -> ${new_balance:.2f}")
+                                                    else:
+                                                        print(f"HEARTBEAT: Insufficient credits - required ${total_cost:.6f}, available ${current_balance:.2f}")
+                                                    
+                                                    cost_cursor.close()
+                                                    cost_conn.close()
                                                     
                                                 except Exception as cost_err:
                                                     print(f"HEARTBEAT: Error tracking compute cost: {cost_err}")
