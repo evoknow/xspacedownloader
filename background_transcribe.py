@@ -1180,63 +1180,187 @@ class TranscriptionWorker:
                                           result={"text_sample": transcript_text[:500] + "..."})
                     return False
                 
-                # Detect language from transcript text if it wasn't explicitly set or detected
-                if language_code == 'unknown' or (not translate_to and not detect_language and not language):
-                    logger.info(f"Detecting language from transcript text for space {space_id}")
+                # Always run AI language detection on the transcript text for accuracy
+                # This ensures we get the correct language even if Whisper misdetected it
+                logger.info(f"Running AI language detection on transcript for space {space_id}")
+                try:
+                    # Use AI to detect language from a sample of the transcript
+                    sample_text = transcript_text[:1000]  # Use first 1000 chars for detection
+                    
+                    # Check if AI is configured
+                    ai_config_exists = False
+                    ai_provider = None
+                    
                     try:
-                        # Import SpeechToText to use its language detection
-                        from components.SpeechToText import SpeechToText
-                        stt_detector = SpeechToText()
-                        detected_lang = stt_detector._detect_language_from_text(transcript_text)
-                        
-                        if detected_lang != 'unknown' and detected_lang != language_code:
-                            logger.info(f"AI detected language: {detected_lang} (was: {language_code})")
-                            # Update the language in database
-                            import mysql.connector
-                            connection = None
-                            cursor = None
+                        with open("mainconfig.json", 'r') as f:
+                            main_config = json.load(f)
                             
-                            try:
-                                # Load database config
-                                with open("db_config.json", 'r') as f:
-                                    config = json.load(f)
+                        # Check if AI is configured
+                        ai_config = main_config.get('ai', {})
+                        if ai_config.get('provider'):
+                            ai_config_exists = True
+                            ai_provider = ai_config['provider']
+                    except:
+                        pass
+                    
+                    if ai_config_exists and ai_provider == 'openai':
+                        from components.OpenAI import OpenAI
+                        import os
+                        api_key = os.environ.get('OPENAI_API_KEY') or ai_config.get('openai', {}).get('api_key')
+                        model = ai_config.get('openai', {}).get('model', 'gpt-4o-mini')
+                        
+                        if api_key:
+                            logger.info(f"Using OpenAI for language detection with model: {model}")
+                            ai = OpenAI(api_key, model=model)
+                            
+                            # Prepare prompt for language detection
+                            prompt = f"""Analyze the following text and identify its language. Return ONLY the ISO 639-1 language code (2 letters).
+
+Common language codes:
+- en: English
+- bn: Bengali/Bangla
+- hi: Hindi
+- ar: Arabic
+- ur: Urdu
+- es: Spanish
+- fr: French
+- de: German
+- ja: Japanese
+- ko: Korean
+- zh: Chinese
+- pt: Portuguese
+- it: Italian
+- ru: Russian
+- tr: Turkish
+- fa: Persian/Farsi
+
+Text to analyze:
+"{sample_text}"
+
+Language code:"""
+
+                            messages = [
+                                {"role": "system", "content": "You are a language detection expert. Return only the 2-letter ISO 639-1 language code."},
+                                {"role": "user", "content": prompt}
+                            ]
+                            
+                            success, response = ai._make_request(messages, max_tokens=10, temperature=0.1)
+                            
+                            if success:
+                                detected_lang = response.strip().lower()
                                 
-                                db_config = config["mysql"].copy()
-                                if 'use_ssl' in db_config:
-                                    del db_config['use_ssl']
+                                # Validate the response is a proper language code
+                                valid_codes = {
+                                    'en', 'bn', 'hi', 'ar', 'ur', 'es', 'fr', 'de', 'ja', 'ko', 
+                                    'zh', 'pt', 'it', 'ru', 'tr', 'fa', 'nl', 'sv', 'no', 'da'
+                                }
                                 
-                                connection = mysql.connector.connect(**db_config)
-                                cursor = connection.cursor()
-                                
-                                # Update language for this transcript
-                                update_query = """
-                                UPDATE space_transcripts 
-                                SET language = %s, updated_at = NOW()
-                                WHERE id = %s
-                                """
-                                cursor.execute(update_query, (detected_lang, transcript_id))
-                                connection.commit()
-                                
-                                # Update language_code for the rest of the function
-                                language_code = detected_lang
-                                logger.info(f"Updated transcript language to {detected_lang} in database")
-                                
-                            except Exception as db_err:
-                                logger.error(f"Error updating language in database: {db_err}")
-                            finally:
-                                if cursor:
+                                if detected_lang in valid_codes and detected_lang != language_code.split('-')[0]:
+                                    logger.info(f"AI detected language: {detected_lang} (was: {language_code})")
+                                    
+                                    # Format language code with region
+                                    new_language_code = f"{detected_lang}-{detected_lang.upper()}"
+                                    
+                                    # Update the language in database
+                                    import mysql.connector
+                                    connection = None
+                                    cursor = None
+                                    
                                     try:
-                                        cursor.close()
-                                    except:
-                                        pass
-                                if connection:
-                                    try:
-                                        connection.close()
-                                    except:
-                                        pass
+                                        # Load database config
+                                        with open("db_config.json", 'r') as f:
+                                            config = json.load(f)
                                         
-                    except Exception as detect_err:
-                        logger.error(f"Error detecting language: {detect_err}")
+                                        db_config = config["mysql"].copy()
+                                        if 'use_ssl' in db_config:
+                                            del db_config['use_ssl']
+                                        
+                                        connection = mysql.connector.connect(**db_config)
+                                        cursor = connection.cursor()
+                                        
+                                        # Update language for this transcript
+                                        update_query = """
+                                        UPDATE space_transcripts 
+                                        SET language = %s, updated_at = NOW()
+                                        WHERE id = %s
+                                        """
+                                        cursor.execute(update_query, (new_language_code, transcript_id))
+                                        connection.commit()
+                                        
+                                        # Update language_code for the rest of the function
+                                        language_code = new_language_code
+                                        logger.info(f"Updated transcript language to {new_language_code} in database")
+                                        
+                                    except Exception as db_err:
+                                        logger.error(f"Error updating language in database: {db_err}")
+                                    finally:
+                                        if cursor:
+                                            try:
+                                                cursor.close()
+                                            except:
+                                                pass
+                                        if connection:
+                                            try:
+                                                connection.close()
+                                            except:
+                                                pass
+                                
+                                # Track AI cost for language detection
+                                try:
+                                    if user_id and user_id > 0:
+                                        # Estimate tokens (prompt + response)
+                                        prompt_tokens = len(prompt.split()) * 1.3  # Rough estimate
+                                        output_tokens = 5  # Just the language code
+                                        
+                                        cost_logger = CostLogger()
+                                        cost = cost_logger.calculate_cost('openai', model, int(prompt_tokens), int(output_tokens))
+                                        
+                                        with cost_logger.db.get_connection() as conn:
+                                            cursor = conn.cursor()
+                                            
+                                            # Get user balance
+                                            cursor.execute("SELECT credits FROM users WHERE id = %s", (user_id,))
+                                            balance_result = cursor.fetchone()
+                                            balance_before = float(balance_result[0]) if balance_result else 0.0
+                                            
+                                            # Check if user has sufficient credits
+                                            if balance_before >= cost:
+                                                # Deduct credits
+                                                balance_after = balance_before - cost
+                                                cursor.execute("""
+                                                    UPDATE users 
+                                                    SET credits = %s 
+                                                    WHERE id = %s
+                                                """, (balance_after, user_id))
+                                                
+                                                # Record AI transaction
+                                                cursor.execute("""
+                                                    INSERT INTO transactions 
+                                                    (user_id, cookie_id, space_id, action, ai_model, input_tokens, 
+                                                     output_tokens, cost, balance_before, balance_after)
+                                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                                """, (user_id, None, space_id, 'language_detection', f"openai/{model}", 
+                                                      int(prompt_tokens), int(output_tokens), cost, balance_before, balance_after))
+                                                
+                                                conn.commit()
+                                                logger.info(f"COST TRACKING: language detection cost tracked - ${cost:.6f} for {int(prompt_tokens)}+{int(output_tokens)} tokens (User {user_id}: ${balance_before:.2f} -> ${balance_after:.2f})")
+                                            else:
+                                                logger.warning(f"COST TRACKING: Insufficient credits for user {user_id} - required ${cost:.6f}, available ${balance_before:.2f}")
+                                            
+                                            cursor.close()
+                                except Exception as cost_err:
+                                    logger.error(f"Error tracking language detection cost: {cost_err}")
+                            else:
+                                logger.warning(f"AI language detection failed: {response}")
+                                
+                    elif ai_config_exists and ai_provider == 'claude':
+                        # Similar implementation for Claude if needed
+                        logger.info("Claude language detection not implemented yet, using original language")
+                    else:
+                        logger.info("AI not configured for language detection, using original language")
+                        
+                except Exception as detect_err:
+                    logger.error(f"Error in AI language detection: {detect_err}", exc_info=True)
                 
                 # Generate and save tags for English transcripts
                 if language_code.startswith('en'):
