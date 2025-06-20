@@ -4,13 +4,28 @@
 import os
 import json
 import logging
-import whisper
 import warnings
 from datetime import datetime
 from pathlib import Path
-from pydub import AudioSegment
-from pydub.utils import make_chunks
 import tempfile
+
+# Optional pydub import (for audio processing)
+try:
+    from pydub import AudioSegment
+    from pydub.utils import make_chunks
+    PYDUB_AVAILABLE = True
+except ImportError:
+    PYDUB_AVAILABLE = False
+    AudioSegment = None
+    make_chunks = None
+
+# Optional Whisper import (for local transcription)
+try:
+    import whisper
+    WHISPER_AVAILABLE = True
+except ImportError:
+    WHISPER_AVAILABLE = False
+    whisper = None
 
 # Optional OpenAI API import
 try:
@@ -61,6 +76,15 @@ class SpeechToText:
             elif not self.config.get('openai_api_key'):
                 logger.warning("OpenAI API key not configured, falling back to local Whisper")
                 self.provider = 'local'
+        
+        # Check if local provider is available when needed
+        if self.provider == 'local' and not WHISPER_AVAILABLE:
+            if OPENAI_AVAILABLE and self.config.get('openai_api_key'):
+                logger.warning("Local Whisper not available, switching to OpenAI API")
+                self.provider = 'openai'
+                self.model_name = self.config.get('openai_model', 'gpt-4o-mini-transcribe')
+            else:
+                raise ImportError("Neither Whisper nor OpenAI API is available for transcription")
         
         # Set appropriate model name for provider
         if self.provider == 'openai':
@@ -138,6 +162,10 @@ class SpeechToText:
                 return False
         else:
             # Local Whisper model loading
+            if not WHISPER_AVAILABLE:
+                logger.error("Whisper library not available for local transcription")
+                return False
+                
             if self.model is None:
                 try:
                     logger.info(f"[TRANSCRIPTION] Loading Local Whisper model: {self.model_name}")
@@ -149,6 +177,61 @@ class SpeechToText:
                     return False
         
         return True
+    
+    def _get_language_name(self, language_code):
+        """
+        Get the language name from a language code, with fallback for when whisper is not available.
+        
+        Args:
+            language_code (str): Language code (e.g., 'en', 'es')
+            
+        Returns:
+            str: Language name or 'Unknown' if not found
+        """
+        if WHISPER_AVAILABLE and language_code:
+            return whisper.tokenizer.LANGUAGES.get(language_code, "Unknown")
+        
+        # Fallback language mapping when whisper is not available
+        fallback_languages = {
+            'en': 'English',
+            'es': 'Spanish', 
+            'fr': 'French',
+            'de': 'German',
+            'it': 'Italian',
+            'pt': 'Portuguese',
+            'ru': 'Russian',
+            'ja': 'Japanese',
+            'ko': 'Korean',
+            'zh': 'Chinese',
+            'ar': 'Arabic',
+            'hi': 'Hindi',
+            'nl': 'Dutch',
+            'sv': 'Swedish',
+            'da': 'Danish',
+            'no': 'Norwegian',
+            'fi': 'Finnish'
+        }
+        return fallback_languages.get(language_code, "Unknown")
+    
+    def _is_valid_language_code(self, language_code):
+        """
+        Check if a language code is valid.
+        
+        Args:
+            language_code (str): Language code to check
+            
+        Returns:
+            bool: True if valid, False otherwise
+        """
+        if WHISPER_AVAILABLE and language_code:
+            return language_code in whisper.tokenizer.LANGUAGES
+        
+        # Fallback check when whisper is not available
+        fallback_languages = {
+            'en', 'es', 'fr', 'de', 'it', 'pt', 'ru', 'ja', 'ko', 
+            'zh', 'ar', 'hi', 'nl', 'sv', 'da', 'no', 'fi'
+        }
+        return language_code in fallback_languages
     
     def _transcribe_with_openai(self, audio_file, language=None, verbose=False):
         """
@@ -574,8 +657,8 @@ class SpeechToText:
             client = OpenAI(api_key=self.config.get('openai_api_key'))
             
             # Get language names for better prompts
-            source_name = whisper.tokenizer.LANGUAGES.get(source_lang, source_lang)
-            target_name = whisper.tokenizer.LANGUAGES.get(target_lang, target_lang)
+            source_name = self._get_language_name(source_lang) if source_lang else source_lang
+            target_name = self._get_language_name(target_lang) if target_lang else target_lang
             
             logger.info(f"[TRANSCRIPTION] Translating from {source_name} to {target_name} using OpenAI")
             
@@ -930,7 +1013,7 @@ Return ONLY the corrected transcript text without any additional commentary, for
                             result["translated_text"] = translated_text
                             result["target_language"] = {
                                 "code": target_lang,
-                                "name": whisper.tokenizer.LANGUAGES.get(target_lang, "Unknown") if target_lang in whisper.tokenizer.LANGUAGES else "Unknown"
+                                "name": self._get_language_name(target_lang)
                             }
                             logger.info(f"Translation completed successfully")
                         else:
@@ -943,7 +1026,7 @@ Return ONLY the corrected transcript text without any additional commentary, for
                     "text": result["text"],
                     "detected_language": {
                         "code": result["language"],
-                        "name": whisper.tokenizer.LANGUAGES.get(result["language"], "Unknown") if result["language"] != "unknown" else "Unknown"
+                        "name": self._get_language_name(result["language"]) if result["language"] != "unknown" else "Unknown"
                     },
                     "segments": result.get("segments", []),
                     "duration": result.get("duration", 0)
@@ -992,7 +1075,7 @@ Return ONLY the corrected transcript text without any additional commentary, for
                     logger.info(f"Detected language: {detected_language_code}")
                     final_result["detected_language"] = {
                         "code": detected_language_code,
-                        "name": whisper.tokenizer.LANGUAGES.get(detected_language_code, "Unknown")
+                        "name": self._get_language_name(detected_language_code)
                     }
                 else:
                     logger.warning("Language detection failed, will use auto-detection in transcription")
@@ -1015,7 +1098,7 @@ Return ONLY the corrected transcript text without any additional commentary, for
                     whisper_language = language.lower()
             
             # Verify language code is supported
-            if whisper_language and whisper_language not in whisper.tokenizer.LANGUAGES:
+            if whisper_language and not self._is_valid_language_code(whisper_language):
                 logger.warning(f"Language {whisper_language} not in Whisper supported languages. Will use auto-detection.")
                 whisper_language = None
             
@@ -1061,7 +1144,7 @@ Return ONLY the corrected transcript text without any additional commentary, for
                 detected_language_code = result.get("language", "unknown")
                 final_result["detected_language"] = {
                     "code": detected_language_code,
-                    "name": whisper.tokenizer.LANGUAGES.get(detected_language_code, "Unknown")
+                    "name": self._get_language_name(detected_language_code)
                 }
             
             # Set the transcript based on the current step
@@ -1083,7 +1166,7 @@ Return ONLY the corrected transcript text without any additional commentary, for
                     target_lang = target_lang.split('-')[0].lower()
                 
                 # Check if target language is different from source and is supported
-                if target_lang != detected_language_code and target_lang in whisper.tokenizer.LANGUAGES:
+                if target_lang != detected_language_code and self._is_valid_language_code(target_lang):
                     logger.info(f"Translating from {detected_language_code} to {target_lang}")
                     
                     # IMPORTANT NOTE: Whisper's "translate" task only translates TO ENGLISH, not to other languages
@@ -1174,13 +1257,13 @@ Return ONLY the corrected transcript text without any additional commentary, for
                     else:
                         # For non-English target languages (not fully supported yet)
                         logger.warning(f"Translation to {target_lang} not supported. Whisper only translates to English.")
-                        translated_text = f"[Translation to {target_lang} ({whisper.tokenizer.LANGUAGES.get(target_lang, 'Unknown')}) is not yet supported. Whisper only translates to English.]"
+                        translated_text = f"[Translation to {target_lang} ({self._get_language_name(target_lang)}) is not yet supported. Whisper only translates to English.]"
                     
                     # Add translation to result
                     final_result["translated_text"] = translated_text
                     final_result["target_language"] = {
                         "code": target_lang,
-                        "name": whisper.tokenizer.LANGUAGES.get(target_lang, "Unknown")
+                        "name": self._get_language_name(target_lang)
                     }
                     
                     # Update the main text to be the translation

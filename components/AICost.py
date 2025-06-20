@@ -20,9 +20,16 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
-from flask import session
 import mysql.connector
 from .DatabaseManager import DatabaseManager
+
+# Optional Flask import (for session management)
+try:
+    from flask import session
+    FLASK_AVAILABLE = True
+except ImportError:
+    FLASK_AVAILABLE = False
+    session = None
 
 class AICost:
     """Unified AI cost tracking and credit management."""
