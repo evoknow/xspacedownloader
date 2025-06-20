@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 import mysql.connector
 from mysql.connector import Error
-from components.CostLogger import CostLogger  # For cost tracking
+from components.CostLogger import CostLogger  # For compute cost tracking
 from components.Email import Email  # For email notifications
 
 # Check if we're already running in a virtual environment

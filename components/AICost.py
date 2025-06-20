@@ -329,3 +329,37 @@ class AICost:
         output_tokens = self.estimate_tokens(transcript_length * ' ', is_input=False)  # Rough char to word conversion
         
         return input_tokens, output_tokens
+    
+    def get_user_balance(self, user_id: int) -> float:
+        """
+        Get user credit balance.
+        
+        Args:
+            user_id: User ID
+            
+        Returns:
+            float: User credit balance
+        """
+        connection = None
+        cursor = None
+        
+        try:
+            connection = self.db.get_connection()
+            cursor = connection.cursor()
+            
+            cursor.execute("SELECT credits FROM users WHERE id = %s", (user_id,))
+            result = cursor.fetchone()
+            
+            if result:
+                return float(result[0])
+            else:
+                return 0.0
+                
+        except Exception as e:
+            self.cost_logger.error(f"Error getting user balance: {e}")
+            return 0.0
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()

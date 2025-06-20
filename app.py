@@ -5403,11 +5403,11 @@ def generate_video(space_id):
         
         # Check user credits before starting expensive video generation
         try:
-            from components.CostLogger import CostLogger
-            cost_logger = CostLogger()
+            from components.AICost import AICost
+            ai_cost = AICost()
             
             # Check if user has sufficient credits (estimate $0.10 minimum for video generation)
-            user_credits = cost_logger.get_user_credits(user_id)
+            user_credits = ai_cost.get_user_balance(user_id)
             min_required_credits = 0.10  # Minimum estimated cost
             
             if user_credits < min_required_credits:

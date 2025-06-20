@@ -6,7 +6,8 @@ import os
 import json
 import logging
 from typing import Dict, List, Optional, Union, Tuple
-from .CostAwareAI import CostAwareAI
+from .AI import AI
+from .AICost import AICost
 
 # Configure logging
 logging.basicConfig(
@@ -34,12 +35,14 @@ class Translate:
         self.api_url = "AI-powered translation"  # Descriptive value for web API
         
         try:
-            self.ai = CostAwareAI()
-            logger.info(f"Translation component initialized using CostAware AI provider: {self.ai.get_provider_name()}")
+            self.ai = AI()
+            self.ai_cost = AICost()
+            logger.info(f"Translation component initialized using AI provider: {self.ai.get_provider_name()}")
             self.api_key = "AI-configured"
         except Exception as e:
-            logger.error(f"Failed to initialize CostAware AI component: {e}")
+            logger.error(f"Failed to initialize AI component: {e}")
             self.ai = None
+            self.ai_cost = None
             self.api_key = None
             self.api_url = "AI component not available - check API keys"
         
@@ -104,11 +107,47 @@ class Translate:
         problematic_languages = ['bn', 'ar', 'hi', 'th', 'ko', 'ja']
         
         try:
-            # Use cost tracking version if space_id is provided
-            if space_id and hasattr(self.ai, 'translate_with_cost_tracking'):
-                success, result = self.ai.translate_with_cost_tracking(space_id, source_lang, target_lang, text)
-            else:
-                success, result = self.ai.translate(source_lang, target_lang, text)
+            # Perform translation
+            success, result = self.ai.translate(source_lang, target_lang, text)
+            
+            # Track cost if space_id is provided and translation was successful
+            if success and space_id and self.ai_cost:
+                try:
+                    # Extract content and usage info
+                    if isinstance(result, dict) and 'content' in result:
+                        content = result['content']
+                        usage = result.get('usage', {})
+                        input_tokens = usage.get('input_tokens', 0)
+                        output_tokens = usage.get('output_tokens', 0)
+                    else:
+                        content = str(result)
+                        # Estimate tokens if no usage data
+                        input_tokens = self.ai_cost.estimate_tokens(text, is_input=True)
+                        output_tokens = self.ai_cost.estimate_tokens(content, is_input=False)
+                    
+                    # Get provider and model info
+                    provider = self.ai.get_provider_name().lower()
+                    model = getattr(self.ai.provider, 'model', 'unknown') if hasattr(self.ai, 'provider') else 'unknown'
+                    
+                    # Track cost
+                    cost_success, cost_message, cost = self.ai_cost.track_cost(
+                        space_id=space_id,
+                        action='translation',
+                        vendor=provider,
+                        model=model,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens
+                    )
+                    
+                    if not cost_success:
+                        logger.warning(f"Cost tracking failed for translation: {cost_message}")
+                    
+                    # Return just the content, not the usage dict
+                    result = content
+                    
+                except Exception as cost_err:
+                    logger.warning(f"Error tracking translation cost: {cost_err}")
+                    # Continue with translation result even if cost tracking fails
             
             # If translation failed or is for a problematic language, try with Claude if available
             if (not success or target_lang.lower() in problematic_languages) and hasattr(self, '_try_claude_fallback'):
@@ -236,22 +275,57 @@ class Translate:
             return False, {"error": "No content provided for summarization"}
         
         try:
-            # Use cost tracking version if space_id is provided
-            if space_id:
-                return self.ai.summary_with_cost_tracking(space_id, content, max_length)
+            # Check if the AI provider's summary method accepts language parameter
+            import inspect
+            sig = inspect.signature(self.ai.summary)
+            params = sig.parameters
+            
+            # Perform summarization
+            if 'language' in params:
+                success, result = self.ai.summary(content, max_length, language)
             else:
-                # Pass language parameter if AI provider supports it
-                # Check if the AI provider's summary method accepts language parameter
-                import inspect
-                sig = inspect.signature(self.ai.summary)
-                params = sig.parameters
-                
-                if 'language' in params:
-                    # AI provider supports language parameter
-                    return self.ai.summary(content, max_length, language)
-                else:
-                    # Fallback to basic summary without language
-                    return self.ai.summary(content, max_length)
+                success, result = self.ai.summary(content, max_length)
+            
+            # Track cost if space_id is provided and summarization was successful
+            if success and space_id and self.ai_cost:
+                try:
+                    # Extract content and usage info
+                    if isinstance(result, dict) and 'content' in result:
+                        summary_content = result['content']
+                        usage = result.get('usage', {})
+                        input_tokens = usage.get('input_tokens', 0)
+                        output_tokens = usage.get('output_tokens', 0)
+                    else:
+                        summary_content = str(result)
+                        # Estimate tokens if no usage data
+                        input_tokens = self.ai_cost.estimate_tokens(content, is_input=True)
+                        output_tokens = self.ai_cost.estimate_tokens(summary_content, is_input=False)
+                    
+                    # Get provider and model info
+                    provider = self.ai.get_provider_name().lower()
+                    model = getattr(self.ai.provider, 'model', 'unknown') if hasattr(self.ai, 'provider') else 'unknown'
+                    
+                    # Track cost
+                    cost_success, cost_message, cost = self.ai_cost.track_cost(
+                        space_id=space_id,
+                        action='summary',
+                        vendor=provider,
+                        model=model,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens
+                    )
+                    
+                    if not cost_success:
+                        logger.warning(f"Cost tracking failed for summary: {cost_message}")
+                    
+                    # Return just the content, not the usage dict
+                    result = summary_content
+                    
+                except Exception as cost_err:
+                    logger.warning(f"Error tracking summary cost: {cost_err}")
+                    # Continue with summary result even if cost tracking fails
+            
+            return success, result
         except Exception as e:
             logger.error(f"Summarization error: {e}")
             return False, {"error": f"Summarization error: {str(e)}"}
