@@ -3092,7 +3092,9 @@ class Space:
             # Try AI-based tag generation first
             try:
                 from components.AI import AI
+                from components.AICost import AICost
                 ai = AI()
+                ai_cost = AICost()
                 
                 # Prepare prompt for tag generation
                 prompt = f"""Analyze this transcript and generate {max_tags} relevant tags that capture the main topics, themes, and key concepts discussed. 
@@ -3129,6 +3131,34 @@ Transcript:
                 
                 # Generate tags using AI
                 result = ai.generate_text(prompt, max_tokens=100)
+                
+                # Track cost if we have a space_id (which we can get from self.id)
+                if hasattr(self, 'id') and self.id:
+                    try:
+                        # Estimate tokens for cost tracking
+                        input_tokens = ai_cost.estimate_tokens(prompt, is_input=True)
+                        output_tokens = ai_cost.estimate_tokens(result.get('text', ''), is_input=False) if result.get('success') else 0
+                        
+                        # Get provider and model info
+                        provider = ai.get_provider_name().lower()
+                        model = getattr(ai.provider, 'model', 'unknown') if hasattr(ai, 'provider') else 'unknown'
+                        
+                        # Track cost (without deducting credits since this is called from background process)
+                        cost_success, cost_message, cost = ai_cost.track_cost(
+                            space_id=self.id,
+                            action='tag_generation',
+                            vendor=provider,
+                            model=model,
+                            input_tokens=input_tokens,
+                            output_tokens=output_tokens,
+                            user_id=getattr(self, 'user_id', None),
+                            deduct_credits=False  # Don't deduct for background tag generation
+                        )
+                        
+                        if not cost_success:
+                            tag_logger.warning(f"Cost tracking failed for tag generation: {cost_message}")
+                    except Exception as cost_err:
+                        tag_logger.warning(f"Error tracking cost for tag generation: {cost_err}")
                 
                 tag_logger.info("AI RESPONSE:")
                 tag_logger.info("-"*80)

@@ -40,7 +40,7 @@ except Exception as e:
 # Import components
 try:
     from components.SpeechToText import SpeechToText
-    from components.CostLogger import CostLogger
+    from components.AICost import AICost
 except ImportError as e:
     logger.error(f"Failed to import required components: {e}")
     sys.exit(1)
@@ -989,131 +989,52 @@ class TranscriptionWorker:
                 
                 # Track cost for AI transcription if using OpenAI
                 try:
-                    admin_requested = job_data.get('admin_requested', False)
                     user_id = job_data.get('user_id')
                     
-                    # Track costs if user_id is available (including admin users)
+                    # Track costs if user_id is available
                     if user_id and user_id > 0:
-                        # Check if this was an OpenAI transcription by looking at the model used
+                        # Check if this was an OpenAI transcription
                         model_used = job_data.get('model', 'tiny')
                         stt_provider = getattr(self.stt, 'provider', 'local')
                         
-                        if stt_provider == 'openai' and hasattr(result, 'get') and result.get('usage'):
-                            # OpenAI transcription with usage data
-                            usage = result['usage']
-                            input_tokens = usage.get('input_tokens', 0)
-                            output_tokens = usage.get('output_tokens', 0)
+                        if stt_provider == 'openai':
+                            ai_cost = AICost()
                             
-                            # Track AI cost directly via database (background process doesn't have Flask session)
-                            try:
-                                cost_logger = CostLogger()
-                                cost = cost_logger.calculate_cost('openai', getattr(self.stt, 'model_name', 'gpt-4o-mini-transcribe'), input_tokens, output_tokens)
-                                
-                                with cost_logger.db.get_connection() as conn:
-                                    cursor = conn.cursor()
-                                    
-                                    # Get user balance
-                                    cursor.execute("SELECT credits FROM users WHERE id = %s", (user_id,))
-                                    balance_result = cursor.fetchone()
-                                    balance_before = float(balance_result[0]) if balance_result else 0.0
-                                    
-                                    # Check if user has sufficient credits
-                                    if balance_before >= cost:
-                                        # Deduct credits
-                                        balance_after = balance_before - cost
-                                        cursor.execute("""
-                                            UPDATE users 
-                                            SET credits = %s 
-                                            WHERE id = %s
-                                        """, (balance_after, user_id))
-                                        
-                                        # Record AI transaction
-                                        cursor.execute("""
-                                            INSERT INTO transactions 
-                                            (user_id, cookie_id, space_id, action, ai_model, input_tokens, 
-                                             output_tokens, cost, balance_before, balance_after)
-                                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                        """, (user_id, None, space_id, 'transcription', f"openai/{getattr(self.stt, 'model_name', 'gpt-4o-mini-transcribe')}", 
-                                              input_tokens, output_tokens, cost, balance_before, balance_after))
-                                        
-                                        # Update space_cost table
-                                        cursor.execute("""
-                                            INSERT INTO space_cost (space_id, transcription_cost) 
-                                            VALUES (%s, %s) 
-                                            ON DUPLICATE KEY UPDATE 
-                                            transcription_cost = transcription_cost + %s
-                                        """, (space_id, cost, cost))
-                                        
-                                        conn.commit()
-                                        logger.info(f"COST TRACKING: transcription cost tracked - ${cost:.6f} for {input_tokens}+{output_tokens} tokens (User {user_id}: ${balance_before:.2f} -> ${balance_after:.2f})")
-                                    else:
-                                        logger.warning(f"COST TRACKING: Insufficient credits for user {user_id} - required ${cost:.6f}, available ${balance_before:.2f}")
-                                    
-                                    cursor.close()
-                            except Exception as track_err:
-                                logger.error(f"Error tracking transcription cost: {track_err}")
-                        elif stt_provider == 'openai':
-                            # OpenAI transcription without usage data - estimate cost
-                            # Estimate tokens based on audio duration (rough approximation)
-                            estimated_input_tokens = int(transcription_duration * 10)  # ~10 tokens per second of audio
-                            estimated_output_tokens = len(result.get('text', '').split()) if isinstance(result, dict) and result.get('text') else 0
+                            # Determine tokens based on whether we have usage data
+                            if hasattr(result, 'get') and result.get('usage'):
+                                # OpenAI transcription with usage data
+                                usage = result['usage']
+                                input_tokens = usage.get('input_tokens', 0)
+                                output_tokens = usage.get('output_tokens', 0)
+                            else:
+                                # Estimate tokens for OpenAI transcription
+                                transcript_text = result.get('text', '') if isinstance(result, dict) else str(result)
+                                input_tokens, output_tokens = ai_cost.estimate_transcription_tokens(
+                                    transcription_duration, len(transcript_text)
+                                )
                             
-                            # Track AI cost directly via database (background process doesn't have Flask session)
-                            try:
-                                cost_logger = CostLogger()
-                                cost = cost_logger.calculate_cost('openai', getattr(self.stt, 'model_name', 'gpt-4o-mini-transcribe'), estimated_input_tokens, estimated_output_tokens)
-                                
-                                with cost_logger.db.get_connection() as conn:
-                                    cursor = conn.cursor()
-                                    
-                                    # Get user balance
-                                    cursor.execute("SELECT credits FROM users WHERE id = %s", (user_id,))
-                                    balance_result = cursor.fetchone()
-                                    balance_before = float(balance_result[0]) if balance_result else 0.0
-                                    
-                                    # Check if user has sufficient credits
-                                    if balance_before >= cost:
-                                        # Deduct credits
-                                        balance_after = balance_before - cost
-                                        cursor.execute("""
-                                            UPDATE users 
-                                            SET credits = %s 
-                                            WHERE id = %s
-                                        """, (balance_after, user_id))
-                                        
-                                        # Record AI transaction
-                                        cursor.execute("""
-                                            INSERT INTO transactions 
-                                            (user_id, cookie_id, space_id, action, ai_model, input_tokens, 
-                                             output_tokens, cost, balance_before, balance_after)
-                                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                        """, (user_id, None, space_id, 'transcription', f"openai/{getattr(self.stt, 'model_name', 'gpt-4o-mini-transcribe')}", 
-                                              estimated_input_tokens, estimated_output_tokens, cost, balance_before, balance_after))
-                                        
-                                        # Update space_cost table
-                                        cursor.execute("""
-                                            INSERT INTO space_cost (space_id, transcription_cost) 
-                                            VALUES (%s, %s) 
-                                            ON DUPLICATE KEY UPDATE 
-                                            transcription_cost = transcription_cost + %s
-                                        """, (space_id, cost, cost))
-                                        
-                                        conn.commit()
-                                        logger.info(f"COST TRACKING: transcription cost tracked (estimated) - ${cost:.6f} for {estimated_input_tokens}+{estimated_output_tokens} tokens (User {user_id}: ${balance_before:.2f} -> ${balance_after:.2f})")
-                                    else:
-                                        logger.warning(f"COST TRACKING: Insufficient credits for user {user_id} - required ${cost:.6f}, available ${balance_before:.2f}")
-                                    
-                                    cursor.close()
-                            except Exception as track_err:
-                                logger.error(f"Error tracking transcription cost (estimated): {track_err}")
+                            # Track cost using unified AICost component
+                            success, message, cost = ai_cost.track_cost(
+                                space_id=space_id,
+                                action='transcription',
+                                vendor='openai',
+                                model=getattr(self.stt, 'model_name', 'gpt-4o-mini-transcribe'),
+                                input_tokens=input_tokens,
+                                output_tokens=output_tokens,
+                                user_id=user_id,
+                                cookie_id=None,
+                                deduct_credits=True
+                            )
+                            
+                            if success:
+                                logger.info(f"COST TRACKING: {message} - ${cost:.2f} for {input_tokens}+{output_tokens} tokens")
+                            else:
+                                logger.warning(f"COST TRACKING: {message}")
                         else:
                             logger.info(f"Skipping cost tracking for local transcription model: {model_used}")
                     else:
-                        if not user_id or user_id <= 0:
-                            logger.info("Skipping cost tracking - no valid user_id provided")
-                        else:
-                            logger.info(f"Skipping cost tracking - unexpected condition: user_id={user_id}, admin_requested={admin_requested}")
-                            
+                        logger.info("Skipping cost tracking - no valid user_id provided")
+                        
                 except Exception as cost_err:
                     logger.error(f"Error in transcription cost tracking: {cost_err}")
                     import traceback
@@ -1205,7 +1126,6 @@ class TranscriptionWorker:
                     
                     if ai_config_exists and ai_provider == 'openai':
                         from components.OpenAI import OpenAI
-                        import os
                         api_key = os.environ.get('OPENAI_API_KEY') or ai_config.get('openai', {}).get('api_key')
                         model = ai_config.get('openai', {}).get('model', 'gpt-4o-mini')
                         
@@ -1308,46 +1228,30 @@ Language code:"""
                                 # Track AI cost for language detection
                                 try:
                                     if user_id and user_id > 0:
-                                        # Estimate tokens (prompt + response)
-                                        prompt_tokens = len(prompt.split()) * 1.3  # Rough estimate
+                                        ai_cost = AICost()
+                                        
+                                        # Estimate tokens for language detection
+                                        input_tokens = ai_cost.estimate_tokens(prompt, is_input=True)
                                         output_tokens = 5  # Just the language code
                                         
-                                        cost_logger = CostLogger()
-                                        cost = cost_logger.calculate_cost('openai', model, int(prompt_tokens), int(output_tokens))
+                                        # Track cost using unified AICost component
+                                        success, message, cost = ai_cost.track_cost(
+                                            space_id=space_id,
+                                            action='language_detection',
+                                            vendor='openai',
+                                            model=model,
+                                            input_tokens=input_tokens,
+                                            output_tokens=output_tokens,
+                                            user_id=user_id,
+                                            cookie_id=None,
+                                            deduct_credits=True
+                                        )
                                         
-                                        with cost_logger.db.get_connection() as conn:
-                                            cursor = conn.cursor()
+                                        if success:
+                                            logger.info(f"COST TRACKING: {message} - ${cost:.2f} for language detection")
+                                        else:
+                                            logger.warning(f"COST TRACKING: {message}")
                                             
-                                            # Get user balance
-                                            cursor.execute("SELECT credits FROM users WHERE id = %s", (user_id,))
-                                            balance_result = cursor.fetchone()
-                                            balance_before = float(balance_result[0]) if balance_result else 0.0
-                                            
-                                            # Check if user has sufficient credits
-                                            if balance_before >= cost:
-                                                # Deduct credits
-                                                balance_after = balance_before - cost
-                                                cursor.execute("""
-                                                    UPDATE users 
-                                                    SET credits = %s 
-                                                    WHERE id = %s
-                                                """, (balance_after, user_id))
-                                                
-                                                # Record AI transaction
-                                                cursor.execute("""
-                                                    INSERT INTO transactions 
-                                                    (user_id, cookie_id, space_id, action, ai_model, input_tokens, 
-                                                     output_tokens, cost, balance_before, balance_after)
-                                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                                """, (user_id, None, space_id, 'language_detection', f"openai/{model}", 
-                                                      int(prompt_tokens), int(output_tokens), cost, balance_before, balance_after))
-                                                
-                                                conn.commit()
-                                                logger.info(f"COST TRACKING: language detection cost tracked - ${cost:.6f} for {int(prompt_tokens)}+{int(output_tokens)} tokens (User {user_id}: ${balance_before:.2f} -> ${balance_after:.2f})")
-                                            else:
-                                                logger.warning(f"COST TRACKING: Insufficient credits for user {user_id} - required ${cost:.6f}, available ${balance_before:.2f}")
-                                            
-                                            cursor.close()
                                 except Exception as cost_err:
                                     logger.error(f"Error tracking language detection cost: {cost_err}")
                             else:
