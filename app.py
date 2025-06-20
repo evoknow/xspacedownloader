@@ -1746,11 +1746,14 @@ def space_page(space_id):
                     with open(job_file, 'r') as f:
                         job_data = json.load(f)
                         if (job_data.get('space_id') == space_id and 
-                            job_data.get('status') in ['pending', 'in_progress']):
+                            job_data.get('status') in ['pending', 'in_progress', 'processing']):
                             has_pending_transcript_job = True
+                            logger.info(f"Found pending transcription job {job_data.get('id')} for space {space_id} with status {job_data.get('status')}")
                             break
                 except Exception as e:
                     logger.error(f"Error reading transcript job file {job_file}: {e}")
+        
+        logger.info(f"Space {space_id}: has_pending_transcript_job = {has_pending_transcript_job}")
         
         # Get reviews for this space
         reviews = None
@@ -8482,6 +8485,50 @@ def admin_update_openai_pricing():
 def about():
     """Display the About page."""
     return render_template('about.html')
+
+# Route to check transcription job status for a space
+@app.route('/api/transcribe/<space_id>/status', methods=['GET'])
+def check_transcription_status(space_id):
+    """Check if there's a pending/in-progress transcription job for a space."""
+    try:
+        from pathlib import Path
+        import json
+        
+        transcript_jobs_dir = Path('./transcript_jobs')
+        
+        if not transcript_jobs_dir.exists():
+            return jsonify({
+                'has_pending_job': False,
+                'status': None,
+                'job_id': None
+            })
+        
+        # Check for existing job
+        for job_file in transcript_jobs_dir.glob('*.json'):
+            try:
+                with open(job_file, 'r') as f:
+                    job_data = json.load(f)
+                    if (job_data.get('space_id') == space_id and 
+                        job_data.get('status') in ['pending', 'in_progress', 'processing']):
+                        return jsonify({
+                            'has_pending_job': True,
+                            'status': job_data.get('status'),
+                            'job_id': job_data.get('id'),
+                            'created_at': job_data.get('created_at'),
+                            'language': job_data.get('language', 'en')
+                        })
+            except Exception as e:
+                logger.error(f"Error reading transcript job file {job_file}: {e}")
+        
+        return jsonify({
+            'has_pending_job': False,
+            'status': None,
+            'job_id': None
+        })
+        
+    except Exception as e:
+        logger.error(f"Error checking transcription status for space {space_id}: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
 
 # Route for transcribing a space
 @app.route('/api/transcribe/<space_id>', methods=['POST'])

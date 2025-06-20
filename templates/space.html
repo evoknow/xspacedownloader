@@ -5279,5 +5279,49 @@
     });
     
     {% endif %}
+    
+    // Function to check transcription status
+    function checkTranscriptionStatus() {
+        const transcribeBtn = document.getElementById('transcribe-btn');
+        if (!transcribeBtn) return;
+        
+        fetch(`/api/transcribe/${spaceId}/status`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.has_pending_job) {
+                    // Disable button and show status
+                    transcribeBtn.disabled = true;
+                    transcribeBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> <span class="d-none d-sm-inline">Transcribing...</span>';
+                    transcribeBtn.setAttribute('title', `Transcription ${data.status} (Job: ${data.job_id})`);
+                    
+                    // Update tooltip
+                    const tooltip = bootstrap.Tooltip.getInstance(transcribeBtn);
+                    if (tooltip) {
+                        tooltip.setContent({ '.tooltip-inner': `Transcription ${data.status}` });
+                    }
+                } else if (!transcribeBtn.getAttribute('data-has-transcript')) {
+                    // Re-enable button if no job and no transcript exists
+                    transcribeBtn.disabled = false;
+                    transcribeBtn.innerHTML = '<i class="bi bi-mic"></i> <span class="d-none d-sm-inline">Transcribe</span>';
+                    transcribeBtn.setAttribute('title', 'Generate transcript from audio');
+                    
+                    // Update tooltip
+                    const tooltip = bootstrap.Tooltip.getInstance(transcribeBtn);
+                    if (tooltip) {
+                        tooltip.setContent({ '.tooltip-inner': 'Generate transcript from audio' });
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error checking transcription status:', error);
+            });
+    }
+    
+    // Check transcription status on page load
+    checkTranscriptionStatus();
+    
+    // Poll transcription status every 10 seconds
+    setInterval(checkTranscriptionStatus, 10000);
+    
 </script>
 {% endblock %}
