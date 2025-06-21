@@ -8,6 +8,18 @@ XSpace Downloader is a Python-based tool designed to download and organize conte
 
 ## Project Structure
 
+**IMPORTANT**: This project has two main directories:
+- **`/var/www/production/xspacedownload.com/website/xspacedownloader`** - Development source directory where code is written and edited
+- **`/var/www/production/xspacedownload.com/website/htdocs`** - Live site directory that serves the production website
+
+The live site is updated from the development directory using:
+```bash
+/var/www/production/xspacedownload.com/website/xspacedownloader/update.py
+```
+
+**Always work in the development directory (`xspacedownloader/`) and use `update.py` to deploy changes to the live site.**
+
+### Development Directory Structure
 - `components/` - Core Python modules
   - `Space.py` - Space object representation and management
   - `Tag.py` - Tagging functionality
@@ -52,6 +64,19 @@ The project uses a MySQL database with the schema defined in `mysql.schema`. Key
 - Tags
 - UserSpaceAccess
 - SpaceTags
+
+## Background Job Daemons
+
+**IMPORTANT**: This project does NOT use systemd services for background jobs. Instead, it uses standalone Python daemon processes:
+
+- **`background_transcribe.py`** - Transcription job daemon that processes audio transcription requests
+- **`background_translate.py`** - Translation job daemon that processes text translation requests
+
+These daemons run independently and log to:
+- `logs/transcription.log` - All transcription-related activity
+- `logs/translate.log` - All translation-related activity
+
+Do NOT look for or modify systemd service files for these background processes.
 
 ## Development Guidelines
 
