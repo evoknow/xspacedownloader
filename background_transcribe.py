@@ -1167,7 +1167,9 @@ Language code:"""
                             success, response = ai._make_request(messages, max_tokens=10, temperature=0.1)
                             
                             if success:
-                                detected_lang = response.strip().lower()
+                                # Extract content from the response dict
+                                content = response.get('content', '') if isinstance(response, dict) else str(response)
+                                detected_lang = content.strip().lower()
                                 
                                 # Validate the response is a proper language code
                                 valid_codes = {
