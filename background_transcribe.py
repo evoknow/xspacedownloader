@@ -210,17 +210,22 @@ Transcript:
                             try:
                                 # Extract content from response
                                 content = response.get('content', '') if isinstance(response, dict) else str(response)
-                                # Parse the JSON response
-                                tags = json.loads(content)
                                 
-                                if isinstance(tags, list) and len(tags) > 0:
-                                    logger.info(f"AI generated {len(tags)} tags for space {space_id}: {tags}")
+                                # Parse tags - AI returns comma-separated string
+                                if isinstance(content, str) and content.strip():
+                                    # Split by comma and clean up each tag
+                                    tags = [tag.strip() for tag in content.split(',') if tag.strip()]
                                     
-                                    # Save tags using Tag component
-                                    save_tags_to_database(space_id, tags)
-                                    return
-                            except json.JSONDecodeError:
-                                logger.warning("Failed to parse AI response as JSON, falling back to keyword extraction")
+                                    if len(tags) > 0:
+                                        logger.info(f"AI generated {len(tags)} tags for space {space_id}: {tags}")
+                                        
+                                        # Save tags using Tag component
+                                        save_tags_to_database(space_id, tags)
+                                        return
+                                else:
+                                    logger.warning("AI response was not a valid string")
+                            except Exception as e:
+                                logger.warning(f"Failed to parse AI response: {e}, falling back to keyword extraction")
                         else:
                             logger.warning(f"AI tag generation failed: {response}")
                             

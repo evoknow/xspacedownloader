@@ -101,46 +101,38 @@ class AICost:
         Returns:
             dict: {'input_cost_per_million': float, 'output_cost_per_million': float}
         """
-        connection = None
-        cursor = None
-        
         try:
-            connection = self.db.get_connection()
-            cursor = connection.cursor(dictionary=True)
-            
-            cursor.execute("""
-                SELECT input_token_cost_per_million_tokens, output_token_cost_per_million_tokens
-                FROM ai_api_cost 
-                WHERE vendor = %s AND model = %s
-            """, (vendor, model))
-            
-            result = cursor.fetchone()
-            
-            if result:
+            with self.db.get_connection() as connection:
+                cursor = connection.cursor(dictionary=True)
+                
+                cursor.execute("""
+                    SELECT input_token_cost_per_million_tokens, output_token_cost_per_million_tokens
+                    FROM ai_api_cost 
+                    WHERE vendor = %s AND model = %s
+                """, (vendor, model))
+                
+                result = cursor.fetchone()
+                
+                if result:
+                    return {
+                        'input_cost_per_million': float(result['input_token_cost_per_million_tokens']),
+                        'output_cost_per_million': float(result['output_token_cost_per_million_tokens'])
+                    }
+                
+                # Fall back to defaults
+                vendor_defaults = self.DEFAULT_COSTS.get(vendor.lower(), {})
+                model_defaults = vendor_defaults.get(model, {'input': 0.15, 'output': 0.60})
+                
+                self.cost_logger.warning(f"No costs found for {vendor}/{model}, using defaults")
                 return {
-                    'input_cost_per_million': float(result['input_token_cost_per_million_tokens']),
-                    'output_cost_per_million': float(result['output_token_cost_per_million_tokens'])
+                    'input_cost_per_million': model_defaults['input'],
+                    'output_cost_per_million': model_defaults['output']
                 }
-            
-            # Fall back to defaults
-            vendor_defaults = self.DEFAULT_COSTS.get(vendor.lower(), {})
-            model_defaults = vendor_defaults.get(model, {'input': 0.15, 'output': 0.60})
-            
-            self.cost_logger.warning(f"No costs found for {vendor}/{model}, using defaults")
-            return {
-                'input_cost_per_million': model_defaults['input'],
-                'output_cost_per_million': model_defaults['output']
-            }
             
         except Exception as e:
             self.cost_logger.error(f"Error getting model costs: {e}")
             # Return safe defaults
             return {'input_cost_per_million': 0.15, 'output_cost_per_million': 0.60}
-        finally:
-            if cursor:
-                cursor.close()
-            if connection:
-                connection.close()
     
     def calculate_cost(self, vendor: str, model: str, input_tokens: int, output_tokens: int) -> float:
         """
@@ -197,93 +189,84 @@ class AICost:
         # Calculate cost
         cost = self.calculate_cost(vendor, model, input_tokens, output_tokens)
         
-        connection = None
-        cursor = None
         balance_before = None
         balance_after = None
         
         try:
-            connection = self.db.get_connection()
-            cursor = connection.cursor()
-            
-            # Check user balance and deduct if requested
-            if user_id and deduct_credits:
-                # Get current balance
-                cursor.execute("SELECT credits FROM users WHERE id = %s", (user_id,))
-                result = cursor.fetchone()
+            with self.db.get_connection() as connection:
+                cursor = connection.cursor()
                 
-                if not result:
-                    return False, "User not found", cost
+                # Check user balance and deduct if requested
+                if user_id and deduct_credits:
+                    # Get current balance
+                    cursor.execute("SELECT credits FROM users WHERE id = %s", (user_id,))
+                    result = cursor.fetchone()
+                    
+                    if not result:
+                        return False, "User not found", cost
+                    
+                    balance_before = float(result[0])
+                    
+                    if balance_before < cost:
+                        message = f"Insufficient credits. Required: {cost:.2f}, Available: {balance_before:.2f}"
+                        self.cost_logger.warning(f"User {user_id} - {message}")
+                        return False, message, cost
+                    
+                    # Deduct credits
+                    cursor.execute("""
+                        UPDATE users 
+                        SET credits = credits - %s 
+                        WHERE id = %s AND credits >= %s
+                    """, (cost, user_id, cost))
+                    
+                    if cursor.rowcount == 0:
+                        return False, "Failed to deduct credits", cost
+                    
+                    balance_after = balance_before - cost
+                elif user_id and not deduct_credits:
+                    # Just get the balance for logging
+                    cursor.execute("SELECT credits FROM users WHERE id = %s", (user_id,))
+                    result = cursor.fetchone()
+                    balance_before = float(result[0]) if result else 0.0
+                    balance_after = balance_before  # No deduction
+                elif not user_id:
+                    return False, "AI operations require user login", cost
                 
-                balance_before = float(result[0])
-                
-                if balance_before < cost:
-                    message = f"Insufficient credits. Required: {cost:.2f}, Available: {balance_before:.2f}"
-                    self.cost_logger.warning(f"User {user_id} - {message}")
-                    return False, message, cost
-                
-                # Deduct credits
+                # Record transaction
                 cursor.execute("""
-                    UPDATE users 
-                    SET credits = credits - %s 
-                    WHERE id = %s AND credits >= %s
-                """, (cost, user_id, cost))
+                    INSERT INTO transactions 
+                    (user_id, cookie_id, space_id, action, ai_model, input_tokens, 
+                     output_tokens, cost, balance_before, balance_after)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (user_id, cookie_id, space_id, action, f"{vendor}/{model}", 
+                      input_tokens, output_tokens, cost, balance_before, balance_after))
                 
-                if cursor.rowcount == 0:
-                    return False, "Failed to deduct credits", cost
+                # Update space_cost table based on action type
+                cost_column = self._get_cost_column_for_action(action)
+                if cost_column:
+                    cursor.execute(f"""
+                        INSERT INTO space_cost (space_id, {cost_column}) 
+                        VALUES (%s, %s) 
+                        ON DUPLICATE KEY UPDATE 
+                        {cost_column} = {cost_column} + %s
+                    """, (space_id, cost, cost))
                 
-                balance_after = balance_before - cost
-            elif user_id and not deduct_credits:
-                # Just get the balance for logging
-                cursor.execute("SELECT credits FROM users WHERE id = %s", (user_id,))
-                result = cursor.fetchone()
-                balance_before = float(result[0]) if result else 0.0
-                balance_after = balance_before  # No deduction
-            elif not user_id:
-                return False, "AI operations require user login", cost
-            
-            # Record transaction
-            cursor.execute("""
-                INSERT INTO transactions 
-                (user_id, cookie_id, space_id, action, ai_model, input_tokens, 
-                 output_tokens, cost, balance_before, balance_after)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (user_id, cookie_id, space_id, action, f"{vendor}/{model}", 
-                  input_tokens, output_tokens, cost, balance_before, balance_after))
-            
-            # Update space_cost table based on action type
-            cost_column = self._get_cost_column_for_action(action)
-            if cost_column:
-                cursor.execute(f"""
-                    INSERT INTO space_cost (space_id, {cost_column}) 
-                    VALUES (%s, %s) 
-                    ON DUPLICATE KEY UPDATE 
-                    {cost_column} = {cost_column} + %s
-                """, (space_id, cost, cost))
-            
-            connection.commit()
-            
-            # Log to cost.log
-            user_identifier = f"user_id:{user_id}" if user_id else f"cookie_id:{cookie_id}"
-            self.cost_logger.info(
-                f"{user_identifier} | space_id:{space_id} | action:{action} | "
-                f"model:{vendor}/{model} | input_tokens:{input_tokens} | output_tokens:{output_tokens} | "
-                f"cost:{cost:.2f} | balance_before:{balance_before} | balance_after:{balance_after} | "
-                f"deducted:{deduct_credits}"
-            )
-            
-            return True, "Cost tracked successfully", cost
+                connection.commit()
+                
+                # Log to cost.log
+                user_identifier = f"user_id:{user_id}" if user_id else f"cookie_id:{cookie_id}"
+                self.cost_logger.info(
+                    f"{user_identifier} | space_id:{space_id} | action:{action} | "
+                    f"model:{vendor}/{model} | input_tokens:{input_tokens} | output_tokens:{output_tokens} | "
+                    f"cost:{cost:.2f} | balance_before:{balance_before} | balance_after:{balance_after} | "
+                    f"deducted:{deduct_credits}"
+                )
+                
+                return True, "Cost tracked successfully", cost
             
         except Exception as e:
             self.cost_logger.error(f"Error tracking AI cost: {e}")
-            if connection:
-                connection.rollback()
             return False, f"Error tracking cost: {str(e)}", cost
-        finally:
-            if cursor:
-                cursor.close()
-            if connection:
-                connection.close()
     
     def _get_cost_column_for_action(self, action: str) -> Optional[str]:
         """Map action type to space_cost table column."""
@@ -347,26 +330,18 @@ class AICost:
         Returns:
             float: User credit balance
         """
-        connection = None
-        cursor = None
-        
         try:
-            connection = self.db.get_connection()
-            cursor = connection.cursor()
-            
-            cursor.execute("SELECT credits FROM users WHERE id = %s", (user_id,))
-            result = cursor.fetchone()
-            
-            if result:
-                return float(result[0])
-            else:
-                return 0.0
+            with self.db.get_connection() as connection:
+                cursor = connection.cursor()
                 
+                cursor.execute("SELECT credits FROM users WHERE id = %s", (user_id,))
+                result = cursor.fetchone()
+                
+                if result:
+                    return float(result[0])
+                else:
+                    return 0.0
+                    
         except Exception as e:
             self.cost_logger.error(f"Error getting user balance: {e}")
             return 0.0
-        finally:
-            if cursor:
-                cursor.close()
-            if connection:
-                connection.close()
