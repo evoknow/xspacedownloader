@@ -185,10 +185,32 @@ Transcript:
                         
                         success, response = ai._make_request(messages, max_tokens=150, temperature=0.3)
                         
+                        # Track AI cost for tag generation
+                        if success and isinstance(response, dict) and 'usage' in response:
+                            try:
+                                ai_cost = AICost()
+                                usage = response['usage']
+                                input_tokens = usage.get('input_tokens', 0)
+                                output_tokens = usage.get('output_tokens', 0)
+                                
+                                # Track cost
+                                ai_cost.track_cost(
+                                    vendor='openai',
+                                    model=ai.model,  # Use the model from AI component
+                                    input_tokens=input_tokens,
+                                    output_tokens=output_tokens,
+                                    space_id=space_id
+                                )
+                                logger.info(f"Tracked AI cost for tag generation: {input_tokens} input + {output_tokens} output tokens")
+                            except Exception as cost_error:
+                                logger.warning(f"Failed to track AI cost for tag generation: {cost_error}")
+                        
                         if success:
                             try:
+                                # Extract content from response
+                                content = response.get('content', '') if isinstance(response, dict) else str(response)
                                 # Parse the JSON response
-                                tags = json.loads(response)
+                                tags = json.loads(content)
                                 
                                 if isinstance(tags, list) and len(tags) > 0:
                                     logger.info(f"AI generated {len(tags)} tags for space {space_id}: {tags}")
@@ -1165,6 +1187,26 @@ Language code:"""
                             ]
                             
                             success, response = ai._make_request(messages, max_tokens=10, temperature=0.1)
+                            
+                            # Track AI cost for language detection
+                            if success and isinstance(response, dict) and 'usage' in response:
+                                try:
+                                    ai_cost = AICost()
+                                    usage = response['usage']
+                                    input_tokens = usage.get('input_tokens', 0)
+                                    output_tokens = usage.get('output_tokens', 0)
+                                    
+                                    # Track cost
+                                    ai_cost.track_cost(
+                                        vendor='openai',
+                                        model=ai.model,  # Use the model from AI component
+                                        input_tokens=input_tokens,
+                                        output_tokens=output_tokens,
+                                        space_id=space_id
+                                    )
+                                    logger.info(f"Tracked AI cost for language detection: {input_tokens} input + {output_tokens} output tokens")
+                                except Exception as cost_error:
+                                    logger.warning(f"Failed to track AI cost for language detection: {cost_error}")
                             
                             if success:
                                 # Extract content from the response dict
