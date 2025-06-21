@@ -232,148 +232,81 @@ class UpdateManager:
             print("Set .env file permissions to 640")
     
     def restart_services(self):
-        """Restart application services."""
+        """Stop and restart background daemon processes."""
         if not self.restart_services_enabled:
             return
             
-        print("\n=== Restarting services ===")
-        
-        services = [
-            'xspacedownloader-gunicorn'
-        ]
-        
-        for service in services:
-            print(f"Restarting {service}...")
-            self.run_command(['systemctl', 'restart', service])
-            
-            # Check service status
-            result = self.run_command(['systemctl', 'is-active', service], check=False)
-            if result and result.stdout.strip() == 'active':
-                print(f"✓ {service} is running")
+        print("\n=== Cleaning logs ===")
+        # Remove all log files from production directory
+        logs_dir = Path(self.production_dir) / 'logs'
+        if logs_dir.exists():
+            print("Removing all log files...")
+            if not self.dry_run:
+                import shutil
+                shutil.rmtree(logs_dir)
+                logs_dir.mkdir()
+                # Set proper permissions
+                self.run_command(['chown', f'{self.nginx_user}:{self.nginx_user}', str(logs_dir)])
             else:
-                print(f"✗ {service} failed to start")
+                print(f"[DRY RUN] Would remove all files in {logs_dir}")
         
-        # Handle background processes manually
-        print("\n=== Restarting background processes (manual) ===")
-        
-        # Kill existing background processes
-        print("Stopping existing background processes...")
-        self.run_command(['pkill', '-f', 'bg_downloader.py'], check=False)
-        self.run_command(['pkill', '-f', 'background_transcribe.py'], check=False)
-        self.run_command(['pkill', '-f', 'bg_progress_watcher.py'], check=False)
-        self.run_command(['pkill', '-f', 'background_translate.py'], check=False)
-        
-        # Wait a moment for processes to stop
-        import time
-        time.sleep(2)
-        
-        # Start bg_downloader manually
-        print("Starting bg_downloader...")
-        bg_cmd = [
-            'sudo', '-u', self.nginx_user, 'nohup',
-            f'{self.production_dir}/venv/bin/python',
-            f'{self.production_dir}/bg_downloader.py'
+        print("\n=== Stopping background daemons ===")
+        # Stop all background processes
+        daemons = [
+            'bg_downloader.py',
+            'background_transcribe.py', 
+            'background_translate.py',
+            'bg_progress_watcher.py'
         ]
         
-        if self.dry_run:
-            print(f"[DRY RUN] Would execute: {' '.join(bg_cmd)} > /dev/null 2>&1 &")
-        else:
-            # Use subprocess to start in background
-            subprocess.Popen(
-                bg_cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                cwd=self.production_dir
-            )
-            
-            # Check if it started
+        for daemon in daemons:
+            print(f"Stopping {daemon}...")
+            if not self.dry_run:
+                self.run_command(['pkill', '-f', daemon], check=False)
+            else:
+                print(f"[DRY RUN] Would execute: pkill -f {daemon}")
+        
+        # Wait for processes to stop
+        if not self.dry_run:
+            import time
             time.sleep(3)
-            result = self.run_command(['pgrep', '-f', 'bg_downloader.py'], check=False)
-            if result and result.stdout.strip():
-                print(f"✓ bg_downloader is running (PID: {result.stdout.strip()})")
-            else:
-                print("✗ bg_downloader failed to start")
         
-        # Start background_transcribe manually
-        print("Starting background_transcribe...")
-        transcribe_cmd = [
-            'sudo', '-u', self.nginx_user, 'nohup',
-            f'{self.production_dir}/venv/bin/python',
-            f'{self.production_dir}/background_transcribe.py'
+        print("\n=== Starting background daemons ===")
+        # Start essential background daemons
+        essential_daemons = [
+            ('bg_downloader.py', 'Background downloader'),
+            ('background_transcribe.py', 'Transcription daemon'),
         ]
         
-        if self.dry_run:
-            print(f"[DRY RUN] Would execute: {' '.join(transcribe_cmd)} > /dev/null 2>&1 &")
-        else:
-            # Use subprocess to start in background
-            subprocess.Popen(
-                transcribe_cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                cwd=self.production_dir
-            )
+        for daemon_script, description in essential_daemons:
+            print(f"Starting {description}...")
+            daemon_cmd = [
+                'sudo', '-u', self.nginx_user, 'nohup',
+                f'{self.production_dir}/venv/bin/python',
+                f'{self.production_dir}/{daemon_script}'
+            ]
             
-            # Check if it started
-            time.sleep(3)
-            result = self.run_command(['pgrep', '-f', 'background_transcribe.py'], check=False)
-            if result and result.stdout.strip():
-                print(f"✓ background_transcribe is running (PID: {result.stdout.strip()})")
+            if self.dry_run:
+                print(f"[DRY RUN] Would execute: {' '.join(daemon_cmd)} > /dev/null 2>&1 &")
             else:
-                print("✗ background_transcribe failed to start")
+                # Start daemon in background
+                subprocess.Popen(
+                    daemon_cmd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    cwd=self.production_dir
+                )
+                
+                # Wait and check if it started
+                import time
+                time.sleep(2)
+                result = self.run_command(['pgrep', '-f', daemon_script], check=False)
+                if result and result.stdout.strip():
+                    print(f"✓ {description} is running (PID: {result.stdout.strip()})")
+                else:
+                    print(f"✗ {description} failed to start")
         
-        # Start progress watcher manually
-        print("Starting bg_progress_watcher...")
-        watcher_cmd = [
-            'sudo', '-u', self.nginx_user, 'nohup',
-            f'{self.production_dir}/venv/bin/python',
-            f'{self.production_dir}/bg_progress_watcher.py'
-        ]
-        
-        if self.dry_run:
-            print(f"[DRY RUN] Would execute: {' '.join(watcher_cmd)} > /dev/null 2>&1 &")
-        else:
-            # Use subprocess to start in background
-            subprocess.Popen(
-                watcher_cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                cwd=self.production_dir
-            )
-            
-            # Check if it started
-            time.sleep(3)
-            result = self.run_command(['pgrep', '-f', 'bg_progress_watcher.py'], check=False)
-            if result and result.stdout.strip():
-                print(f"✓ bg_progress_watcher is running (PID: {result.stdout.strip()})")
-            else:
-                print("✗ bg_progress_watcher failed to start")
-        
-        # Start background translation worker manually
-        print("Starting background_translate...")
-        translate_cmd = [
-            'sudo', '-u', self.nginx_user, 'nohup',
-            f'{self.production_dir}/venv/bin/python',
-            f'{self.production_dir}/background_translate.py'
-        ]
-        
-        if self.dry_run:
-            print(f"[DRY RUN] Would execute: {' '.join(translate_cmd)} > /dev/null 2>&1 &")
-        else:
-            # Use subprocess to start in background
-            subprocess.Popen(
-                translate_cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                cwd=self.production_dir
-            )
-            
-            # Check if it started
-            time.sleep(3)
-            result = self.run_command(['pgrep', '-f', 'background_translate.py'], check=False)
-            if result and result.stdout.strip():
-                print(f"✓ background_translate is running (PID: {result.stdout.strip()})")
-            else:
-                print("✗ background_translate failed to start")
+        print("\nNote: bg_progress_watcher.py and background_translate.py can be started manually if needed.")
     
     def update(self):
         """Run the complete update process."""
@@ -409,9 +342,8 @@ class UpdateManager:
         print("\n=== Update completed successfully! ===")
         if not self.restart_services_enabled:
             print("\nRemember to restart services if needed:")
-            print("  sudo systemctl restart xspacedownloader-gunicorn")
-            print("  sudo systemctl restart xspacedownloader-bg")
-            print("  sudo systemctl restart xspacedownloader-transcribe")
+            print("  sudo systemctl restart xspacedownloader-gunicorn  # Web server (if using systemd)")
+            print("  ./start.sh  # Background daemons (manual management)")
 
 
 def main():
