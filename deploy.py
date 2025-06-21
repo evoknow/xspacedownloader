@@ -306,8 +306,8 @@ ProtectHome=true
 ReadWritePaths={self.production_dir}/downloads {self.production_dir}/logs {self.production_dir}/transcript_jobs {self.production_dir}
 
 # Logging
-StandardOutput=append:{self.production_dir}/logs/background_transcribe.log
-StandardError=append:{self.production_dir}/logs/background_transcribe-error.log
+StandardOutput=append:{self.production_dir}/logs/transcription.log
+StandardError=append:{self.production_dir}/logs/transcription.log
 
 [Install]
 WantedBy=multi-user.target

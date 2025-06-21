@@ -30,7 +30,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('./logs/background_translate.log'),
+        logging.FileHandler('./logs/translate.log'),
         logging.StreamHandler()
     ]
 )

@@ -81,7 +81,7 @@ fi
 echo ""
 echo "📁 Log files available in: $SCRIPT_DIR/logs/"
 echo "   - bg_downloader.log"
-echo "   - bg_transcribe.log"  
+echo "   - transcription.log"  
 echo "   - bg_progress_watcher.log"
 echo ""
 echo "🔄 To stop all services, run: ./stop.sh"
