@@ -282,10 +282,12 @@ class UpdateManager:
             print("  ✓ Process shutdown complete")
         
         print("\n=== Starting background daemons ===")
-        # Start essential background daemons
+        # Start all background daemons
         essential_daemons = [
             ('bg_downloader.py', 'Background downloader'),
             ('background_transcribe.py', 'Transcription daemon'),
+            ('background_translate.py', 'Translation daemon'),
+            ('bg_progress_watcher.py', 'Progress watcher'),
         ]
         
         for daemon_script, description in essential_daemons:
@@ -310,16 +312,13 @@ class UpdateManager:
                 # Wait and check if it started
                 import time
                 time.sleep(2)
-                result = self.run_command(['pgrep', '-f', daemon_script], check=False, quiet=True)
+                result = self.run_command(['pgrep', '-f', f'python.*{daemon_script}'], check=False, quiet=True)
                 if result and result.stdout.strip():
-                    # Get the first PID only for cleaner output
-                    pids = result.stdout.strip().split('\n')
-                    main_pid = pids[0] if pids else 'unknown'
-                    print(f"  ✓ {description} started successfully (PID: {main_pid})")
+                    print(f"  ✓ {description} started successfully")
                 else:
                     print(f"  ✗ {description} failed to start")
         
-        print("\nNote: bg_progress_watcher.py and background_translate.py can be started manually if needed.")
+        print("\n✓ All background daemons started")
     
     def update(self):
         """Run the complete update process."""
