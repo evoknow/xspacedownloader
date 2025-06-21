@@ -127,14 +127,24 @@ class User:
             # Hash the password
             hashed_password = self.hash_password(password)
             
-            # Create the user
+            # Get default credits for new users from config
+            default_credits = 10  # Default fallback
+            try:
+                with open('mainconfig.json', 'r') as config_file:
+                    config = json.load(config_file)
+                    default_credits = config.get('user_settings', {}).get('new_user_default_credits', 10)
+            except Exception as config_err:
+                print(f"Could not read default credits from config, using {default_credits}: {config_err}")
+            
+            # Create the user with default credits
             query = """
-            INSERT INTO users (email, password, status, is_admin, country)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO users (email, password, status, is_admin, country, credits)
+            VALUES (%s, %s, %s, %s, %s, %s)
             """
-            cursor.execute(query, (email_modified, hashed_password, 1, 0, country))  # Status 1 = active, is_admin 0 = not admin
+            cursor.execute(query, (email_modified, hashed_password, 1, 0, country, default_credits))  # Status 1 = active, is_admin 0 = not admin
             user_id = cursor.lastrowid
             
+            print(f"Created new user with {default_credits} default credits")
             self.connection.commit()
             
             # For TestUser test, return the timestamp as user_id

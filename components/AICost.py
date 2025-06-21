@@ -212,10 +212,10 @@ class AICost:
                         self.cost_logger.warning(f"User {user_id} - {message}")
                         return False, message, cost
                     
-                    # Deduct credits
+                    # Deduct credits (ensure credits never go below 0)
                     cursor.execute("""
                         UPDATE users 
-                        SET credits = credits - %s 
+                        SET credits = GREATEST(0, credits - %s)
                         WHERE id = %s AND credits >= %s
                     """, (cost, user_id, cost))
                     

@@ -43,6 +43,10 @@
     "enabled": false,
     "comment": "Rate limiting configuration for download requests. Set enabled to false to disable rate limiting."
   },
+  "user_settings": {
+    "new_user_default_credits": 10,
+    "comment": "Default credits given to new users after email verification. Admin can override this in Settings."
+  },
   "video_title_branding": "X Space Downloader",
   "video_watermark_text": "xspacedownload.com",
   "font_family": "Trebuchet MS",

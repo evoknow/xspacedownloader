@@ -367,6 +367,94 @@ def claim_download_job(space: Space, job_id: int) -> bool:
         return False
 
 
+def trim_leading_silence(audio_file_path: str, silence_threshold: float = 0.01, max_trim_seconds: int = 300) -> bool:
+    """
+    Trim leading silence from an audio file using ffmpeg.
+    
+    Args:
+        audio_file_path (str): Path to the audio file
+        silence_threshold (float): Silence detection threshold (0.01 = 1% volume)
+        max_trim_seconds (int): Maximum seconds to trim from start (safety limit)
+        
+    Returns:
+        bool: True if file was trimmed, False if no trimming was needed
+    """
+    try:
+        # Check if ffmpeg is available
+        if not shutil.which('ffmpeg'):
+            print("ffmpeg not found, skipping silence trimming")
+            return False
+        
+        # First, detect silence at the beginning
+        print(f"Analyzing audio for leading silence: {audio_file_path}")
+        
+        # Use ffmpeg silencedetect to find the end of initial silence
+        detect_cmd = [
+            'ffmpeg', '-i', audio_file_path,
+            '-af', f'silencedetect=noise={silence_threshold}:d=1',
+            '-f', 'null', '-'
+        ]
+        
+        result = subprocess.run(detect_cmd, capture_output=True, text=True, stderr=subprocess.STDOUT)
+        output = result.stdout + result.stderr
+        
+        # Parse the output to find when the first non-silence starts
+        silence_end = None
+        for line in output.split('\n'):
+            if 'silence_end:' in line and silence_end is None:
+                try:
+                    # Extract the time when silence ends
+                    parts = line.split('silence_end:')
+                    if len(parts) > 1:
+                        time_str = parts[1].split('|')[0].strip()
+                        silence_end = float(time_str)
+                        break
+                except (ValueError, IndexError):
+                    continue
+        
+        # If no silence detected or silence is too short, don't trim
+        if silence_end is None or silence_end < 2.0:  # Less than 2 seconds of leading silence
+            print(f"No significant leading silence detected (silence_end: {silence_end})")
+            return False
+        
+        # Apply safety limit - don't trim more than max_trim_seconds
+        if silence_end > max_trim_seconds:
+            print(f"Leading silence ({silence_end}s) exceeds safety limit ({max_trim_seconds}s), trimming to limit")
+            silence_end = max_trim_seconds
+        
+        print(f"Detected {silence_end:.2f} seconds of leading silence, trimming...")
+        
+        # Create output filename
+        path_obj = Path(audio_file_path)
+        temp_output = path_obj.parent / f"{path_obj.stem}_trimmed{path_obj.suffix}"
+        
+        # Trim the audio file
+        trim_cmd = [
+            'ffmpeg', '-i', audio_file_path,
+            '-ss', str(silence_end),  # Start from silence_end seconds
+            '-c', 'copy',  # Copy without re-encoding for speed
+            str(temp_output), '-y'  # Overwrite if exists
+        ]
+        
+        result = subprocess.run(trim_cmd, capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            # Replace original file with trimmed version
+            shutil.move(str(temp_output), audio_file_path)
+            print(f"Successfully trimmed {silence_end:.2f} seconds of leading silence")
+            return True
+        else:
+            print(f"ffmpeg trim failed: {result.stderr}")
+            # Clean up temp file if it exists
+            if temp_output.exists():
+                temp_output.unlink()
+            return False
+            
+    except Exception as e:
+        print(f"Error in trim_leading_silence: {e}")
+        return False
+
+
 def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') -> Optional[int]:
     """
     Fork a new process to handle the download.
@@ -2476,6 +2564,39 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                         print(f"Error updating spaces table: {spaces_err}")
                     
                     print(f"Download completed for space {space_id}")
+                    
+                    # POST-DOWNLOAD PROCESSING: Automatic metadata fetching and audio trimming
+                    try:
+                        print("Starting post-download processing...")
+                        
+                        # 1. Automatic metadata fetching
+                        print("Fetching metadata automatically...")
+                        try:
+                            space = Space()
+                            metadata_result = space.fetch_and_save_metadata(space_id)
+                            if metadata_result and metadata_result.get('success'):
+                                print(f"Metadata fetched successfully for space {space_id}")
+                            else:
+                                print(f"Failed to fetch metadata: {metadata_result.get('error', 'Unknown error') if metadata_result else 'No result'}")
+                        except Exception as metadata_err:
+                            print(f"Error fetching metadata: {metadata_err}")
+                        
+                        # 2. Automatic MP3 trimming for leading silence
+                        print("Trimming leading silence from audio...")
+                        try:
+                            trimmed = trim_leading_silence(output_file)
+                            if trimmed:
+                                print(f"Successfully trimmed leading silence from {output_file}")
+                            else:
+                                print("No significant leading silence detected or trimming not needed")
+                        except Exception as trim_err:
+                            print(f"Error trimming audio: {trim_err}")
+                        
+                        print("Post-download processing completed")
+                        
+                    except Exception as post_err:
+                        print(f"Error in post-download processing: {post_err}")
+                    
                     return  # Return from child process
                 else:
                     print(f"yt-dlp failed with return code {process_returncode}")
