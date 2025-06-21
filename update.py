@@ -86,7 +86,7 @@ class UpdateManager:
         print(f"Production: {self.production_dir}")
         print(f"Nginx User: {self.nginx_user}")
         
-    def run_command(self, cmd, shell=False, check=True, cwd=None):
+    def run_command(self, cmd, shell=False, check=True, cwd=None, quiet=False):
         """Execute a command, respecting dry-run mode."""
         if self.dry_run:
             print(f"[DRY RUN] Would execute: {cmd}")
@@ -102,10 +102,11 @@ class UpdateManager:
                 cwd=cwd or self.repo_dir
             )
             
-            if result.stdout:
-                print(result.stdout.strip())
-            if result.stderr:
-                print(result.stderr.strip(), file=sys.stderr)
+            if not quiet:
+                if result.stdout:
+                    print(result.stdout.strip())
+                if result.stderr:
+                    print(result.stderr.strip(), file=sys.stderr)
                 
             return result
         except subprocess.CalledProcessError as e:
@@ -135,10 +136,10 @@ class UpdateManager:
                 sys.exit(1)
         
         # Get current branch
-        result = self.run_command(['git', 'branch', '--show-current'])
+        result = self.run_command(['git', 'branch', '--show-current'], quiet=True)
         if result:
             current_branch = result.stdout.strip()
-            print(f"Current branch: {current_branch}")
+            print(f"• Current branch: {current_branch}")
         
         return True
     
@@ -147,15 +148,17 @@ class UpdateManager:
         print("\n=== Pulling latest code ===")
         
         # Fetch latest changes
-        self.run_command(['git', 'fetch', 'origin'])
+        print("• Fetching latest changes...")
+        self.run_command(['git', 'fetch', 'origin'], quiet=True)
         
         # Pull latest changes
-        self.run_command(['git', 'pull', 'origin', 'main'])
+        print("• Pulling latest changes...")
+        self.run_command(['git', 'pull', 'origin', 'main'], quiet=True)
         
         # Show latest commit
-        result = self.run_command(['git', 'log', '--oneline', '-1'])
+        result = self.run_command(['git', 'log', '--oneline', '-1'], quiet=True)
         if result:
-            print(f"Latest commit: {result.stdout.strip()}")
+            print(f"• Latest commit: {result.stdout.strip()}")
     
     def create_backup(self):
         """Create backup of production directory."""
@@ -202,16 +205,20 @@ class UpdateManager:
             f"{self.production_dir}/"  # Destination
         ]
         
-        print(f"Syncing from {self.repo_dir} to {self.production_dir}")
-        self.run_command(rsync_cmd)
+        print(f"• Syncing from {self.repo_dir} to {self.production_dir}")
+        result = self.run_command(rsync_cmd, quiet=True)
+        if result and not self.dry_run:
+            print("  ✓ Code sync completed")
         
         # Set ownership
-        print(f"Setting ownership to {self.nginx_user}:{self.nginx_user}")
+        print(f"• Setting ownership to {self.nginx_user}:{self.nginx_user}")
         self.run_command([
             'chown', '-R', 
             f'{self.nginx_user}:{self.nginx_user}', 
             str(self.production_dir)
-        ])
+        ], quiet=True)
+        if not self.dry_run:
+            print("  ✓ Ownership updated")
         
         # Ensure logs directory exists with proper permissions
         logs_dir = self.production_dir / 'logs'
@@ -223,13 +230,13 @@ class UpdateManager:
                 'chown', 
                 f'{self.nginx_user}:{self.nginx_user}', 
                 str(logs_dir)
-            ])
+            ], quiet=True)
         
         # Set secure permissions on .env file
         env_file = self.production_dir / '.env'
         if env_file.exists():
-            self.run_command(['chmod', '640', str(env_file)])
-            print("Set .env file permissions to 640")
+            self.run_command(['chmod', '640', str(env_file)], quiet=True)
+            print("• Set .env file permissions to 640")
     
     def restart_services(self):
         """Stop and restart background daemon processes."""
@@ -240,15 +247,16 @@ class UpdateManager:
         # Remove all log files from production directory
         logs_dir = Path(self.production_dir) / 'logs'
         if logs_dir.exists():
-            print("Removing all log files...")
+            print("• Removing all log files...")
             if not self.dry_run:
                 import shutil
                 shutil.rmtree(logs_dir)
                 logs_dir.mkdir()
                 # Set proper permissions
-                self.run_command(['chown', f'{self.nginx_user}:{self.nginx_user}', str(logs_dir)])
+                self.run_command(['chown', f'{self.nginx_user}:{self.nginx_user}', str(logs_dir)], quiet=True)
+                print("  ✓ Log directory cleaned and recreated")
             else:
-                print(f"[DRY RUN] Would remove all files in {logs_dir}")
+                print(f"  [DRY RUN] Would remove all files in {logs_dir}")
         
         print("\n=== Stopping background daemons ===")
         # Stop all background processes
@@ -260,16 +268,18 @@ class UpdateManager:
         ]
         
         for daemon in daemons:
-            print(f"Stopping {daemon}...")
+            print(f"• Stopping {daemon}...")
             if not self.dry_run:
-                self.run_command(['pkill', '-f', daemon], check=False)
+                self.run_command(['pkill', '-f', daemon], check=False, quiet=True)
             else:
-                print(f"[DRY RUN] Would execute: pkill -f {daemon}")
+                print(f"  [DRY RUN] Would execute: pkill -f {daemon}")
         
         # Wait for processes to stop
         if not self.dry_run:
             import time
+            print("• Waiting for processes to stop...")
             time.sleep(3)
+            print("  ✓ Process shutdown complete")
         
         print("\n=== Starting background daemons ===")
         # Start essential background daemons
@@ -279,7 +289,7 @@ class UpdateManager:
         ]
         
         for daemon_script, description in essential_daemons:
-            print(f"Starting {description}...")
+            print(f"• Starting {description}...")
             daemon_cmd = [
                 'sudo', '-u', self.nginx_user, 'nohup',
                 f'{self.production_dir}/venv/bin/python',
@@ -287,7 +297,7 @@ class UpdateManager:
             ]
             
             if self.dry_run:
-                print(f"[DRY RUN] Would execute: {' '.join(daemon_cmd)} > /dev/null 2>&1 &")
+                print(f"  [DRY RUN] Would execute: {' '.join(daemon_cmd)} > /dev/null 2>&1 &")
             else:
                 # Start daemon in background
                 subprocess.Popen(
@@ -300,11 +310,14 @@ class UpdateManager:
                 # Wait and check if it started
                 import time
                 time.sleep(2)
-                result = self.run_command(['pgrep', '-f', daemon_script], check=False)
+                result = self.run_command(['pgrep', '-f', daemon_script], check=False, quiet=True)
                 if result and result.stdout.strip():
-                    print(f"✓ {description} is running (PID: {result.stdout.strip()})")
+                    # Get the first PID only for cleaner output
+                    pids = result.stdout.strip().split('\n')
+                    main_pid = pids[0] if pids else 'unknown'
+                    print(f"  ✓ {description} started successfully (PID: {main_pid})")
                 else:
-                    print(f"✗ {description} failed to start")
+                    print(f"  ✗ {description} failed to start")
         
         print("\nNote: bg_progress_watcher.py and background_translate.py can be started manually if needed.")
     
