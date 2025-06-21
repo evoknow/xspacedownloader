@@ -195,11 +195,12 @@ Transcript:
                                 
                                 # Track cost
                                 ai_cost.track_cost(
+                                    space_id=space_id,
+                                    action='tag_generation',
                                     vendor='openai',
                                     model=ai.model,  # Use the model from AI component
                                     input_tokens=input_tokens,
-                                    output_tokens=output_tokens,
-                                    space_id=space_id
+                                    output_tokens=output_tokens
                                 )
                                 logger.info(f"Tracked AI cost for tag generation: {input_tokens} input + {output_tokens} output tokens")
                             except Exception as cost_error:
@@ -1198,11 +1199,12 @@ Language code:"""
                                     
                                     # Track cost
                                     ai_cost.track_cost(
+                                        space_id=space_id,
+                                        action='language_detection',
                                         vendor='openai',
                                         model=ai.model,  # Use the model from AI component
                                         input_tokens=input_tokens,
-                                        output_tokens=output_tokens,
-                                        space_id=space_id
+                                        output_tokens=output_tokens
                                     )
                                     logger.info(f"Tracked AI cost for language detection: {input_tokens} input + {output_tokens} output tokens")
                                 except Exception as cost_error:
