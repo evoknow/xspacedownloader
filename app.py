@@ -6250,7 +6250,7 @@ def admin_get_logs():
         limit = int(request.args.get('limit', 100))
         
         # Read logs from the logs directory
-        logs_dir = Path('./logs')
+        logs_dir = Path('/var/www/production/xspacedownload.com/website/xspacedownloader/logs')
         log_files = []
         
         # Find all log files, prioritizing the main app log
@@ -6264,7 +6264,7 @@ def admin_get_logs():
         # If no logs directory, try reading from root directory
         if not log_files:
             for pattern in ['*.log', 'app.log', 'xspacedownloader.log']:
-                for log_file in Path('.').glob(pattern):
+                for log_file in Path('/var/www/production/xspacedownload.com/website/xspacedownloader').glob(pattern):
                     log_files.append(log_file)
         
         all_log_entries = []
@@ -6539,7 +6539,7 @@ def admin_dev_clear_spaces_data():
         
         # Clear audio files
         files_deleted = []
-        downloads_dir = Path('./downloads')
+        downloads_dir = Path('/var/www/production/xspacedownload.com/website/xspacedownloader/downloads')
         if downloads_dir.exists():
             for pattern in ['*.mp3', '*.m4a', '*.wav']:
                 for file_path in downloads_dir.glob(pattern):
@@ -6550,7 +6550,7 @@ def admin_dev_clear_spaces_data():
                         logger.warning(f"[DEV] Error deleting file {file_path}: {e}")
         
         # Clear transcript job files
-        transcript_jobs_dir = Path('./transcript_jobs')
+        transcript_jobs_dir = Path('/var/www/production/xspacedownload.com/website/xspacedownloader/transcript_jobs')
         if transcript_jobs_dir.exists():
             for file_path in transcript_jobs_dir.glob('*.json'):
                 try:
@@ -6722,7 +6722,7 @@ def admin_get_transcription_queue():
         from pathlib import Path
         from datetime import datetime, timedelta
         
-        transcript_jobs_dir = Path('./transcript_jobs')
+        transcript_jobs_dir = Path('/var/www/production/xspacedownload.com/website/xspacedownloader/transcript_jobs')
         if not transcript_jobs_dir.exists():
             return jsonify({
                 'pending': [],
@@ -6805,7 +6805,7 @@ def admin_get_translation_queue():
         from datetime import datetime, timedelta
         
         # Translation jobs are part of transcription jobs with translate_to option
-        transcript_jobs_dir = Path('./transcript_jobs')
+        transcript_jobs_dir = Path('/var/www/production/xspacedownload.com/website/xspacedownloader/transcript_jobs')
         if not transcript_jobs_dir.exists():
             return jsonify({
                 'pending': [],
@@ -7202,7 +7202,7 @@ def admin_get_video_queue():
         from pathlib import Path
         from datetime import datetime, timedelta
         
-        transcript_jobs_dir = Path('./transcript_jobs')
+        transcript_jobs_dir = Path('/var/www/production/xspacedownload.com/website/xspacedownloader/transcript_jobs')
         if not transcript_jobs_dir.exists():
             return jsonify({
                 'pending': [],
