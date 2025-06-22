@@ -4088,6 +4088,53 @@
                 }
             });
             
+            // Track play events for play count
+            let playStartTime = null;
+            window.mainPlayer.on('play', function() {
+                playStartTime = Date.now();
+                console.log('Play started');
+            });
+            
+            window.mainPlayer.on('pause', function() {
+                if (playStartTime) {
+                    const duration = Math.floor((Date.now() - playStartTime) / 1000);
+                    trackPlayEvent(duration);
+                    playStartTime = null;
+                }
+            });
+            
+            window.mainPlayer.on('ended', function() {
+                if (playStartTime) {
+                    const duration = Math.floor((Date.now() - playStartTime) / 1000);
+                    trackPlayEvent(duration);
+                    playStartTime = null;
+                }
+            });
+            
+            // Function to track play events
+            function trackPlayEvent(duration) {
+                if (duration < 5) return; // Don't track very short plays
+                
+                fetch('/api/track_play/{{ space.space_id }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        duration: duration
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.counted) {
+                        console.log('Play tracked successfully');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error tracking play:', error);
+                });
+            }
+            
             console.log('Main Plyr player initialized successfully');
             } catch (error) {
                 console.error('Error initializing main Plyr player:', error);
