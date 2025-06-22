@@ -42,13 +42,12 @@ class BackgroundTranslate:
     def __init__(self):
         """Initialize the background translation worker."""
         self.running = True
-        self.jobs_dir = Path('./translation_jobs')
+        self.jobs_dir = Path('/var/www/production/xspacedownload.com/website/htdocs/translation_jobs')
         self.jobs_dir.mkdir(exist_ok=True)
         
         # Initialize components
         try:
             self.db_manager = DatabaseManager()
-            self.connection = self.db_manager.get_connection()
             self.translator = Translate()
             logger.info("Background translation worker initialized successfully")
         except Exception as e:
@@ -109,24 +108,25 @@ class BackgroundTranslate:
             
             logger.info(f"Translation completed, saving to database for job {job_id}")
             
-            # Save translation to database
-            cursor = self.connection.cursor()
-            
+            # Save translation to database using context manager
             try:
-                # Insert the translated transcript
-                query = """
-                INSERT INTO space_transcripts (space_id, transcript, language, created_at)
-                VALUES (%s, %s, %s, %s)
-                """
-                cursor.execute(query, (
-                    space_id,
-                    result,
-                    target_lang,
-                    datetime.datetime.now()
-                ))
-                
-                self.connection.commit()
-                logger.info(f"Translation saved to database for space {space_id} in {target_lang}")
+                with self.db_manager.get_connection() as connection:
+                    cursor = connection.cursor()
+                    
+                    # Insert the translated transcript
+                    query = """
+                    INSERT INTO space_transcripts (space_id, transcript, language, created_at)
+                    VALUES (%s, %s, %s, %s)
+                    """
+                    cursor.execute(query, (
+                        space_id,
+                        result,
+                        target_lang,
+                        datetime.datetime.now()
+                    ))
+                    
+                    connection.commit()
+                    logger.info(f"Translation saved to database for space {space_id} in {target_lang}")
                 
                 # Update job status to completed
                 job_data['status'] = 'completed'
@@ -145,7 +145,6 @@ class BackgroundTranslate:
                 
             except Exception as db_error:
                 logger.error(f"Database error for job {job_id}: {db_error}")
-                self.connection.rollback()
                 
                 job_data['status'] = 'failed'
                 job_data['error'] = f"Database error: {str(db_error)}"
@@ -154,9 +153,6 @@ class BackgroundTranslate:
                 
                 with open(job_file, 'w') as f:
                     json.dump(job_data, f)
-                
-            finally:
-                cursor.close()
                 
         except Exception as e:
             logger.error(f"Error processing translation job {job_file}: {e}")
