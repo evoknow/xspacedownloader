@@ -1962,7 +1962,7 @@ def api_queue_status():
         
         # Get translation jobs
         translation_jobs = []
-        translation_jobs_dir = Path('translation_jobs')
+        translation_jobs_dir = Path('/var/www/production/xspacedownload.com/website/htdocs/translation_jobs')
         if translation_jobs_dir.exists():
             for job_file in translation_jobs_dir.glob('*.json'):
                 try:
@@ -8810,11 +8810,11 @@ def queue_translation():
             }), 409
         
         # Create translation jobs directory if it doesn't exist
-        os.makedirs('./translation_jobs', exist_ok=True)
+        os.makedirs('/var/www/production/xspacedownload.com/website/htdocs/translation_jobs', exist_ok=True)
         
         # Check for existing pending jobs
         from pathlib import Path
-        translation_jobs_dir = Path('./translation_jobs')
+        translation_jobs_dir = Path('/var/www/production/xspacedownload.com/website/htdocs/translation_jobs')
         existing_job = None
         
         if translation_jobs_dir.exists():
@@ -8856,7 +8856,7 @@ def queue_translation():
         }
         
         # Save job file
-        job_file = Path(f'./translation_jobs/{job_id}.json')
+        job_file = Path(f'/var/www/production/xspacedownload.com/website/htdocs/translation_jobs/{job_id}.json')
         with open(job_file, 'w') as f:
             json.dump(job_data, f)
         
