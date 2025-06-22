@@ -84,7 +84,8 @@ class BackgroundTranslate:
                 text=transcript_text,
                 source_lang=source_lang,
                 target_lang=target_lang,
-                space_id=space_id
+                space_id=space_id,
+                user_id=user_id
             )
             
             if not success:

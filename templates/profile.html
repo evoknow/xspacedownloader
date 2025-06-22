@@ -66,9 +66,9 @@
                                         <tr>
                                             <th>Date</th>
                                             <th>Type</th>
+                                            <th>Space</th>
                                             <th class="d-none d-md-table-cell">Description</th>
-                                            <th>Amount</th>
-                                            <th class="d-none d-md-table-cell">Balance After</th>
+                                            <th>Cost (Credits)</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -79,11 +79,17 @@
                                             <td>
                                                 <span class="badge bg-warning">Compute</span>
                                             </td>
-                                            <td class="d-none d-md-table-cell">
-                                                {{ transaction.action|title }} 
+                                            <td>
                                                 {% if transaction.space_id %}
-                                                    <small class="text-muted">({{ transaction.space_id[:20] }}...)</small>
+                                                    <a href="/spaces/{{ transaction.space_id }}" class="text-decoration-none">
+                                                        {{ transaction.space_id[:13] }}...
+                                                    </a>
+                                                {% else %}
+                                                    -
                                                 {% endif %}
+                                            </td>
+                                            <td class="d-none d-md-table-cell">
+                                                {{ transaction.action|title }}
                                                 <br>
                                                 <small class="text-muted">
                                                     {{ transaction.compute_time_seconds }}s @ {{ "{:g}".format(transaction.cost_per_second) }}/s
@@ -92,7 +98,6 @@
                                             <td>
                                                 <span class="text-danger">-{{ transaction.total_cost|int }}</span>
                                             </td>
-                                            <td class="d-none d-md-table-cell">{{ transaction.balance_after|int }}</td>
                                         </tr>
                                         {% endfor %}
                                         
@@ -103,13 +108,19 @@
                                             <td>
                                                 <span class="badge bg-info">AI</span>
                                             </td>
+                                            <td>
+                                                {% if transaction.space_id %}
+                                                    <a href="/spaces/{{ transaction.space_id }}" class="text-decoration-none">
+                                                        {{ transaction.space_id[:13] }}...
+                                                    </a>
+                                                {% else %}
+                                                    -
+                                                {% endif %}
+                                            </td>
                                             <td class="d-none d-md-table-cell">
                                                 {{ transaction.action|title }}
                                                 {% if transaction.ai_model %}
                                                     <small class="text-muted">({{ transaction.ai_model }})</small>
-                                                {% endif %}
-                                                {% if transaction.space_id %}
-                                                    <br><small class="text-muted">{{ transaction.space_id[:20] }}...</small>
                                                 {% endif %}
                                                 {% if transaction.input_tokens and transaction.output_tokens %}
                                                     <br><small class="text-muted">{{ transaction.input_tokens }} in + {{ transaction.output_tokens }} out tokens</small>
@@ -118,7 +129,6 @@
                                             <td>
                                                 <span class="text-danger">-{{ transaction.cost|int }}</span>
                                             </td>
-                                            <td class="d-none d-md-table-cell">{{ transaction.balance_after|int if transaction.balance_after else '-' }}</td>
                                         </tr>
                                         {% endfor %}
                                     </tbody>

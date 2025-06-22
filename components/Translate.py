@@ -76,7 +76,7 @@ class Translate:
         """
         return self.available_languages
     
-    def translate(self, text: str, source_lang: str, target_lang: str, space_id: str = None) -> Tuple[bool, Union[str, Dict]]:
+    def translate(self, text: str, source_lang: str, target_lang: str, space_id: str = None, user_id: int = None) -> Tuple[bool, Union[str, Dict]]:
         """
         Translate text from source language to target language.
         
@@ -85,6 +85,7 @@ class Translate:
             source_lang (str): The source language code (e.g., 'en', 'es')
             target_lang (str): The target language code (e.g., 'en', 'es')
             space_id (str, optional): Space ID for cost tracking
+            user_id (int, optional): User ID for cost tracking
             
         Returns:
             Tuple[bool, Union[str, Dict]]: A tuple containing:
@@ -136,7 +137,8 @@ class Translate:
                         vendor=provider,
                         model=model,
                         input_tokens=input_tokens,
-                        output_tokens=output_tokens
+                        output_tokens=output_tokens,
+                        user_id=user_id
                     )
                     
                     if not cost_success:
@@ -252,7 +254,7 @@ class Translate:
             logger.error(f"Language detection error: {e}")
             return False, {"error": f"Language detection error: {str(e)}"}
     
-    def summary(self, content: str, max_length: int = None, language: str = None, space_id: str = None) -> Tuple[bool, Union[str, Dict]]:
+    def summary(self, content: str, max_length: int = None, language: str = None, space_id: str = None, user_id: int = None) -> Tuple[bool, Union[str, Dict]]:
         """
         Generate a summary of the given content using AI.
         
@@ -261,6 +263,7 @@ class Translate:
             max_length (int, optional): Maximum length of summary in words
             language (str, optional): Language for the summary output
             space_id (str, optional): Space ID for cost tracking
+            user_id (int, optional): User ID for cost tracking
             
         Returns:
             Tuple[bool, Union[str, Dict]]: Success flag and summary or error dict
@@ -312,7 +315,8 @@ class Translate:
                         vendor=provider,
                         model=model,
                         input_tokens=input_tokens,
-                        output_tokens=output_tokens
+                        output_tokens=output_tokens,
+                        user_id=user_id
                     )
                     
                     if not cost_success:
