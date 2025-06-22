@@ -166,7 +166,7 @@ class NotificationHelper:
                     <td style="padding: 8px; border-bottom: 1px solid #eee;">{date_str}</td>
                     <td style="padding: 8px; border-bottom: 1px solid #eee;">{tx['action'].title()}</td>
                     <td style="padding: 8px; border-bottom: 1px solid #eee;">{space_title}</td>
-                    <td style="padding: 8px; text-align: right; border-bottom: 1px solid #eee;">${tx['cost']:.2f}</td>
+                    <td style="padding: 8px; text-align: right; border-bottom: 1px solid #eee;">-{tx['cost']:.0f}</td>
                 </tr>
             """
         
@@ -303,7 +303,7 @@ class NotificationHelper:
                         
                         <div class="credit-balance">
                             <h3>Your Credit Balance</h3>
-                            <p style="font-size: 24px; margin: 5px 0;"><strong>${user_info['credits']:.2f}</strong></p>
+                            <p style="font-size: 24px; margin: 5px 0;"><strong>{user_info['credits']:.0f} Credits</strong></p>
                         </div>
                         
                         <h3>Recent Transactions</h3>
