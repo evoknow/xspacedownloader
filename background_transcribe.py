@@ -1365,6 +1365,54 @@ Language code:"""
                 self.update_job_status(job_id, 'completed', progress=100, result=result_data)
                 logger.info(f"Transcription job {job_id} completed successfully")
                 
+                # Send email notification
+                try:
+                    from components.NotificationHelper import NotificationHelper
+                    
+                    # Get user_id and space title from database
+                    user_id = job.get('user_id')
+                    space_title = None
+                    
+                    if not user_id:
+                        # Try to get user_id from database if not in job
+                        try:
+                            with self.db_manager.get_connection() as connection:
+                                cursor = connection.cursor(dictionary=True)
+                                query = """
+                                SELECT sdq.user_id, s.title
+                                FROM space_download_scheduler sdq
+                                LEFT JOIN spaces s ON sdq.space_id = s.space_id
+                                WHERE sdq.space_id = %s
+                                ORDER BY sdq.created_at DESC
+                                LIMIT 1
+                                """
+                                cursor.execute(query, (space_id,))
+                                result = cursor.fetchone()
+                                if result:
+                                    user_id = result['user_id']
+                                    space_title = result['title']
+                        except Exception as db_err:
+                            logger.error(f"Error getting user info for notification: {db_err}")
+                    
+                    if user_id:
+                        helper = NotificationHelper()
+                        success = helper.send_job_completion_email(
+                            user_id=user_id,
+                            job_type='transcription',
+                            space_id=space_id,
+                            space_title=space_title,
+                            additional_info={'language': language_code}
+                        )
+                        if success:
+                            logger.info(f"Email notification sent to user {user_id}")
+                        else:
+                            logger.error("Failed to send email notification")
+                    else:
+                        logger.warning("Could not determine user_id for email notification")
+                        
+                except Exception as email_err:
+                    logger.error(f"Error sending email notification: {email_err}")
+                
                 # Clean up temp file
                 if temp_file.exists():
                     temp_file.unlink()

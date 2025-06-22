@@ -2597,6 +2597,68 @@ def fork_download_process(job_id: int, space_id: str, file_type: str = 'mp3') ->
                     except Exception as post_err:
                         print(f"Error in post-download processing: {post_err}")
                     
+                    # 3. Send email notification
+                    try:
+                        print("Sending email notification...")
+                        from components.NotificationHelper import NotificationHelper
+                        
+                        # Get user_id from the job
+                        user_id = None
+                        space_title = None
+                        
+                        try:
+                            # Get job details from database
+                            with open('db_config.json', 'r') as config_file:
+                                db_config = json.load(config_file)
+                                if db_config["type"] == "mysql":
+                                    mysql_config = db_config["mysql"].copy()
+                                    if 'use_ssl' in mysql_config:
+                                        del mysql_config['use_ssl']
+                                    
+                                    conn = mysql.connector.connect(**mysql_config)
+                                    cursor = conn.cursor(dictionary=True)
+                                    
+                                    # Get user_id from the job
+                                    cursor.execute(
+                                        "SELECT user_id FROM space_download_scheduler WHERE id = %s",
+                                        (job_id,)
+                                    )
+                                    job_info = cursor.fetchone()
+                                    if job_info:
+                                        user_id = job_info['user_id']
+                                    
+                                    # Get space title
+                                    cursor.execute(
+                                        "SELECT title FROM spaces WHERE space_id = %s",
+                                        (space_id,)
+                                    )
+                                    space_info = cursor.fetchone()
+                                    if space_info:
+                                        space_title = space_info['title']
+                                    
+                                    cursor.close()
+                                    conn.close()
+                        except Exception as db_err:
+                            print(f"Error getting user/space info: {db_err}")
+                        
+                        if user_id:
+                            helper = NotificationHelper()
+                            success = helper.send_job_completion_email(
+                                user_id=user_id,
+                                job_type='download',
+                                space_id=space_id,
+                                space_title=space_title
+                            )
+                            if success:
+                                print(f"Email notification sent to user {user_id}")
+                            else:
+                                print("Failed to send email notification")
+                        else:
+                            print("Could not determine user_id for email notification")
+                            
+                    except Exception as email_err:
+                        print(f"Error sending email notification: {email_err}")
+                    
                     return  # Return from child process
                 else:
                     print(f"yt-dlp failed with return code {process_returncode}")

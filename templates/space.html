@@ -1143,6 +1143,22 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
+                <!-- Share type selector (only shown if video exists) -->
+                <div id="share-type-selector" class="mb-3" style="display: none;">
+                    <label class="form-label">What would you like to share?</label>
+                    <div class="btn-group w-100" role="group" aria-label="Share type">
+                        <input type="radio" class="btn-check" name="shareType" id="shareSpace" value="space" checked>
+                        <label class="btn btn-outline-primary" for="shareSpace">
+                            <i class="bi bi-link-45deg"></i> Space Link
+                        </label>
+                        
+                        <input type="radio" class="btn-check" name="shareType" id="shareVideo" value="video">
+                        <label class="btn btn-outline-primary" for="shareVideo">
+                            <i class="bi bi-play-circle"></i> Video (MP4)
+                        </label>
+                    </div>
+                </div>
+                
                 <div class="mb-3">
                     <label for="share-message" class="form-label">Message</label>
                     <textarea id="share-message" class="form-control" rows="3" readonly>Listen to "{{ space.title if space.title else 'Space ' + space.space_id }}" by {{ '@' + space.metadata.host_handle[1:] if space.metadata and space.metadata.host_handle and space.metadata.host_handle.startswith('@') else space.metadata.host_handle if space.metadata and space.metadata.host_handle else 'Unknown' }}
@@ -4527,17 +4543,48 @@
         const shareModal = document.getElementById('shareModal');
         const copyShareBtn = document.getElementById('copy-share-btn');
         const shareMessage = document.getElementById('share-message');
+        const shareTypeSelector = document.getElementById('share-type-selector');
         
         if (shareBtn && shareModal) {
             // Initialize share modal
             const shareModalInstance = new bootstrap.Modal(shareModal);
             
-            shareBtn.addEventListener('click', function() {
+            // Store original share message
+            const originalShareMessage = shareMessage.value;
+            
+            // Check if video exists
+            function checkVideoExists() {
+                const videoPath = `/downloads/{{ space.space_id }}.mp4`;
+                return fetch(videoPath, { method: 'HEAD' })
+                    .then(response => response.ok)
+                    .catch(() => false);
+            }
+            
+            // Update share message based on type
+            function updateShareMessage(shareType) {
+                if (shareType === 'video') {
+                    const videoUrl = `${window.location.origin}/downloads/{{ space.space_id }}.mp4`;
+                    shareMessage.value = `Watch "{{ space.title if space.title else 'Space ' + space.space_id }}" by {{ '@' + space.metadata.host_handle[1:] if space.metadata and space.metadata.host_handle and space.metadata.host_handle.startswith('@') else space.metadata.host_handle if space.metadata and space.metadata.host_handle else 'Unknown' }}
+
+${videoUrl}`;
+                } else {
+                    shareMessage.value = originalShareMessage;
+                }
+                
                 // Update share links
+                updateShareLinks();
+            }
+            
+            // Update share links based on current message
+            function updateShareLinks() {
                 const message = shareMessage.value;
-                const url = window.location.href;
+                const lines = message.split('\n\n');
+                const url = lines[lines.length - 1]; // Last line is the URL
+                const text = lines.slice(0, -1).join(' '); // Everything except URL
+                
                 const encodedMessage = encodeURIComponent(message);
                 const encodedUrl = encodeURIComponent(url);
+                const encodedText = encodeURIComponent(text);
                 
                 // Twitter/X
                 document.getElementById('share-twitter').href = 
@@ -4545,7 +4592,7 @@
                 
                 // Facebook
                 document.getElementById('share-facebook').href = 
-                    `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedMessage}`;
+                    `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedText}`;
                 
                 // WhatsApp
                 document.getElementById('share-whatsapp').href = 
@@ -4553,7 +4600,31 @@
                 
                 // Telegram
                 document.getElementById('share-telegram').href = 
-                    `https://t.me/share/url?url=${encodedUrl}&text=${message.split('\n\n')[0]}`;
+                    `https://t.me/share/url?url=${encodedUrl}&text=${text}`;
+            }
+            
+            // Handle share type change
+            document.querySelectorAll('input[name="shareType"]').forEach(radio => {
+                radio.addEventListener('change', function() {
+                    updateShareMessage(this.value);
+                });
+            });
+            
+            shareBtn.addEventListener('click', async function() {
+                // Check if video exists
+                const videoExists = await checkVideoExists();
+                
+                if (videoExists) {
+                    // Show share type selector
+                    shareTypeSelector.style.display = 'block';
+                } else {
+                    // Hide share type selector
+                    shareTypeSelector.style.display = 'none';
+                }
+                
+                // Reset to space sharing by default
+                document.getElementById('shareSpace').checked = true;
+                updateShareMessage('space');
                 
                 // Show modal
                 shareModalInstance.show();

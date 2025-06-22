@@ -198,6 +198,30 @@ class VideoGenerator:
                 job_data['progress'] = 100
                 job_data['video_path'] = video_path
                 logger.info(f"Video generation completed for job {job_id}: {video_path}")
+                
+                # Send email notification
+                try:
+                    from components.NotificationHelper import NotificationHelper
+                    
+                    if job_data.get('user_id'):
+                        helper = NotificationHelper()
+                        space_title = job_data.get('space_data', {}).get('title')
+                        email_success = helper.send_job_completion_email(
+                            user_id=int(job_data['user_id']),
+                            job_type='video',
+                            space_id=job_data['space_id'],
+                            space_title=space_title,
+                            additional_info={'style': 'waveform'}
+                        )
+                        if email_success:
+                            logger.info(f"Email notification sent to user {job_data['user_id']}")
+                        else:
+                            logger.error("Failed to send email notification")
+                    else:
+                        logger.warning("No user_id in job data, skipping email notification")
+                        
+                except Exception as email_err:
+                    logger.error(f"Error sending email notification: {email_err}")
             else:
                 job_data['status'] = 'failed'
                 job_data['error'] = 'Video generation failed'

@@ -143,6 +143,41 @@ class BackgroundTranslate:
                 
                 logger.info(f"Translation job {job_id} completed successfully")
                 
+                # Send email notification
+                try:
+                    from components.NotificationHelper import NotificationHelper
+                    
+                    # Get space title from database if needed
+                    space_title = None
+                    try:
+                        with self.db_manager.get_connection() as connection:
+                            cursor = connection.cursor(dictionary=True)
+                            cursor.execute(
+                                "SELECT title FROM spaces WHERE space_id = %s",
+                                (space_id,)
+                            )
+                            space_info = cursor.fetchone()
+                            if space_info:
+                                space_title = space_info['title']
+                    except Exception as title_err:
+                        logger.warning(f"Could not get space title: {title_err}")
+                    
+                    helper = NotificationHelper()
+                    success = helper.send_job_completion_email(
+                        user_id=user_id,
+                        job_type='translation',
+                        space_id=space_id,
+                        space_title=space_title,
+                        additional_info={'target_lang': target_lang}
+                    )
+                    if success:
+                        logger.info(f"Email notification sent to user {user_id}")
+                    else:
+                        logger.error("Failed to send email notification")
+                        
+                except Exception as email_err:
+                    logger.error(f"Error sending email notification: {email_err}")
+                
             except Exception as db_error:
                 logger.error(f"Database error for job {job_id}: {db_error}")
                 
