@@ -828,10 +828,17 @@ def view_queue():
         # Sort by created_at (oldest first, so they appear in queue order)
         queue_jobs.sort(key=lambda x: x.get('created_at', ''))
         
-        # Get transcription jobs
+        # Get transcription jobs from both old and new locations
         transcript_jobs = []
-        transcript_jobs_dir = Path('transcript_jobs')
-        if transcript_jobs_dir.exists():
+        transcript_jobs_dirs = [
+            Path('transcript_jobs'),  # Old location
+            Path('/var/www/production/xspacedownload.com/website/htdocs/transcript_jobs')  # New location
+        ]
+        
+        for transcript_jobs_dir in transcript_jobs_dirs:
+            if not transcript_jobs_dir.exists():
+                continue
+                
             for job_file in transcript_jobs_dir.glob('*.json'):
                 try:
                     with open(job_file, 'r') as f:
@@ -896,6 +903,41 @@ def view_queue():
         
         # Sort transcript jobs by created_at
         transcript_jobs.sort(key=lambda x: x.get('created_at', ''))
+        
+        # Also get standalone translation jobs from translation_jobs directory
+        translation_jobs_dir = Path('/var/www/production/xspacedownload.com/website/htdocs/translation_jobs')
+        if translation_jobs_dir.exists():
+            for job_file in translation_jobs_dir.glob('*.json'):
+                try:
+                    with open(job_file, 'r') as f:
+                        job_data = json.load(f)
+                        # Only include pending, in_progress, or processing translation jobs
+                        if job_data.get('status') in ['pending', 'in_progress', 'processing']:
+                            # Get space details for title
+                            space_details = space.get_space(job_data.get('space_id'))
+                            if space_details:
+                                job_data['title'] = space_details.get('title', f"Space {job_data.get('space_id')}")
+                            else:
+                                job_data['title'] = f"Space {job_data.get('space_id')}"
+                            
+                            job_data['is_translation'] = True
+                            job_data['target_language'] = job_data.get('target_lang')
+                            
+                            if job_data.get('status') == 'pending':
+                                job_data['status_label'] = 'Pending Translation'
+                                job_data['status_class'] = 'warning'
+                            elif job_data.get('status') == 'processing':
+                                job_data['status_label'] = f'Translating to {job_data.get("target_lang")}'
+                                job_data['status_class'] = 'info'
+                                job_data['progress_percent'] = job_data.get('progress', 0)
+                            else:
+                                job_data['status_label'] = 'Translating'
+                                job_data['status_class'] = 'success'
+                                job_data['progress_percent'] = job_data.get('progress', 0)
+                            
+                            transcript_jobs.append(job_data)
+                except Exception as e:
+                    logger.error(f"Error reading translation job file {job_file}: {e}")
         
         # Separate transcription and translation jobs
         transcription_only_jobs = [job for job in transcript_jobs if not job.get('is_translation')]
@@ -6722,8 +6764,11 @@ def admin_get_transcription_queue():
         from pathlib import Path
         from datetime import datetime, timedelta
         
-        transcript_jobs_dir = Path('/var/www/production/xspacedownload.com/website/xspacedownloader/transcript_jobs')
-        if not transcript_jobs_dir.exists():
+        # Check both old and new locations for transcript jobs
+        transcript_jobs_dir_old = Path('/var/www/production/xspacedownload.com/website/xspacedownloader/transcript_jobs')
+        transcript_jobs_dir_new = Path('/var/www/production/xspacedownload.com/website/htdocs/transcript_jobs')
+        
+        if not transcript_jobs_dir_old.exists() and not transcript_jobs_dir_new.exists():
             return jsonify({
                 'pending': [],
                 'processing': [],
@@ -6738,8 +6783,14 @@ def admin_get_transcription_queue():
         completed_jobs = []
         failed_jobs = []
         
-        # Read all job files
-        for job_file in transcript_jobs_dir.glob('*.json'):
+        # Read all job files from both directories
+        job_files = []
+        if transcript_jobs_dir_old.exists():
+            job_files.extend(transcript_jobs_dir_old.glob('*.json'))
+        if transcript_jobs_dir_new.exists():
+            job_files.extend(transcript_jobs_dir_new.glob('*.json'))
+            
+        for job_file in job_files:
             try:
                 with open(job_file, 'r') as f:
                     job_data = json.load(f)
