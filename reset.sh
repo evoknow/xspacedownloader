@@ -21,6 +21,8 @@ echo "Removing logs and downloaded media..."
 rm -f *.log *.logs
 rm -rf logs
 rm -f downloads/*.{mp3,log,m4a,part,mp4}
+rm -rf transcript_jobs
+rm -rf translation_jobs
 
 # Confirm remaining files
 echo "Remaining files in downloads/:"
