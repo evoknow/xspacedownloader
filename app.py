@@ -6806,7 +6806,10 @@ def admin_get_translation_queue():
         
         # Translation jobs are part of transcription jobs with translate_to option
         transcript_jobs_dir = Path('/var/www/production/xspacedownload.com/website/xspacedownloader/transcript_jobs')
-        if not transcript_jobs_dir.exists():
+        # Also check the new translation_jobs directory
+        translation_jobs_dir = Path('/var/www/production/xspacedownload.com/website/htdocs/translation_jobs')
+        
+        if not transcript_jobs_dir.exists() and not translation_jobs_dir.exists():
             return jsonify({
                 'pending': [],
                 'processing': [],
@@ -6819,18 +6822,28 @@ def admin_get_translation_queue():
         processing_jobs = []
         completed_jobs = []
         
-        # Read all job files and filter for translation jobs
-        for job_file in transcript_jobs_dir.glob('*.json'):
+        # Read all job files and filter for translation jobs from both directories
+        job_files = []
+        if transcript_jobs_dir.exists():
+            job_files.extend(transcript_jobs_dir.glob('*.json'))
+        if translation_jobs_dir.exists():
+            job_files.extend(translation_jobs_dir.glob('*.json'))
+            
+        for job_file in job_files:
             try:
                 with open(job_file, 'r') as f:
                     job_data = json.load(f)
                 
-                # Skip video jobs and non-translation jobs
+                # Skip video jobs
                 if '_video' in job_file.name:
                     continue
                 
+                # Check if this is a new-style translation job (from translation_jobs dir)
+                is_new_translation_job = str(job_file.parent).endswith('translation_jobs')
+                
+                # For old-style transcription jobs, check if they have translate_to option
                 options = job_data.get('options', {})
-                if not options.get('translate_to'):
+                if not is_new_translation_job and not options.get('translate_to'):
                     continue
                     
                 status = job_data.get('status', 'unknown')
@@ -6840,18 +6853,35 @@ def admin_get_translation_queue():
                 if status == 'completed' and created_at < yesterday:
                     continue
                 
-                job_info = {
-                    'job_id': job_data.get('job_id', job_data.get('id')),
-                    'space_id': job_data.get('space_id'),
-                    'status': status,
-                    'progress': job_data.get('progress', 0),
-                    'created_at': job_data.get('created_at'),
-                    'updated_at': job_data.get('updated_at'),
-                    'source_language': job_data.get('language', 'auto'),
-                    'target_language': options.get('translate_to'),
-                    'options': options,
-                    'error': job_data.get('error')
-                }
+                # Handle different job formats
+                if is_new_translation_job:
+                    # New translation job format
+                    job_info = {
+                        'job_id': job_data.get('id'),
+                        'space_id': job_data.get('space_id'),
+                        'status': status,
+                        'progress': job_data.get('progress', 0),
+                        'created_at': job_data.get('created_at'),
+                        'updated_at': job_data.get('updated_at'),
+                        'source_language': job_data.get('source_lang', 'auto'),
+                        'target_language': job_data.get('target_lang'),
+                        'options': {},
+                        'error': job_data.get('error')
+                    }
+                else:
+                    # Old transcription job format with translate_to option
+                    job_info = {
+                        'job_id': job_data.get('job_id', job_data.get('id')),
+                        'space_id': job_data.get('space_id'),
+                        'status': status,
+                        'progress': job_data.get('progress', 0),
+                        'created_at': job_data.get('created_at'),
+                        'updated_at': job_data.get('updated_at'),
+                        'source_language': job_data.get('language', 'auto'),
+                        'target_language': options.get('translate_to'),
+                        'options': options,
+                        'error': job_data.get('error')
+                    }
                 
                 if status == 'pending':
                     pending_jobs.append(job_info)
