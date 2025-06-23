@@ -171,9 +171,17 @@ def generate_and_save_tags_with_ai(space_id, transcript_text):
                         ai = OpenAI(api_key, model=model)
                         
                         # Prepare prompt for tag generation using user's clean prompt
-                        prompt = f"""Extract the top 10 topic words from the following transcript. Focus only on the most relevant nouns and concepts discussed. Do not include hashtags, filler words, or speaker names. The result should be a concise list of 10 topic keywords representing the main themes.
+                        prompt = f"""Extract up to 10 meaningful tags from this transcript. 
 
-Return ONLY a JSON array of keywords, nothing else. Example: ["artificial intelligence", "python", "web development"]
+IMPORTANT RULES:
+1. NO COMMON WORDS like: going, because, think, about, would, doesn't, really, maybe, probably, something, could, should, might, actually, basically
+2. INCLUDE: Countries, cities, places, regions mentioned (e.g., Bangladesh, New York, Silicon Valley)
+3. INCLUDE: Specific topics discussed (e.g., cybersecurity, climate change, artificial intelligence)
+4. INCLUDE: Organizations, companies, or institutions mentioned
+5. INCLUDE: Technical terms, industries, or fields discussed
+6. Only include words/phrases that someone would search for to find this specific content
+
+Return ONLY a JSON array of keywords. Example: ["Bangladesh", "cybersecurity", "data breach", "Dhaka", "IT industry"]
 
 Transcript:
 {transcript_text[:3000]}..."""
@@ -240,9 +248,17 @@ Transcript:
                         ai = Claude(api_key, model=model)
                         
                         # Same clean prompt for Claude
-                        prompt = f"""Extract the top 10 topic words from the following transcript. Focus only on the most relevant nouns and concepts discussed. Do not include hashtags, filler words, or speaker names. The result should be a concise list of 10 topic keywords representing the main themes.
+                        prompt = f"""Extract up to 10 meaningful tags from this transcript. 
 
-Return ONLY a JSON array of keywords, nothing else.
+IMPORTANT RULES:
+1. NO COMMON WORDS like: going, because, think, about, would, doesn't, really, maybe, probably, something, could, should, might, actually, basically
+2. INCLUDE: Countries, cities, places, regions mentioned (e.g., Bangladesh, New York, Silicon Valley)
+3. INCLUDE: Specific topics discussed (e.g., cybersecurity, climate change, artificial intelligence)
+4. INCLUDE: Organizations, companies, or institutions mentioned
+5. INCLUDE: Technical terms, industries, or fields discussed
+6. Only include words/phrases that someone would search for to find this specific content
+
+Return ONLY a JSON array of keywords. Example: ["Bangladesh", "cybersecurity", "data breach", "Dhaka", "IT industry"]
 
 Transcript:
 {transcript_text[:3000]}..."""

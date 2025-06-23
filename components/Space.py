@@ -3097,18 +3097,22 @@ class Space:
                 ai_cost = AICost()
                 
                 # Prepare prompt for tag generation
-                prompt = f"""Analyze this transcript and generate {max_tags} relevant tags that capture the main topics, themes, and key concepts discussed. 
+                prompt = f"""Analyze this transcript and generate {max_tags} meaningful tags for categorization and search.
 
-Tags should be:
-- Short (1-2 words)
-- Specific and descriptive (NOT generic words like "good", "your", "nice", etc.)
-- Relevant domain-specific terms, proper nouns, or important concepts
-- Useful for categorization and search
-- NEVER just numbers by themselves (avoid tags like "2024", "100", "5", etc.)
-- Examples of good tags: "Machine Learning", "Climate Change", "Bitcoin", "Mental Health", "Space Exploration", "Web3", "Artificial Intelligence", "Cybersecurity", "Marketing Strategy"
-- Examples of bad tags: "good", "your", "nice", "really", "very", "thing", "stuff", "people", "2024", "100", "5"
+IMPORTANT RULES:
+1. NO COMMON WORDS like: going, because, think, about, would, doesn't, really, maybe, probably, something, could, should, might, actually, basically, thing, stuff, people, good, nice, very
+2. PRIORITIZE THESE CATEGORIES:
+   - Countries, cities, places, regions mentioned (e.g., Bangladesh, New York, Silicon Valley, Europe)
+   - Specific topics and subjects discussed (e.g., cybersecurity, climate change, artificial intelligence)
+   - Organizations, companies, institutions mentioned
+   - Technical terms, industries, fields discussed
+   - Notable people or figures mentioned
+3. Tags should be specific words/phrases someone would search for to find this content
+4. Prefer proper nouns and domain-specific terminology
+5. Avoid standalone numbers or generic descriptors
 
-Avoid common everyday words, standalone numbers, and focus on distinctive topics, technologies, organizations, concepts, or themes that make this content unique.
+Examples of GOOD tags: "Bangladesh", "cybersecurity", "Dhaka", "data breach", "IT industry", "PayPal", "machine learning", "climate change"
+Examples of BAD tags: "going", "think", "would", "really", "2024", "good", "nice", "people"
 
 Return ONLY the tags as a comma-separated list, nothing else.
 
