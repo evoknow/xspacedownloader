@@ -71,6 +71,7 @@ except ImportError:
 
 # Import application components
 from components.Space import Space
+from components.Ad import Ad
 # Import SpeechToText component if available
 try:
     from components.SpeechToText import SpeechToText
@@ -966,7 +967,17 @@ def index():
         # Check if we have cached data
         cached_data = get_cached_index_data()
         if cached_data:
-            return render_template('index.html', completed_spaces=cached_data)
+            # Load advertisement for logged in users
+            advertisement_html = None
+            if session.get('user_id'):
+                try:
+                    ad = Ad.get_active_ad()
+                    if ad and ad.copy:
+                        advertisement_html = ad.copy
+                except Exception as e:
+                    logger.warning(f"Error loading advertisement: {e}")
+            
+            return render_template('index.html', completed_spaces=cached_data, advertisement_html=advertisement_html)
         
         # No valid cache, generate fresh data
         logger.info("Generating fresh index data (cache miss or expired)")
@@ -1005,7 +1016,17 @@ def index():
         # Cache the data
         set_index_cache(completed_spaces)
         
-        return render_template('index.html', completed_spaces=completed_spaces)
+        # Load advertisement for logged in users
+        advertisement_html = None
+        if session.get('user_id'):
+            try:
+                ad = Ad.get_active_ad()
+                if ad and ad.copy:
+                    advertisement_html = ad.copy
+            except Exception as e:
+                logger.warning(f"Error loading advertisement: {e}")
+        
+        return render_template('index.html', completed_spaces=completed_spaces, advertisement_html=advertisement_html)
     except Exception as e:
         logger.error(f"Error loading completed spaces: {e}", exc_info=True)
         return render_template('index.html')

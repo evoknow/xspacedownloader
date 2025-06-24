@@ -284,3 +284,39 @@ SELECT
     1
 WHERE EXISTS (SELECT 1 FROM `users` WHERE `email` = 'admin@xspacedownload.com')
 AND NOT EXISTS (SELECT 1 FROM `api_keys` WHERE `name` = 'Default Admin API Key');
+
+-- Table structure for table `advertisements`
+DROP TABLE IF EXISTS `advertisements`;
+CREATE TABLE `advertisements` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `copy` text NOT NULL COMMENT 'Advertisement copy (HTML allowed)',
+  `start_date` datetime NOT NULL COMMENT 'When the ad should start displaying',
+  `end_date` datetime NOT NULL COMMENT 'When the ad should stop displaying',
+  `status` tinyint DEFAULT '0' COMMENT '0-pending, 1-active, -1-deleted, -9-suspended',
+  `impression_count` int DEFAULT '0' COMMENT 'Number of times ad has been shown',
+  `max_impressions` int DEFAULT '0' COMMENT '0 for unlimited',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_status_dates` (`status`,`start_date`,`end_date`),
+  KEY `idx_impression_count` (`impression_count`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Advertisements shown to logged-in users';
+
+-- Insert default advertisement (id 0 for fallback)
+INSERT INTO `advertisements` (`id`, `copy`, `start_date`, `end_date`, `status`, `impression_count`, `max_impressions`) 
+VALUES (0, 
+        '<div class="alert alert-info">
+            <h5>🎯 Discover Amazing Spaces!</h5>
+            <p>Explore our vast collection of transcribed audio content. Search by topics, locations, and interests to find exactly what you\'re looking for.</p>
+        </div>', 
+        '2020-01-01 00:00:00', 
+        '2099-12-31 23:59:59', 
+        1, 
+        0, 
+        0
+)
+ON DUPLICATE KEY UPDATE
+    `copy` = VALUES(`copy`),
+    `start_date` = VALUES(`start_date`),
+    `end_date` = VALUES(`end_date`),
+    `status` = VALUES(`status`);

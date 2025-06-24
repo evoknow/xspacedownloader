@@ -95,8 +95,8 @@ class VideoGenerator:
         
         logger.info(f"Created video generation job {job_id} for space {space_id}")
         
-        # Start video generation in background (simplified for now)
-        self._generate_video_sync(job_id)
+        # Job will be processed by background_video.py daemon
+        # No longer processing synchronously to prevent timeouts
         
         return job_id
     
@@ -794,11 +794,29 @@ class VideoGenerator:
                     video_logger.info(f"Video file created: {video_path}")
                     video_logger.info(f"Video file size: {file_size} bytes ({file_size / (1024*1024):.2f} MB)")
                     
-                    if file_size > 1024:
-                        video_logger.info("Video generation SUCCESSFUL!")
-                        return True
+                    # More robust file size validation
+                    min_size = 1024 * 1024  # 1MB minimum for video files
+                    if file_size > min_size:
+                        # Additional validation: check if file is actually a valid video
+                        try:
+                            import subprocess
+                            probe_result = subprocess.run([
+                                'ffprobe', '-v', 'quiet', '-print_format', 'json', 
+                                '-show_format', '-show_streams', video_path
+                            ], capture_output=True, text=True, timeout=30)
+                            
+                            if probe_result.returncode == 0:
+                                video_logger.info("Video generation SUCCESSFUL and file is valid!")
+                                return True
+                            else:
+                                video_logger.error(f"Generated file is not a valid video: {probe_result.stderr}")
+                                return False
+                        except Exception as e:
+                            video_logger.warning(f"Could not validate video file: {e}")
+                            video_logger.info("Video generation completed (validation failed but file exists)")
+                            return True
                     else:
-                        video_logger.error(f"Video file too small: {file_size} bytes")
+                        video_logger.error(f"Video file too small: {file_size} bytes (minimum: {min_size})")
                         return False
                 else:
                     video_logger.error(f"Video file not created at: {video_path}")

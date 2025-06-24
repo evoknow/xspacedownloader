@@ -119,7 +119,9 @@
                                             </td>
                                             <td class="d-none d-md-table-cell">
                                                 {{ transaction.action|title }}
-                                                {% if transaction.ai_model %}
+                                                {% if transaction.source_language and transaction.target_language %}
+                                                    <small class="text-muted">({{ transaction.source_language }} → {{ transaction.target_language }})</small>
+                                                {% elif transaction.ai_model %}
                                                     <small class="text-muted">({{ transaction.ai_model }})</small>
                                                 {% endif %}
                                                 {% if transaction.input_tokens and transaction.output_tokens %}

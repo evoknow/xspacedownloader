@@ -138,7 +138,9 @@ class Translate:
                         model=model,
                         input_tokens=input_tokens,
                         output_tokens=output_tokens,
-                        user_id=user_id
+                        user_id=user_id,
+                        source_language=source_lang,
+                        target_language=target_lang
                     )
                     
                     if not cost_success:

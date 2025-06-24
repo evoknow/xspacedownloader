@@ -162,7 +162,9 @@ class AICost:
                    output_tokens: int,
                    user_id: Optional[int] = None,
                    cookie_id: Optional[str] = None,
-                   deduct_credits: bool = True) -> Tuple[bool, str, float]:
+                   deduct_credits: bool = True,
+                   source_language: Optional[str] = None,
+                   target_language: Optional[str] = None) -> Tuple[bool, str, float]:
         """
         Track AI operation cost and optionally deduct credits.
         
@@ -236,10 +238,11 @@ class AICost:
                 cursor.execute("""
                     INSERT INTO transactions 
                     (user_id, cookie_id, space_id, action, ai_model, input_tokens, 
-                     output_tokens, cost, balance_before, balance_after)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     output_tokens, cost, balance_before, balance_after, source_language, target_language)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (user_id, cookie_id, space_id, action, f"{vendor}/{model}", 
-                      input_tokens, output_tokens, cost, balance_before, balance_after))
+                      input_tokens, output_tokens, cost, balance_before, balance_after, 
+                      source_language, target_language))
                 
                 # Update space_cost table based on action type
                 cost_column = self._get_cost_column_for_action(action)
