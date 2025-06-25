@@ -8734,6 +8734,34 @@ def admin_ads_delete(ad_id):
     
     return redirect(url_for('admin_ads_page'))
 
+@app.route('/admin/ads/<int:ad_id>/edit', methods=['POST'])
+def admin_ads_edit(ad_id):
+    """Edit an existing ad."""
+    try:
+        # Check if user is logged in and is admin
+        if not session.get('user_id') or not session.get('is_admin'):
+            flash('Admin access required.', 'error')
+            return redirect(url_for('index'))
+        
+        ad = Ad(ad_id)
+        if not ad.copy:
+            flash('Advertisement not found.', 'danger')
+            return redirect(url_for('admin_ads_page'))
+        
+        # Update ad properties
+        ad.copy = request.form.get('copy', '')
+        ad.start_date = datetime.strptime(request.form.get('start_date'), '%Y-%m-%d %H:%M:%S')
+        ad.end_date = datetime.strptime(request.form.get('end_date'), '%Y-%m-%d %H:%M:%S')
+        ad.max_impressions = int(request.form.get('max_impressions', 0)) or 0
+        
+        ad.save()
+        flash('Advertisement updated successfully!', 'success')
+    except Exception as e:
+        logger.error(f"Error updating ad: {e}", exc_info=True)
+        flash(f'Error updating ad: {str(e)}', 'danger')
+    
+    return redirect(url_for('admin_ads_page'))
+
 # Route for About page
 @app.route('/about')
 def about():
