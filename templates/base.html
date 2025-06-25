@@ -283,6 +283,27 @@
             background-color: #444;
             color: #fff;
         }
+        
+        /* Advertisement container styling */
+        .advertisement-container {
+            overflow: hidden;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        
+        .advertisement-container * {
+            max-width: 100%;
+            height: auto;
+        }
+        
+        .advertisement-container img {
+            display: block;
+            margin: 0 auto;
+        }
+        
+        .advertisement-container .alert {
+            margin-bottom: 0;
+        }
     </style>
     {% block head %}{% endblock %}
 </head>
