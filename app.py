@@ -8582,6 +8582,95 @@ def admin_update_openai_pricing():
         logger.error(f"Error updating OpenAI pricing: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
+# Admin page to manage ads
+@app.route('/admin/ads')
+@admin_required
+def admin_ads_page():
+    """Render the ads management page."""
+    try:
+        ads = Ad.get_all_ads()
+        ads_list = []
+        for ad in ads:
+            ads_list.append({
+                'id': ad['id'],
+                'copy': ad['copy'],
+                'start_date': ad['start_date'].strftime('%Y-%m-%d %H:%M:%S') if ad['start_date'] else '',
+                'end_date': ad['end_date'].strftime('%Y-%m-%d %H:%M:%S') if ad['end_date'] else '',
+                'status': ad['status'],
+                'status_text': 'Active' if ad['status'] == 1 else 'Suspended' if ad['status'] == -9 else 'Pending' if ad['status'] == 0 else 'Deleted',
+                'impressions': ad['impression_count'],
+                'max_impressions': ad['max_impressions'] or 'Unlimited',
+                'created_at': ad['created_at'].strftime('%Y-%m-%d %H:%M:%S') if ad['created_at'] else '',
+                'updated_at': ad['updated_at'].strftime('%Y-%m-%d %H:%M:%S') if ad['updated_at'] else ''
+            })
+        return render_template('admin_ads.html', ads=ads_list)
+    except Exception as e:
+        logger.error(f"Error loading ads page: {e}", exc_info=True)
+        flash('Error loading ads', 'danger')
+        return redirect(url_for('admin'))
+
+@app.route('/admin/ads/create', methods=['POST'])
+@admin_required
+def admin_ads_create():
+    """Create a new ad."""
+    try:
+        ad = Ad()
+        ad.copy = request.form.get('copy', '')
+        ad.start_date = datetime.strptime(request.form.get('start_date'), '%Y-%m-%d %H:%M:%S')
+        ad.end_date = datetime.strptime(request.form.get('end_date'), '%Y-%m-%d %H:%M:%S')
+        ad.max_impressions = int(request.form.get('max_impressions', 0)) or 0
+        ad.status = 0  # Start as pending
+        
+        ad.save()
+        flash('Advertisement created successfully!', 'success')
+    except Exception as e:
+        logger.error(f"Error creating ad: {e}", exc_info=True)
+        flash(f'Error creating ad: {str(e)}', 'danger')
+    
+    return redirect(url_for('admin_ads_page'))
+
+@app.route('/admin/ads/<int:ad_id>/activate', methods=['POST'])
+@admin_required
+def admin_ads_activate(ad_id):
+    """Activate an ad."""
+    try:
+        ad = Ad(ad_id)
+        ad.activate()
+        flash('Advertisement activated!', 'success')
+    except Exception as e:
+        logger.error(f"Error activating ad: {e}", exc_info=True)
+        flash(f'Error activating ad: {str(e)}', 'danger')
+    
+    return redirect(url_for('admin_ads_page'))
+
+@app.route('/admin/ads/<int:ad_id>/suspend', methods=['POST'])
+@admin_required
+def admin_ads_suspend(ad_id):
+    """Suspend an ad."""
+    try:
+        ad = Ad(ad_id)
+        ad.suspend()
+        flash('Advertisement suspended!', 'warning')
+    except Exception as e:
+        logger.error(f"Error suspending ad: {e}", exc_info=True)
+        flash(f'Error suspending ad: {str(e)}', 'danger')
+    
+    return redirect(url_for('admin_ads_page'))
+
+@app.route('/admin/ads/<int:ad_id>/delete', methods=['POST'])
+@admin_required
+def admin_ads_delete(ad_id):
+    """Delete an ad."""
+    try:
+        ad = Ad(ad_id)
+        ad.delete()
+        flash('Advertisement deleted!', 'success')
+    except Exception as e:
+        logger.error(f"Error deleting ad: {e}", exc_info=True)
+        flash(f'Error deleting ad: {str(e)}', 'danger')
+    
+    return redirect(url_for('admin_ads_page'))
+
 # Route for About page
 @app.route('/about')
 def about():

@@ -86,7 +86,13 @@
     <div class="col-lg-4 {% if session.get('user_id') %}d-none d-lg-block{% else %}d-block{% endif %}">
         <div class="card shadow-sm equal-height-card">
             <div class="card-header bg-success text-white">
-                <h4 class="mb-0"><i class="bi bi-person-circle"></i> Account</h4>
+                <h4 class="mb-0">
+                    {% if session.get('user_id') and advertisement_html %}
+                        <i class="bi bi-star"></i> For You
+                    {% else %}
+                        <i class="bi bi-person-circle"></i> Account
+                    {% endif %}
+                </h4>
             </div>
             <div class="card-body">
                 {% if session.get('user_id') %}
@@ -94,12 +100,13 @@
                     <div class="advertisement-container">
                         {{ advertisement_html|safe }}
                     </div>
-                    {% endif %}
+                    {% else %}
                     <div class="text-center mt-3">
                         <a href="{{ url_for('logout') }}" class="btn btn-outline-danger">
                             <i class="bi bi-box-arrow-right"></i> Logout
                         </a>
                     </div>
+                    {% endif %}
                 {% else %}
                     <p class="lead">
                         Get instant access with a magic link!
