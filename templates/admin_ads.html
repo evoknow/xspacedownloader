@@ -54,7 +54,7 @@
                             </td>
                             <td>
                                 <div style="max-width: 300px; max-height: 50px; overflow: hidden;">
-                                    {{ ad.copy|safe }}
+                                    {{ ad['copy']|safe }}
                                 </div>
                             </td>
                             <td>{{ ad.start_date }}</td>
@@ -82,7 +82,7 @@
                                     <button type="button" class="btn btn-primary btn-sm" title="Edit" 
                                             data-bs-toggle="modal" data-bs-target="#editAdModal{{ ad.id }}"
                                             data-ad-id="{{ ad.id }}"
-                                            data-ad-copy="{{ ad.copy|e }}"
+                                            data-ad-copy="{{ ad['copy']|e }}"
                                             data-ad-start="{{ ad.start_date }}"
                                             data-ad-end="{{ ad.end_date }}"
                                             data-ad-max="{{ ad.max_impressions if ad.max_impressions != 'Unlimited' else 0 }}">
@@ -175,7 +175,7 @@
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="edit_copy_{{ ad.id }}" class="form-label">Advertisement Copy (HTML supported)</label>
-                        <textarea class="form-control" name="copy" id="edit_copy_{{ ad.id }}" rows="5" required>{{ ad.copy }}</textarea>
+                        <textarea class="form-control" name="copy" id="edit_copy_{{ ad.id }}" rows="5" required>{{ ad['copy'] }}</textarea>
                     </div>
                     <div class="row">
                         <div class="col-md-6 mb-3">
