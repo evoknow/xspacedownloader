@@ -8691,8 +8691,8 @@ def admin_ads_create():
             return redirect(url_for('index'))
         ad = Ad()
         ad.copy = request.form.get('copy', '')
-        ad.start_date = datetime.strptime(request.form.get('start_date'), '%Y-%m-%d %H:%M:%S')
-        ad.end_date = datetime.strptime(request.form.get('end_date'), '%Y-%m-%d %H:%M:%S')
+        ad.start_date = datetime.datetime.strptime(request.form.get('start_date'), '%Y-%m-%d %H:%M:%S')
+        ad.end_date = datetime.datetime.strptime(request.form.get('end_date'), '%Y-%m-%d %H:%M:%S')
         ad.max_impressions = int(request.form.get('max_impressions', 0)) or 0
         ad.status = 0  # Start as pending
         
@@ -8771,8 +8771,8 @@ def admin_ads_edit(ad_id):
         
         # Update ad properties
         ad.copy = request.form.get('copy', '')
-        ad.start_date = datetime.strptime(request.form.get('start_date'), '%Y-%m-%d %H:%M:%S')
-        ad.end_date = datetime.strptime(request.form.get('end_date'), '%Y-%m-%d %H:%M:%S')
+        ad.start_date = datetime.datetime.strptime(request.form.get('start_date'), '%Y-%m-%d %H:%M:%S')
+        ad.end_date = datetime.datetime.strptime(request.form.get('end_date'), '%Y-%m-%d %H:%M:%S')
         ad.max_impressions = int(request.form.get('max_impressions', 0)) or 0
         
         ad.save()
