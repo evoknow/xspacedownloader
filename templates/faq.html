@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="row">
-    <div class="col-lg-10 mx-auto">
+    <div class="col-12 col-lg-9">
         <div class="card shadow-sm">
             <div class="card-header bg-primary text-white">
                 <h4 class="mb-0"><i class="bi bi-question-circle"></i> Frequently Asked Questions</h4>
@@ -790,6 +790,23 @@
                 </div>
             </div>
         </div>
+    </div>
+    
+    <!-- Right Column - Advertisement -->
+    <div class="col-12 col-lg-3">
+        {% if session.get('user_id') and advertisement_html %}
+        <!-- Advertisement Section -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white py-2">
+                <h6 class="mb-0"><i class="bi bi-star me-1"></i> For You</h6>
+            </div>
+            <div class="card-body p-2">
+                <div class="advertisement-container">
+                    {{ advertisement_html|safe }}
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

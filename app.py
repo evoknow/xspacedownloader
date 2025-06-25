@@ -639,12 +639,23 @@ def status(job_id):
 def all_spaces():
     """Display all downloaded spaces."""
     try:
+        # Load advertisement for logged in users
+        advertisement_html = None
+        if session.get('user_id'):
+            try:
+                ad = Ad.get_active_ad()
+                if ad and ad.copy:
+                    advertisement_html = ad.copy
+            except Exception as e:
+                logger.warning(f"Error loading advertisement: {e}")
+        
         # Check if we have cached data
         cached_data = get_cached_spaces_data()
         if cached_data:
             return render_template('all_spaces.html', 
                                  spaces=cached_data['completed_spaces'], 
-                                 popular_tags=cached_data['popular_tags'])
+                                 popular_tags=cached_data['popular_tags'],
+                                 advertisement_html=advertisement_html)
         
         # No valid cache, generate fresh data
         logger.info("Generating fresh spaces data (cache miss or expired)")
@@ -750,7 +761,7 @@ def all_spaces():
         }
         set_spaces_cache(cache_data)
         
-        return render_template('all_spaces.html', spaces=completed_spaces, popular_tags=popular_tags)
+        return render_template('all_spaces.html', spaces=completed_spaces, popular_tags=popular_tags, advertisement_html=advertisement_html)
         
     except Exception as e:
         logger.error(f"Error listing all spaces: {e}", exc_info=True)
@@ -944,11 +955,22 @@ def view_queue():
         transcription_only_jobs = [job for job in transcript_jobs if not job.get('is_translation')]
         translation_jobs = [job for job in transcript_jobs if job.get('is_translation')]
         
+        # Load advertisement for logged in users
+        advertisement_html = None
+        if session.get('user_id'):
+            try:
+                ad = Ad.get_active_ad()
+                if ad and ad.copy:
+                    advertisement_html = ad.copy
+            except Exception as e:
+                logger.warning(f"Error loading advertisement: {e}")
+        
         return render_template('queue.html', 
                              queue_jobs=queue_jobs, 
                              transcript_jobs=transcript_jobs,
                              transcription_only_jobs=transcription_only_jobs,
-                             translation_jobs=translation_jobs)
+                             translation_jobs=translation_jobs,
+                             advertisement_html=advertisement_html)
         
     except Exception as e:
         logger.error(f"Error viewing queue: {e}", exc_info=True)
@@ -6688,7 +6710,17 @@ def admin_dev_clear_non_admin_users():
 @app.route('/faq')
 def faq():
     """Display the FAQ page."""
-    return render_template('faq.html')
+    # Load advertisement for logged in users
+    advertisement_html = None
+    if session.get('user_id'):
+        try:
+            ad = Ad.get_active_ad()
+            if ad and ad.copy:
+                advertisement_html = ad.copy
+        except Exception as e:
+            logger.warning(f"Error loading advertisement: {e}")
+    
+    return render_template('faq.html', advertisement_html=advertisement_html)
 
 @app.route('/admin/api/jobs/<int:job_id>/priority', methods=['PUT'])
 def admin_set_job_priority(job_id):
@@ -8706,7 +8738,17 @@ def admin_ads_delete(ad_id):
 @app.route('/about')
 def about():
     """Display the About page."""
-    return render_template('about.html')
+    # Load advertisement for logged in users
+    advertisement_html = None
+    if session.get('user_id'):
+        try:
+            ad = Ad.get_active_ad()
+            if ad and ad.copy:
+                advertisement_html = ad.copy
+        except Exception as e:
+            logger.warning(f"Error loading advertisement: {e}")
+    
+    return render_template('about.html', advertisement_html=advertisement_html)
 
 # Route to check transcription job status for a space
 @app.route('/api/transcribe/<space_id>/status', methods=['GET'])
