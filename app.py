@@ -9087,6 +9087,16 @@ if __name__ == '__main__':
     # Create transcript jobs directory if it doesn't exist
     os.makedirs('./transcript_jobs', exist_ok=True)
     
+    # Test route to verify ads routes are loaded
+    @app.route('/test-ads-routes')
+    def test_ads_routes():
+        """Test route to check if ads routes are registered."""
+        routes = []
+        for rule in app.url_map.iter_rules():
+            if '/admin/ads' in rule.rule:
+                routes.append(f"{rule.rule} -> {rule.endpoint}")
+        return f"Ads routes found: {routes}"
+    
     # Print startup message
     print(f"Starting XSpace Downloader Web App on {host}:{port}")
     print(f"Access the web interface at: http://127.0.0.1:{port} or http://localhost:{port}")
