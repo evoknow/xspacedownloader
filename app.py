@@ -8626,7 +8626,7 @@ def admin_ads_page():
     except Exception as e:
         logger.error(f"Error loading ads page: {e}", exc_info=True)
         flash('Error loading ads', 'danger')
-        return redirect(url_for('admin'))
+        return redirect(url_for('admin_dashboard'))
 
 @app.route('/admin/ads/create', methods=['POST'])
 def admin_ads_create():
