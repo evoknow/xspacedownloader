@@ -8693,7 +8693,8 @@ def admin_ads_create():
         ad.copy = request.form.get('copy', '')
         ad.start_date = datetime.datetime.strptime(request.form.get('start_date'), '%Y-%m-%d %H:%M:%S')
         ad.end_date = datetime.datetime.strptime(request.form.get('end_date'), '%Y-%m-%d %H:%M:%S')
-        ad.max_impressions = int(request.form.get('max_impressions', 0)) or 0
+        max_impressions_str = request.form.get('max_impressions', '').strip()
+        ad.max_impressions = int(max_impressions_str) if max_impressions_str else 0
         ad.status = 0  # Start as pending
         
         ad.save()
@@ -8773,7 +8774,8 @@ def admin_ads_edit(ad_id):
         ad.copy = request.form.get('copy', '')
         ad.start_date = datetime.datetime.strptime(request.form.get('start_date'), '%Y-%m-%d %H:%M:%S')
         ad.end_date = datetime.datetime.strptime(request.form.get('end_date'), '%Y-%m-%d %H:%M:%S')
-        ad.max_impressions = int(request.form.get('max_impressions', 0)) or 0
+        max_impressions_str = request.form.get('max_impressions', '').strip()
+        ad.max_impressions = int(max_impressions_str) if max_impressions_str else 0
         
         ad.save()
         flash('Advertisement updated successfully!', 'success')
