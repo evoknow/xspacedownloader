@@ -2716,6 +2716,16 @@ def check_favorite(space_id):
 def favorites():
     """Display user's favorite spaces."""
     try:
+        # Load advertisement for logged in users
+        advertisement_html = None
+        if session.get('user_id'):
+            try:
+                ad = Ad.get_active_ad()
+                if ad and ad.copy:
+                    advertisement_html = ad.copy
+            except Exception as e:
+                logger.warning(f"Error loading advertisement: {e}")
+        
         # Get Space component
         space = get_space_component()
         
@@ -2777,7 +2787,7 @@ def favorites():
                 fav['metadata'] = None
                 fav['summary'] = None
         
-        return render_template('favorites.html', favorites=favorites)
+        return render_template('favorites.html', favorites=favorites, advertisement_html=advertisement_html)
         
     except Exception as e:
         logger.error(f"Error loading favorites: {e}", exc_info=True)
@@ -4402,6 +4412,16 @@ def profile():
         return redirect(url_for('index'))
     
     try:
+        # Load advertisement for logged in users
+        advertisement_html = None
+        if session.get('user_id'):
+            try:
+                ad = Ad.get_active_ad()
+                if ad and ad.copy:
+                    advertisement_html = ad.copy
+            except Exception as e:
+                logger.warning(f"Error loading advertisement: {e}")
+        
         space = get_space_component()
         cursor = space.connection.cursor(dictionary=True)
         
@@ -4446,7 +4466,8 @@ def profile():
         return render_template('profile.html', 
                              user_info=user_info, 
                              compute_transactions=compute_transactions,
-                             ai_transactions=ai_transactions)
+                             ai_transactions=ai_transactions,
+                             advertisement_html=advertisement_html)
                              
     except Exception as e:
         logger.error(f"Error loading profile: {e}", exc_info=True)

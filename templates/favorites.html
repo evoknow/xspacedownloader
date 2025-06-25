@@ -39,7 +39,7 @@
 
 {% block content %}
 <div class="row">
-    <div class="col-12">
+    <div class="col-lg-9 col-md-8 col-12">
         <div class="card shadow-sm">
             <div class="card-header bg-warning bg-opacity-10">
                 <div class="d-flex justify-content-between align-items-center">
@@ -191,6 +191,23 @@
                 {% endif %}
             </div>
         </div>
+    </div>
+    
+    <!-- Right Sidebar -->
+    <div class="col-lg-3 col-md-4 col-12">
+        {% if session.get('user_id') and advertisement_html %}
+        <!-- Advertisement Section -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-primary text-white py-2">
+                <h6 class="mb-0"><i class="bi bi-star me-1"></i> For You</h6>
+            </div>
+            <div class="card-body p-2">
+                <div class="advertisement-container">
+                    {{ advertisement_html|safe }}
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 
