@@ -8592,6 +8592,11 @@ def test_ads_routes():
             routes.append(f"{rule.rule} -> {rule.endpoint}")
     return f"Ads routes found: {routes}"
 
+# Simple test route that should always work
+@app.route('/simple-test')
+def simple_test():
+    return "Simple test works!"
+
 # Admin page to manage ads
 @app.route('/admin/ads')
 def admin_ads_page():
