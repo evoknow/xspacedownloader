@@ -8584,10 +8584,14 @@ def admin_update_openai_pricing():
 
 # Admin page to manage ads
 @app.route('/admin/ads')
-@admin_required
 def admin_ads_page():
     """Render the ads management page."""
     try:
+        # Check if user is logged in and is admin
+        if not session.get('user_id') or not session.get('is_admin'):
+            flash('Admin access required.', 'error')
+            return redirect(url_for('index'))
+            
         ads = Ad.get_all_ads()
         ads_list = []
         for ad in ads:
@@ -8610,10 +8614,13 @@ def admin_ads_page():
         return redirect(url_for('admin'))
 
 @app.route('/admin/ads/create', methods=['POST'])
-@admin_required
 def admin_ads_create():
     """Create a new ad."""
     try:
+        # Check if user is logged in and is admin
+        if not session.get('user_id') or not session.get('is_admin'):
+            flash('Admin access required.', 'error')
+            return redirect(url_for('index'))
         ad = Ad()
         ad.copy = request.form.get('copy', '')
         ad.start_date = datetime.strptime(request.form.get('start_date'), '%Y-%m-%d %H:%M:%S')
@@ -8630,10 +8637,13 @@ def admin_ads_create():
     return redirect(url_for('admin_ads_page'))
 
 @app.route('/admin/ads/<int:ad_id>/activate', methods=['POST'])
-@admin_required
 def admin_ads_activate(ad_id):
     """Activate an ad."""
     try:
+        # Check if user is logged in and is admin
+        if not session.get('user_id') or not session.get('is_admin'):
+            flash('Admin access required.', 'error')
+            return redirect(url_for('index'))
         ad = Ad(ad_id)
         ad.activate()
         flash('Advertisement activated!', 'success')
@@ -8644,10 +8654,13 @@ def admin_ads_activate(ad_id):
     return redirect(url_for('admin_ads_page'))
 
 @app.route('/admin/ads/<int:ad_id>/suspend', methods=['POST'])
-@admin_required
 def admin_ads_suspend(ad_id):
     """Suspend an ad."""
     try:
+        # Check if user is logged in and is admin
+        if not session.get('user_id') or not session.get('is_admin'):
+            flash('Admin access required.', 'error')
+            return redirect(url_for('index'))
         ad = Ad(ad_id)
         ad.suspend()
         flash('Advertisement suspended!', 'warning')
@@ -8658,10 +8671,13 @@ def admin_ads_suspend(ad_id):
     return redirect(url_for('admin_ads_page'))
 
 @app.route('/admin/ads/<int:ad_id>/delete', methods=['POST'])
-@admin_required
 def admin_ads_delete(ad_id):
     """Delete an ad."""
     try:
+        # Check if user is logged in and is admin
+        if not session.get('user_id') or not session.get('is_admin'):
+            flash('Admin access required.', 'error')
+            return redirect(url_for('index'))
         ad = Ad(ad_id)
         ad.delete()
         flash('Advertisement deleted!', 'success')
