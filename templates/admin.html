@@ -1068,12 +1068,20 @@
                 <div class="card-body">
                     <h5 class="card-title">System Settings</h5>
                     
-                    <!-- Cache Management Section -->
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h6 class="mb-0"><i class="bi bi-arrow-clockwise"></i> Cache Management</h6>
-                        </div>
-                        <div class="card-body">
+                    <!-- Settings Accordion -->
+                    <div class="accordion" id="settingsAccordion">
+                        
+                        <!-- Cache Management Section -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="cacheHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                        data-bs-target="#cacheCollapse" aria-expanded="false" aria-controls="cacheCollapse">
+                                    <i class="bi bi-arrow-clockwise me-2"></i> Cache Management
+                                </button>
+                            </h2>
+                            <div id="cacheCollapse" class="accordion-collapse collapse" 
+                                 aria-labelledby="cacheHeading" data-bs-parent="#settingsAccordion">
+                                <div class="accordion-body">
                             <p class="mb-3">Manage application caches to ensure fresh data is displayed.</p>
                             
                             <div class="row">
@@ -1106,14 +1114,21 @@
                             </div>
                             
                             <div class="alert alert-info mt-3" style="display: none;" id="cacheMessage"></div>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                    
-                    <!-- Rate Limiting Section -->
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h6 class="mb-0"><i class="bi bi-shield-check"></i> Rate Limiting Configuration</h6>
-                        </div>
+                        
+                        <!-- Rate Limiting Section -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="rateLimitHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                        data-bs-target="#rateLimitCollapse" aria-expanded="false" aria-controls="rateLimitCollapse">
+                                    <i class="bi bi-shield-check me-2"></i> Rate Limiting Configuration
+                                </button>
+                            </h2>
+                            <div id="rateLimitCollapse" class="accordion-collapse collapse" 
+                                 aria-labelledby="rateLimitHeading" data-bs-parent="#settingsAccordion">
+                                <div class="accordion-body">
                         <div class="card-body">
                             <form id="rateLimitForm">
                                 <div class="row mb-3">
@@ -1147,15 +1162,21 @@
                                 </button>
                                 <div class="alert alert-info mt-3" style="display: none;" id="rateLimitMessage"></div>
                             </form>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                    
-                    <!-- Play/Download Tracking Configuration -->
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h6 class="mb-0"><i class="bi bi-graph-up"></i> Play & Download Tracking Configuration</h6>
-                        </div>
-                        <div class="card-body">
+                        
+                        <!-- Play/Download Tracking Configuration -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="trackingHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                        data-bs-target="#trackingCollapse" aria-expanded="false" aria-controls="trackingCollapse">
+                                    <i class="bi bi-graph-up me-2"></i> Play & Download Tracking Configuration
+                                </button>
+                            </h2>
+                            <div id="trackingCollapse" class="accordion-collapse collapse" 
+                                 aria-labelledby="trackingHeading" data-bs-parent="#settingsAccordion">
+                                <div class="accordion-body">
                             <form id="trackingConfigForm">
                                 <!-- Play Tracking Settings -->
                                 <h6 class="text-primary mb-3">Play Tracking Settings</h6>
@@ -1212,14 +1233,21 @@
                                 </button>
                                 <div class="alert alert-info mt-3" style="display: none;" id="trackingConfigMessage"></div>
                             </form>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                    
-                    <!-- Transcription Configuration -->
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h6 class="mb-0"><i class="bi bi-mic"></i> Transcription Configuration</h6>
-                        </div>
+                        
+                        <!-- Transcription Configuration -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="transcriptionHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                        data-bs-target="#transcriptionCollapse" aria-expanded="false" aria-controls="transcriptionCollapse">
+                                    <i class="bi bi-mic me-2"></i> Transcription Configuration
+                                </button>
+                            </h2>
+                            <div id="transcriptionCollapse" class="accordion-collapse collapse" 
+                                 aria-labelledby="transcriptionHeading" data-bs-parent="#settingsAccordion">
+                                <div class="accordion-body">
                         <div class="card-body">
                             <form id="transcriptionConfigForm">
                                 <div class="row mb-3">
@@ -1331,14 +1359,21 @@
                                 </button>
                                 <div class="alert alert-info mt-3" style="display: none;" id="transcriptionConfigMessage"></div>
                             </form>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                    
-                    <!-- Video Generation Branding Configuration -->
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h6 class="mb-0"><i class="bi bi-palette"></i> Video Generation Branding Configuration</h6>
-                        </div>
+                        
+                        <!-- Video Generation Branding Configuration -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="brandingHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                        data-bs-target="#brandingCollapse" aria-expanded="false" aria-controls="brandingCollapse">
+                                    <i class="bi bi-palette me-2"></i> Video Generation Branding Configuration
+                                </button>
+                            </h2>
+                            <div id="brandingCollapse" class="accordion-collapse collapse" 
+                                 aria-labelledby="brandingHeading" data-bs-parent="#settingsAccordion">
+                                <div class="accordion-body">
                         <div class="card-body">
                             <form id="brandingConfigForm">
                                 <div class="row mb-3">
@@ -1456,14 +1491,21 @@
                                 </button>
                                 <div class="alert alert-info mt-3" style="display: none;" id="brandingConfigMessage"></div>
                             </form>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                    
-                    <!-- Service Settings Section -->
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h6 class="mb-0"><i class="bi bi-toggles2"></i> Service Settings</h6>
-                        </div>
+                        
+                        <!-- Service Settings Section -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="serviceHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                        data-bs-target="#serviceCollapse" aria-expanded="false" aria-controls="serviceCollapse">
+                                    <i class="bi bi-toggles2 me-2"></i> Service Settings
+                                </button>
+                            </h2>
+                            <div id="serviceCollapse" class="accordion-collapse collapse" 
+                                 aria-labelledby="serviceHeading" data-bs-parent="#settingsAccordion">
+                                <div class="accordion-body">
                         <div class="card-body">
                             <p class="mb-3">Control which services are available to users.</p>
                             <form id="serviceSettingsForm">
@@ -1496,22 +1538,32 @@
                                 </button>
                                 <div class="alert alert-info mt-3" style="display: none;" id="serviceSettingsMessage"></div>
                             </form>
-                        </div>
-                    </div>
-                    
-                    <!-- System Messages Section -->
-                    <div class="card mb-4">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <h6 class="mb-0"><i class="bi bi-megaphone"></i> System Messages</h6>
-                            <div>
-                                <button type="button" class="btn btn-secondary btn-sm me-2" onclick="loadSystemMessages()">
-                                    <i class="bi bi-arrow-clockwise"></i> Refresh
-                                </button>
-                                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addSystemMessageModal">
-                                    <i class="bi bi-plus"></i> Add Message
-                                </button>
+                                </div>
                             </div>
                         </div>
+                        
+                        <!-- System Messages Section -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="messagesHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                        data-bs-target="#messagesCollapse" aria-expanded="false" aria-controls="messagesCollapse">
+                                    <i class="bi bi-megaphone me-2"></i> System Messages
+                                </button>
+                            </h2>
+                            <div id="messagesCollapse" class="accordion-collapse collapse" 
+                                 aria-labelledby="messagesHeading" data-bs-parent="#settingsAccordion">
+                                <div class="accordion-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <span></span>
+                                        <div>
+                                            <button type="button" class="btn btn-secondary btn-sm me-2" onclick="loadSystemMessages()">
+                                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                                            </button>
+                                            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addSystemMessageModal">
+                                                <i class="bi bi-plus"></i> Add Message
+                                            </button>
+                                        </div>
+                                    </div>
                         <div class="card-body">
                             <p class="mb-3">Manage system-wide messages that appear to all users.</p>
                             <div id="systemMessagesTable">
@@ -1523,9 +1575,11 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
-                    
-                    <!-- Other settings can be added here -->
+                                </div>
+                            </div>
+                        </div>
+                        
+                    </div> <!-- End of settingsAccordion -->
                 </div>
             </div>
         </div>
