@@ -265,6 +265,22 @@ function initializeLogs() {
     }
 }
 
+// Expose functions globally for dynamic loading
+window.logsTabFunctions = {
+    initializeLogs,
+    loadLogs,
+    refreshLogs,
+    clearLogs,
+    toggleAutoScroll,
+    toggleLogStreaming,
+    filterLogs,
+    resetFilters
+};
+
+// Make main functions available globally
+window.initializeLogs = initializeLogs;
+window.loadLogs = loadLogs;
+
 // Initialize immediately if DOM is ready, or wait for it
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initializeLogs);

@@ -6169,7 +6169,9 @@ function loadTabContent(tabId, templateUrl) {
         // Make sure the tab pane is visible
         ensureTabPaneVisible(tabId);
         // Trigger initialization for already loaded content
-        initializeTabContent(tabId);
+        setTimeout(() => {
+            initializeTabContent(tabId);
+        }, 100);
         return;
     }
     
@@ -6204,10 +6206,10 @@ function loadTabContent(tabId, templateUrl) {
             // Ensure tab pane is visible
             ensureTabPaneVisible(tabId);
             
-            // Initialize the loaded content
+            // Initialize the loaded content after ensuring visibility
             setTimeout(() => {
                 initializeTabContent(tabId);
-            }, 100);
+            }, 200);
         })
         .catch(error => {
             console.error(`Error loading tab ${tabId}:`, error);
@@ -6230,6 +6232,17 @@ function ensureTabPaneVisible(tabId) {
             console.log(`Making tab pane ${tabId} visible`);
             tabPane.classList.add('show', 'active');
         }
+        
+        // Also ensure the parent tab content container is visible
+        const tabContent = tabPane.closest('.tab-content');
+        if (tabContent) {
+            tabContent.style.display = 'block';
+        }
+        
+        console.log(`Tab pane ${tabId} classes:`, tabPane.className);
+        console.log(`Tab pane ${tabId} computed display:`, window.getComputedStyle(tabPane).display);
+    } else {
+        console.error(`Tab pane with ID '${tabId}' not found`);
     }
 }
 

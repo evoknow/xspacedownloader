@@ -263,6 +263,20 @@ function stopProcess(processName) {
     }
 }
 
+// Expose functions globally for dynamic loading
+window.systemStatusTabFunctions = {
+    loadSystemStatus,
+    displaySystemStatus,
+    generateProcessRows,
+    toggleAutoRefresh,
+    restartProcess,
+    stopProcess
+};
+
+// Make main functions available globally
+window.loadSystemStatus = loadSystemStatus;
+window.displaySystemStatus = displaySystemStatus;
+
 // Initialize when tab is loaded
 document.addEventListener('DOMContentLoaded', function() {
     loadSystemStatus();

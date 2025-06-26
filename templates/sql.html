@@ -365,11 +365,30 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Expose functions globally for dynamic loading
+window.sqlTabFunctions = {
+    loadSQLTab,
+    checkSQLLoggingStatus,
+    toggleSQLLogging,
+    refreshSQLLogs,
+    clearSQLLogs,
+    applySQLFilters,
+    clearSQLFilters
+};
+
+// Make main functions available globally
+window.loadSQLTab = loadSQLTab;
+window.checkSQLLoggingStatus = checkSQLLoggingStatus;
+
 // Add event listeners for filters
 document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('sqlComponentFilter').addEventListener('change', applySQLFilters);
-    document.getElementById('sqlStatusFilter').addEventListener('change', applySQLFilters);
-    document.getElementById('sqlSearchFilter').addEventListener('input', applySQLFilters);
+    const componentFilter = document.getElementById('sqlComponentFilter');
+    const statusFilter = document.getElementById('sqlStatusFilter');
+    const searchFilter = document.getElementById('sqlSearchFilter');
+    
+    if (componentFilter) componentFilter.addEventListener('change', applySQLFilters);
+    if (statusFilter) statusFilter.addEventListener('change', applySQLFilters);
+    if (searchFilter) searchFilter.addEventListener('input', applySQLFilters);
     
     // Initialize
     loadSQLTab();
