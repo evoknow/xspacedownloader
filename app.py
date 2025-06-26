@@ -8053,11 +8053,131 @@ def admin_system_status():
         return jsonify({'error': 'Unauthorized'}), 403
     
     try:
-        if not SYSTEM_STATUS_AVAILABLE:
-            return jsonify({'error': 'SystemStatus component not available'}), 500
+        import psutil
+        import os
+        import time
+        from datetime import datetime
         
-        status = system_status.get_comprehensive_status()
-        return jsonify(status)
+        # Get CPU usage
+        cpu_usage = round(psutil.cpu_percent(interval=1), 1)
+        
+        # Get memory usage
+        memory = psutil.virtual_memory()
+        memory_usage = round(memory.percent, 1)
+        
+        # Get disk usage
+        disk = psutil.disk_usage('/')
+        disk_usage = round((disk.used / disk.total) * 100, 1)
+        
+        # Get uptime
+        boot_time = psutil.boot_time()
+        uptime_seconds = time.time() - boot_time
+        if uptime_seconds < 3600:
+            uptime = f"{int(uptime_seconds / 60)}m"
+        elif uptime_seconds < 86400:
+            uptime = f"{int(uptime_seconds / 3600)}h {int((uptime_seconds % 3600) / 60)}m"
+        else:
+            days = int(uptime_seconds / 86400)
+            hours = int((uptime_seconds % 86400) / 3600)
+            uptime = f"{days}d {hours}h"
+        
+        # Get system info
+        os_info = f"{os.uname().sysname} {os.uname().release}"
+        python_version = f"{os.sys.version_info.major}.{os.sys.version_info.minor}.{os.sys.version_info.micro}"
+        
+        # Get Flask version
+        try:
+            import flask
+            flask_version = flask.__version__
+        except:
+            flask_version = "Unknown"
+        
+        # Get load average
+        try:
+            load_avg = os.getloadavg()
+            load_average = f"{load_avg[0]:.2f}, {load_avg[1]:.2f}, {load_avg[2]:.2f}"
+        except:
+            load_average = "N/A"
+        
+        # Get current time
+        server_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Check database connection
+        db_status = "Unknown"
+        db_connections = "N/A"
+        db_queries = "N/A"
+        cache_hit_rate = "N/A"
+        
+        try:
+            space = get_space_component()
+            if space and space.connection:
+                db_status = "Connected"
+                # Try to get some basic stats
+                cursor = space.connection.cursor(dictionary=True)
+                cursor.execute("SHOW STATUS LIKE 'Threads_connected'")
+                result = cursor.fetchone()
+                if result:
+                    db_connections = result['Value']
+                
+                cursor.execute("SHOW STATUS LIKE 'Queries'")
+                result = cursor.fetchone()
+                if result:
+                    db_queries = result['Value']
+                    
+                cursor.close()
+        except Exception as e:
+            logger.warning(f"Could not get database status: {e}")
+            db_status = "Error"
+        
+        # Get background processes
+        processes = []
+        process_names = ['background_transcribe.py', 'background_translate.py', 'bg_downloader.py', 'bg_progress_watcher.py']
+        
+        for proc_name in process_names:
+            found = False
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'create_time', 'memory_info', 'cpu_percent']):
+                try:
+                    cmdline = ' '.join(proc.info['cmdline'] or [])
+                    if proc_name in cmdline:
+                        processes.append({
+                            'name': proc_name.replace('.py', '').replace('_', ' ').title(),
+                            'status': 'running',
+                            'pid': proc.info['pid'],
+                            'cpu': round(proc.info['cpu_percent'], 1),
+                            'memory': round(proc.info['memory_info'].rss / 1024 / 1024, 1),
+                            'started': datetime.fromtimestamp(proc.info['create_time']).strftime('%Y-%m-%d %H:%M:%S')
+                        })
+                        found = True
+                        break
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            
+            if not found:
+                processes.append({
+                    'name': proc_name.replace('.py', '').replace('_', ' ').title(),
+                    'status': 'stopped',
+                    'pid': 'N/A',
+                    'cpu': 'N/A',
+                    'memory': 'N/A',
+                    'started': 'N/A'
+                })
+        
+        return jsonify({
+            'cpu_usage': cpu_usage,
+            'memory_usage': memory_usage,
+            'disk_usage': disk_usage,
+            'uptime': uptime,
+            'os_info': os_info,
+            'python_version': python_version,
+            'flask_version': flask_version,
+            'server_time': server_time,
+            'load_average': load_average,
+            'db_status': db_status,
+            'db_connections': db_connections,
+            'db_queries': db_queries,
+            'cache_hit_rate': cache_hit_rate,
+            'processes': processes
+        })
         
     except Exception as e:
         logger.error(f"Error getting system status: {e}", exc_info=True)
