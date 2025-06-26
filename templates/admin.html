@@ -6244,6 +6244,25 @@ window.forceFixLogs = function() {
     }
 };
 
+// Simple test to show something in the logs tab
+window.testLogsTab = function() {
+    const logsContent = document.getElementById('logsContent');
+    if (logsContent) {
+        logsContent.innerHTML = `
+            <div style="background: red; color: white; padding: 20px; border: 5px solid yellow; font-size: 20px; font-weight: bold;">
+                TEST: If you can see this, the tab loading works!
+                <br>Current time: ${new Date().toLocaleString()}
+                <br>Tab is visible and functional.
+            </div>
+        `;
+        console.log('Test content added to logsContent');
+        return true;
+    } else {
+        console.error('logsContent div not found');
+        return false;
+    }
+};
+
 function loadTabContent(tabId, templateUrl) {
     console.log(`Loading tab content for: ${tabId} from ${templateUrl}`);
     
