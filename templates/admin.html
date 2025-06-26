@@ -6263,6 +6263,50 @@ window.testLogsTab = function() {
     }
 };
 
+// Full DOM structure debugging
+window.debugTabStructure = function() {
+    console.log('=== Full Tab Structure Debug ===');
+    
+    const logsTab = document.getElementById('logs');
+    const logsContent = document.getElementById('logsContent');
+    const logContainer = document.getElementById('logContainer');
+    const adminTabs = document.getElementById('adminTabs');
+    
+    console.log('Admin tabs container:', adminTabs);
+    console.log('Logs tab pane:', logsTab);
+    console.log('Logs content div:', logsContent);
+    console.log('Log container:', logContainer);
+    
+    if (logsTab) {
+        console.log('Logs tab pane HTML length:', logsTab.innerHTML.length);
+        console.log('Logs tab pane classes:', logsTab.className);
+        console.log('Logs tab pane offsetHeight:', logsTab.offsetHeight);
+        console.log('Logs tab pane scrollHeight:', logsTab.scrollHeight);
+        
+        // Check if tab pane is actually visible
+        const rect = logsTab.getBoundingClientRect();
+        console.log('Logs tab pane bounding rect:', rect);
+        console.log('Logs tab pane on screen:', rect.width > 0 && rect.height > 0);
+    }
+    
+    if (logsContent) {
+        console.log('Logs content HTML length:', logsContent.innerHTML.length);
+        console.log('Logs content offsetHeight:', logsContent.offsetHeight);
+        console.log('Logs content scrollHeight:', logsContent.scrollHeight);
+        
+        const rect = logsContent.getBoundingClientRect();
+        console.log('Logs content bounding rect:', rect);
+        console.log('Logs content on screen:', rect.width > 0 && rect.height > 0);
+    }
+    
+    // Check what's currently active
+    const activeTab = document.querySelector('#adminTabs .nav-link.active');
+    const activePane = document.querySelector('.tab-pane.active.show');
+    
+    console.log('Currently active tab button:', activeTab ? activeTab.id : 'none');
+    console.log('Currently active tab pane:', activePane ? activePane.id : 'none');
+};
+
 function loadTabContent(tabId, templateUrl) {
     console.log(`Loading tab content for: ${tabId} from ${templateUrl}`);
     
