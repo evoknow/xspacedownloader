@@ -102,20 +102,39 @@ let autoScroll = true;
 let logStreamingActive = false;
 
 function loadLogs() {
+    console.log('loadLogs() called, logStreamingActive:', logStreamingActive);
+    
+    // Check if logContainer exists
+    const logContainer = document.getElementById('logContainer');
+    console.log('logContainer found:', !!logContainer, logContainer);
+    
     if (!logStreamingActive) {
+        console.log('Fetching logs from /admin/api/logs?offset=0');
         fetch('/admin/api/logs?offset=0')
-            .then(response => response.json())
+            .then(response => {
+                console.log('Logs API response:', response.status, response.statusText);
+                return response.json();
+            })
             .then(data => {
+                console.log('Logs data received:', data);
                 if (data.logs) {
+                    console.log('Calling displayLogs with', data.logs.length, 'logs');
                     displayLogs(data.logs);
                 } else {
-                    console.error('No logs data received');
+                    console.error('No logs data received', data);
                 }
             })
             .catch(error => {
                 console.error('Error loading logs:', error);
-                document.getElementById('logContainer').innerHTML = '<div class="text-danger text-center mt-5"><i class="bi bi-exclamation-triangle"></i><p>Error loading logs: ' + error.message + '</p></div>';
+                const container = document.getElementById('logContainer');
+                if (container) {
+                    container.innerHTML = '<div class="text-danger text-center mt-5"><i class="bi bi-exclamation-triangle"></i><p>Error loading logs: ' + error.message + '</p></div>';
+                } else {
+                    console.error('logContainer not found for error display');
+                }
             });
+    } else {
+        console.log('Log streaming is active, skipping loadLogs');
     }
 }
 
@@ -132,22 +151,33 @@ function clearLogs() {
 
 function displayLogs(logs) {
     try {
+        console.log('displayLogs called with', logs.length, 'logs');
         const container = document.getElementById('logContainer');
+        console.log('logContainer in displayLogs:', !!container, container);
+        
         if (!container) {
-            console.error('logContainer not found');
+            console.error('logContainer not found in displayLogs');
             return;
         }
         
+        console.log('Clearing container and adding logs...');
         container.innerHTML = '';
         
-        logs.forEach(log => {
-            const logLine = document.createElement('div');
-            logLine.className = 'log-line';
-            logLine.innerHTML = formatLogLine(log);
-            container.appendChild(logLine);
-        });
+        if (logs.length === 0) {
+            container.innerHTML = '<div class="text-muted text-center mt-5"><i class="bi bi-file-text" style="font-size: 2rem;"></i><p>No logs available</p></div>';
+            console.log('No logs to display, showing empty message');
+        } else {
+            logs.forEach((log, index) => {
+                const logLine = document.createElement('div');
+                logLine.className = 'log-line';
+                logLine.innerHTML = formatLogLine(log);
+                container.appendChild(logLine);
+                console.log(`Added log line ${index + 1}/${logs.length}`);
+            });
+        }
         
         const logCountEl = document.getElementById('logCount');
+        console.log('logCount element:', !!logCountEl, logCountEl);
         if (logCountEl) {
             logCountEl.textContent = logs.length + ' lines';
         }
@@ -155,6 +185,8 @@ function displayLogs(logs) {
         if (autoScroll && container) {
             container.scrollTop = container.scrollHeight;
         }
+        
+        console.log('displayLogs completed successfully');
     } catch (error) {
         console.error('Error in displayLogs:', error);
     }
