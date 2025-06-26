@@ -6241,26 +6241,48 @@ function initializeTabContent(tabId) {
         switch(tabId) {
             case 'logs':
                 // Initialize logs functionality
-                if (typeof initializeLogs === 'function') {
-                    console.log('Calling initializeLogs()');
-                    initializeLogs();
-                } else if (typeof loadLogs === 'function') {
-                    console.log('Calling loadLogs()');
-                    loadLogs();
+                console.log('Checking for logs initialization functions...');
+                if (typeof window.initializeLogs === 'function') {
+                    console.log('Calling window.initializeLogs()');
+                    window.initializeLogs();
+                } else if (typeof window.loadLogs === 'function') {
+                    console.log('Calling window.loadLogs()');
+                    window.loadLogs();
+                } else {
+                    console.log('No logs initialization function found, trying direct call...');
+                    // Try to trigger the logs script initialization manually
+                    const scripts = document.querySelectorAll('#logsContent script');
+                    if (scripts.length > 0) {
+                        console.log(`Found ${scripts.length} script(s) in logs content, executing...`);
+                        scripts.forEach((script, index) => {
+                            try {
+                                eval(script.textContent);
+                                console.log(`Executed script ${index + 1}`);
+                            } catch (e) {
+                                console.warn(`Error executing script ${index + 1}:`, e);
+                            }
+                        });
+                    }
                 }
                 break;
             case 'sql':
                 // Initialize SQL functionality
-                if (typeof loadSQLTab === 'function') {
-                    console.log('Calling loadSQLTab()');
-                    loadSQLTab();
+                console.log('Checking for SQL initialization functions...');
+                if (typeof window.loadSQLTab === 'function') {
+                    console.log('Calling window.loadSQLTab()');
+                    window.loadSQLTab();
+                } else {
+                    console.log('loadSQLTab function not found');
                 }
                 break;
             case 'status':
                 // Initialize system status functionality
-                if (typeof loadSystemStatus === 'function') {
-                    console.log('Calling loadSystemStatus()');
-                    loadSystemStatus();
+                console.log('Checking for status initialization functions...');
+                if (typeof window.loadSystemStatus === 'function') {
+                    console.log('Calling window.loadSystemStatus()');
+                    window.loadSystemStatus();
+                } else {
+                    console.log('loadSystemStatus function not found');
                 }
                 break;
         }
@@ -6287,21 +6309,12 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log(`Checking for button: ${buttonId}`, button);
         
         if (button) {
+            // Only use the shown.bs.tab event - this is the proper Bootstrap event
             button.addEventListener('shown.bs.tab', function(event) {
                 console.log(`Tab event fired for: ${buttonId}`, event);
                 const config = tabButtons[buttonId];
                 console.log(`Loading config:`, config);
                 loadTabContent(config.tabId, config.url);
-            });
-            
-            // Also add click event as backup
-            button.addEventListener('click', function(event) {
-                console.log(`Tab clicked: ${buttonId}`, event);
-                // Small delay to ensure tab is shown
-                setTimeout(() => {
-                    const config = tabButtons[buttonId];
-                    loadTabContent(config.tabId, config.url);
-                }, 100);
             });
             
             console.log(`Event listeners added for: ${buttonId}`);
