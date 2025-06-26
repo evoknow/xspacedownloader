@@ -6079,16 +6079,43 @@ document.addEventListener('DOMContentLoaded', function() {
 // Dynamic tab loading
 const loadedTabs = new Set();
 
+// Debug function to force reload a tab
+window.forceReloadTab = function(tabId) {
+    console.log(`Force reloading tab: ${tabId}`);
+    loadedTabs.delete(tabId);
+    const contentDiv = document.getElementById(tabId + 'Content');
+    if (contentDiv) {
+        contentDiv.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Loading...</p></div>';
+    }
+    
+    const urls = {
+        'logs': '/admin/templates/logs',
+        'sql': '/admin/templates/sql', 
+        'status': '/admin/templates/system-status'
+    };
+    
+    if (urls[tabId]) {
+        loadTabContent(tabId, urls[tabId]);
+    }
+};
+
 function loadTabContent(tabId, templateUrl) {
     console.log(`Loading tab content for: ${tabId} from ${templateUrl}`);
     
-    if (loadedTabs.has(tabId)) {
-        console.log(`Tab ${tabId} already loaded, skipping`);
-        return; // Already loaded
-    }
-    
     const contentDivId = tabId + 'Content';
     const contentDiv = document.getElementById(contentDivId);
+    
+    // Check if already loaded AND content still exists
+    if (loadedTabs.has(tabId) && contentDiv && contentDiv.innerHTML.includes('card')) {
+        console.log(`Tab ${tabId} already loaded and content exists, skipping`);
+        return; // Already loaded and content is present
+    }
+    
+    if (loadedTabs.has(tabId)) {
+        console.log(`Tab ${tabId} was marked as loaded but content missing, reloading...`);
+        loadedTabs.delete(tabId); // Remove from loaded set so we can reload
+    }
+    
     console.log(`Looking for content div: ${contentDivId}`, contentDiv);
     
     if (!contentDiv) {
