@@ -6748,11 +6748,13 @@ def faq():
     """Display the FAQ page."""
     # Load advertisement for logged in users
     advertisement_html = None
+    advertisement_bg = '#ffffff'
     if session.get('user_id'):
         try:
             ad = Ad.get_active_ad()
             if ad and ad.copy:
                 advertisement_html = ad.copy
+                advertisement_bg = ad.background_color or '#ffffff'
         except Exception as e:
             logger.warning(f"Error loading advertisement: {e}")
     
@@ -8853,11 +8855,13 @@ def about():
     """Display the About page."""
     # Load advertisement for logged in users
     advertisement_html = None
+    advertisement_bg = '#ffffff'
     if session.get('user_id'):
         try:
             ad = Ad.get_active_ad()
             if ad and ad.copy:
                 advertisement_html = ad.copy
+                advertisement_bg = ad.background_color or '#ffffff'
         except Exception as e:
             logger.warning(f"Error loading advertisement: {e}")
     
