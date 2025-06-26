@@ -304,40 +304,14 @@ document.addEventListener('DOMContentLoaded', function() {
         createEndDate.value = defaultEnd.toISOString().slice(0, 16);
     }
     
-    // Convert datetime-local to MySQL format on form submit
-    const createForm = document.querySelector('form[action*="admin_ads_create"]');
-    if (createForm) {
-        createForm.addEventListener('submit', function(e) {
-            // Convert datetime-local format to MySQL datetime format
-            if (createStartDate.value) {
-                let dateTimeValue = createStartDate.value;
-                if (dateTimeValue.includes('T')) {
-                    dateTimeValue = dateTimeValue.replace('T', ' ');
-                    // Add seconds if not present
-                    if (dateTimeValue.length === 16) {
-                        dateTimeValue += ':00';
-                    }
-                }
-                createStartDate.value = dateTimeValue;
-            }
-            if (createEndDate.value) {
-                let dateTimeValue = createEndDate.value;
-                if (dateTimeValue.includes('T')) {
-                    dateTimeValue = dateTimeValue.replace('T', ' ');
-                    // Add seconds if not present
-                    if (dateTimeValue.length === 16) {
-                        dateTimeValue += ':00';
-                    }
-                }
-                createEndDate.value = dateTimeValue;
-            }
-        });
-    }
+    // No need to convert datetime format - backend handles it now
     
     // Handle edit forms
-    const editForms = document.querySelectorAll('form[action*="admin/ads"][action*="edit"]');
+    const editForms = document.querySelectorAll('form[action*="/edit"]');
     editForms.forEach(form => {
-        const adId = form.action.match(/\/admin\/ads\/(\d+)\/edit/)[1];
+        const actionMatch = form.action.match(/\/admin\/ads\/(\d+)\/edit/);
+        if (!actionMatch) return;
+        const adId = actionMatch[1];
         const editStartDate = document.getElementById(`edit_start_date_${adId}`);
         const editEndDate = document.getElementById(`edit_end_date_${adId}`);
         
@@ -354,33 +328,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
             
-            // Convert on submit
-            form.addEventListener('submit', function(e) {
-                if (editStartDate.value) {
-                    // Convert from datetime-local format (YYYY-MM-DDTHH:MM) to MySQL format (YYYY-MM-DD HH:MM:SS)
-                    let dateTimeValue = editStartDate.value;
-                    if (dateTimeValue.includes('T')) {
-                        dateTimeValue = dateTimeValue.replace('T', ' ');
-                        // Add seconds if not present
-                        if (dateTimeValue.length === 16) {
-                            dateTimeValue += ':00';
-                        }
-                    }
-                    editStartDate.value = dateTimeValue;
-                }
-                if (editEndDate.value) {
-                    // Convert from datetime-local format (YYYY-MM-DDTHH:MM) to MySQL format (YYYY-MM-DD HH:MM:SS)
-                    let dateTimeValue = editEndDate.value;
-                    if (dateTimeValue.includes('T')) {
-                        dateTimeValue = dateTimeValue.replace('T', ' ');
-                        // Add seconds if not present
-                        if (dateTimeValue.length === 16) {
-                            dateTimeValue += ':00';
-                        }
-                    }
-                    editEndDate.value = dateTimeValue;
-                }
-            });
+            // No need to convert - backend handles multiple formats
         }
     });
 });
