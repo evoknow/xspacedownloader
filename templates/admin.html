@@ -6157,6 +6157,93 @@ window.fixTabVisibility = function(tabId) {
     }
 };
 
+// Debug CSS styles for logs specifically
+window.debugLogsCSS = function() {
+    const logContainer = document.getElementById('logContainer');
+    const logsContent = document.getElementById('logsContent');
+    const logsTabPane = document.getElementById('logs');
+    
+    console.log('=== CSS Debug for Logs ===');
+    
+    if (logContainer) {
+        const style = window.getComputedStyle(logContainer);
+        console.log('logContainer computed styles:');
+        console.log('  display:', style.display);
+        console.log('  visibility:', style.visibility);
+        console.log('  opacity:', style.opacity);
+        console.log('  height:', style.height);
+        console.log('  background-color:', style.backgroundColor);
+        console.log('  color:', style.color);
+        console.log('  z-index:', style.zIndex);
+        console.log('  position:', style.position);
+        console.log('  overflow:', style.overflow);
+        console.log('  innerHTML length:', logContainer.innerHTML.length);
+        console.log('  scrollHeight:', logContainer.scrollHeight);
+        console.log('  clientHeight:', logContainer.clientHeight);
+        console.log('  children count:', logContainer.children.length);
+        
+        // Check if any log lines exist
+        const logLines = logContainer.querySelectorAll('.log-line');
+        console.log('  log-line elements:', logLines.length);
+        if (logLines.length > 0) {
+            const firstLine = logLines[0];
+            const lineStyle = window.getComputedStyle(firstLine);
+            console.log('  first log-line styles:');
+            console.log('    display:', lineStyle.display);
+            console.log('    visibility:', lineStyle.visibility);
+            console.log('    color:', lineStyle.color);
+            console.log('    innerHTML:', firstLine.innerHTML);
+        }
+    }
+    
+    if (logsContent) {
+        const style = window.getComputedStyle(logsContent);
+        console.log('logsContent computed styles:');
+        console.log('  display:', style.display);
+        console.log('  visibility:', style.visibility);
+        console.log('  opacity:', style.opacity);
+    }
+    
+    if (logsTabPane) {
+        const style = window.getComputedStyle(logsTabPane);
+        console.log('logs tab pane computed styles:');
+        console.log('  display:', style.display);
+        console.log('  visibility:', style.visibility);
+        console.log('  opacity:', style.opacity);
+    }
+};
+
+// Force fix logs visibility with contrast
+window.forceFixLogs = function() {
+    const logContainer = document.getElementById('logContainer');
+    if (logContainer) {
+        // Force visibility and contrast
+        logContainer.style.display = 'block';
+        logContainer.style.visibility = 'visible';
+        logContainer.style.opacity = '1';
+        logContainer.style.backgroundColor = '#000000';  // Black background
+        logContainer.style.color = '#ffffff';            // White text
+        logContainer.style.border = '2px solid red';     // Debug border
+        logContainer.style.minHeight = '200px';
+        logContainer.style.padding = '10px';
+        
+        // Force all log lines to be visible
+        const logLines = logContainer.querySelectorAll('.log-line');
+        logLines.forEach(line => {
+            line.style.display = 'block';
+            line.style.visibility = 'visible';
+            line.style.color = '#ffffff';
+            line.style.backgroundColor = '#333333';
+            line.style.padding = '5px';
+            line.style.margin = '2px 0';
+            line.style.border = '1px solid yellow';  // Debug border
+        });
+        
+        console.log('Applied force fix to logs with', logLines.length, 'lines');
+        return logContainer;
+    }
+};
+
 function loadTabContent(tabId, templateUrl) {
     console.log(`Loading tab content for: ${tabId} from ${templateUrl}`);
     
