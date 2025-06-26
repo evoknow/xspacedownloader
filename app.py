@@ -6487,9 +6487,11 @@ def admin_get_system_stats():
                 gpu_utilization = gpu_info['utilization'].gpu
                 gpu_name = gpu_info['name']
                 
-        except (ImportError, Exception) as e:
-            if "ImportError" not in str(type(e)):
-                logger.warning(f"Error getting NVIDIA GPU info: {e}")
+        except ImportError:
+            # pynvml not installed - this is fine, not all systems have NVIDIA GPUs
+            pass
+        except Exception as e:
+            logger.warning(f"Error getting NVIDIA GPU info: {e}")
         
         # If no NVIDIA GPU found, try Apple Silicon or other methods
         if not gpu_info:
