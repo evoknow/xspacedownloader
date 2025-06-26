@@ -5119,6 +5119,28 @@ def admin_dashboard():
         flash('An error occurred loading the admin dashboard.', 'error')
         return redirect(url_for('index'))
 
+# Admin template routes for dynamic loading
+@app.route('/admin/templates/logs')
+def admin_logs_template():
+    """Serve the logs template for dynamic loading."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return 'Unauthorized', 403
+    return render_template('logs.html')
+
+@app.route('/admin/templates/sql')
+def admin_sql_template():
+    """Serve the SQL template for dynamic loading."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return 'Unauthorized', 403
+    return render_template('sql.html')
+
+@app.route('/admin/templates/system-status')
+def admin_system_status_template():
+    """Serve the system status template for dynamic loading."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return 'Unauthorized', 403
+    return render_template('system-status.html')
+
 # Admin API routes for AJAX operations
 @app.route('/admin/api/users')
 def admin_get_users():

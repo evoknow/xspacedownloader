@@ -1,0 +1,377 @@
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+            <h5 class="mb-0"><i class="bi bi-database"></i> SQL Query Logs</h5>
+            <small class="text-muted">Monitor database query performance and execution</small>
+        </div>
+        <div class="btn-group" role="group">
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleSQLLogging()">
+                <i class="bi bi-power" id="sqlToggleIcon"></i> <span id="sqlToggleText">Enable</span>
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="refreshSQLLogs()">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger" onclick="clearSQLLogs()">
+                <i class="bi bi-trash"></i> Clear
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-info" onclick="copySQLLogs()">
+                <i class="bi bi-clipboard"></i> Copy All
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <!-- SQL Logging Status -->
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <div class="d-flex align-items-center">
+                    <span class="me-2">Status:</span>
+                    <span class="badge" id="sqlLogStatus">Checking...</span>
+                </div>
+            </div>
+            <div class="col-md-6 text-end">
+                <small class="text-muted">
+                    Showing last <span id="sqlLogCount">0</span> queries
+                </small>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="row mb-3">
+            <div class="col-md-3">
+                <select class="form-select form-select-sm" id="sqlComponentFilter">
+                    <option value="">All Components</option>
+                    <option value="Space">Space</option>
+                    <option value="User">User</option>
+                    <option value="Tag">Tag</option>
+                    <option value="DatabaseManager">DatabaseManager</option>
+                    <option value="DownloadSpace">DownloadSpace</option>
+                    <option value="SpeechToText">SpeechToText</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select form-select-sm" id="sqlStatusFilter">
+                    <option value="">All Status</option>
+                    <option value="SUCCESS">Success</option>
+                    <option value="ERROR">Error</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <input type="text" class="form-control form-control-sm" id="sqlSearchFilter" 
+                       placeholder="Search queries...">
+            </div>
+            <div class="col-md-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary w-100" onclick="clearSQLFilters()">
+                    <i class="bi bi-x-circle"></i> Clear
+                </button>
+            </div>
+        </div>
+
+        <!-- SQL Query Display -->
+        <div class="border rounded" style="background-color: #1e1e1e; color: #d4d4d4; height: 500px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.875rem;">
+            <div id="sqlContainer" class="p-3">
+                <div class="text-center text-muted">
+                    <i class="bi bi-database fs-1"></i>
+                    <p class="mt-2">SQL query logs will appear here when logging is enabled.</p>
+                    <p class="small">Enable SQL logging to monitor database performance.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- SQL Query Statistics -->
+        <div class="row mt-3">
+            <div class="col-md-3">
+                <small class="text-muted">
+                    <i class="bi bi-clock"></i> Avg Time: 
+                    <span id="sqlAvgTime">-</span>ms
+                </small>
+            </div>
+            <div class="col-md-3">
+                <small class="text-muted">
+                    <i class="bi bi-lightning"></i> Fastest: 
+                    <span id="sqlFastestTime">-</span>ms
+                </small>
+            </div>
+            <div class="col-md-3">
+                <small class="text-muted">
+                    <i class="bi bi-hourglass"></i> Slowest: 
+                    <span id="sqlSlowestTime">-</span>ms
+                </small>
+            </div>
+            <div class="col-md-3">
+                <small class="text-muted">
+                    <i class="bi bi-exclamation-triangle"></i> Errors: 
+                    <span id="sqlErrorCount">-</span>
+                </small>
+            </div>
+        </div>
+
+        <!-- Performance Warning -->
+        <div class="alert alert-warning mt-3" style="display: none;" id="sqlPerformanceWarning">
+            <i class="bi bi-exclamation-triangle"></i>
+            <strong>Performance Impact:</strong> SQL logging may impact database performance. 
+            Disable logging in production environments when not needed for debugging.
+        </div>
+    </div>
+</div>
+
+<script>
+// SQL Tab JavaScript
+let sqlLogsPolling;
+let sqlLoggingEnabled = false;
+
+function loadSQLTab() {
+    checkSQLLoggingStatus();
+    if (sqlLoggingEnabled) {
+        refreshSQLLogs();
+    }
+}
+
+function checkSQLLoggingStatus() {
+    fetch('/admin/api/sql_logging_status')
+        .then(response => response.json())
+        .then(data => {
+            sqlLoggingEnabled = data.enabled;
+            updateSQLLoggingUI();
+        })
+        .catch(error => {
+            console.error('Error checking SQL logging status:', error);
+            document.getElementById('sqlLogStatus').textContent = 'Error';
+            document.getElementById('sqlLogStatus').className = 'badge bg-danger';
+        });
+}
+
+function updateSQLLoggingUI() {
+    const statusBadge = document.getElementById('sqlLogStatus');
+    const toggleText = document.getElementById('sqlToggleText');
+    const toggleIcon = document.getElementById('sqlToggleIcon');
+    const warningAlert = document.getElementById('sqlPerformanceWarning');
+    
+    if (sqlLoggingEnabled) {
+        statusBadge.textContent = 'Enabled';
+        statusBadge.className = 'badge bg-success';
+        toggleText.textContent = 'Disable';
+        toggleIcon.className = 'bi bi-power text-danger';
+        warningAlert.style.display = 'block';
+    } else {
+        statusBadge.textContent = 'Disabled';
+        statusBadge.className = 'badge bg-secondary';
+        toggleText.textContent = 'Enable';
+        toggleIcon.className = 'bi bi-power text-success';
+        warningAlert.style.display = 'none';
+    }
+}
+
+function toggleSQLLogging() {
+    const newState = !sqlLoggingEnabled;
+    
+    fetch('/admin/api/toggle_sql_logging', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({enabled: newState})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            sqlLoggingEnabled = newState;
+            updateSQLLoggingUI();
+            if (sqlLoggingEnabled) {
+                refreshSQLLogs();
+            } else {
+                clearSQLDisplay();
+            }
+        } else {
+            alert('Failed to toggle SQL logging: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error toggling SQL logging:', error);
+        alert('Error toggling SQL logging: ' + error.message);
+    });
+}
+
+function refreshSQLLogs() {
+    if (!sqlLoggingEnabled) {
+        clearSQLDisplay();
+        return;
+    }
+    
+    fetch('/admin/api/sql_logs')
+        .then(response => response.json())
+        .then(data => {
+            if (data.logs) {
+                displaySQLLogs(data.logs);
+                updateSQLStatistics(data.stats || {});
+            } else {
+                throw new Error(data.error || 'No logs data received');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading SQL logs:', error);
+            document.getElementById('sqlContainer').innerHTML = `
+                <div class="text-center text-danger">
+                    <i class="bi bi-exclamation-triangle fs-1"></i>
+                    <p class="mt-2">Error loading SQL logs: ${error.message}</p>
+                </div>
+            `;
+        });
+}
+
+function displaySQLLogs(logs) {
+    const container = document.getElementById('sqlContainer');
+    
+    if (!logs.length) {
+        container.innerHTML = `
+            <div class="text-center text-muted">
+                <i class="bi bi-database fs-1"></i>
+                <p class="mt-2">No SQL queries logged yet.</p>
+                <p class="small">Execute some database operations to see queries here.</p>
+            </div>
+        `;
+        document.getElementById('sqlLogCount').textContent = '0';
+        return;
+    }
+    
+    let html = '';
+    logs.forEach((log, index) => {
+        const statusClass = log.status === 'ERROR' ? 'text-danger' : 'text-success';
+        const timeClass = log.execution_time > 100 ? 'text-warning' : 'text-info';
+        
+        html += `
+            <div class="sql-log-entry mb-3 p-2 border-bottom">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <small class="text-muted">#${index + 1} - ${log.timestamp}</small>
+                    <div>
+                        <span class="badge bg-secondary">${log.component || 'Unknown'}</span>
+                        <span class="badge ${statusClass === 'text-danger' ? 'bg-danger' : 'bg-success'}">${log.status}</span>
+                        <span class="badge bg-info">${log.execution_time}ms</span>
+                    </div>
+                </div>
+                <div class="sql-query ${statusClass}">
+                    <code>${escapeHtml(log.query)}</code>
+                </div>
+                ${log.error ? `<div class="text-danger mt-1"><small>Error: ${escapeHtml(log.error)}</small></div>` : ''}
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+    document.getElementById('sqlLogCount').textContent = logs.length;
+    
+    // Auto-scroll to bottom
+    container.scrollTop = container.scrollHeight;
+}
+
+function updateSQLStatistics(stats) {
+    document.getElementById('sqlAvgTime').textContent = stats.avg_time || '-';
+    document.getElementById('sqlFastestTime').textContent = stats.fastest_time || '-';
+    document.getElementById('sqlSlowestTime').textContent = stats.slowest_time || '-';
+    document.getElementById('sqlErrorCount').textContent = stats.error_count || '-';
+}
+
+function clearSQLLogs() {
+    if (confirm('Are you sure you want to clear all SQL logs?')) {
+        fetch('/admin/api/clear_sql_logs', {method: 'POST'})
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    clearSQLDisplay();
+                } else {
+                    alert('Failed to clear SQL logs: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error clearing SQL logs:', error);
+                alert('Error clearing SQL logs: ' + error.message);
+            });
+    }
+}
+
+function clearSQLDisplay() {
+    document.getElementById('sqlContainer').innerHTML = `
+        <div class="text-center text-muted">
+            <i class="bi bi-database fs-1"></i>
+            <p class="mt-2">SQL query logs will appear here when logging is enabled.</p>
+            <p class="small">Enable SQL logging to monitor database performance.</p>
+        </div>
+    `;
+    document.getElementById('sqlLogCount').textContent = '0';
+    updateSQLStatistics({});
+}
+
+function copySQLLogs() {
+    const container = document.getElementById('sqlContainer');
+    const logEntries = container.querySelectorAll('.sql-log-entry');
+    
+    let copyText = 'SQL Query Logs\\n' + '='.repeat(50) + '\\n\\n';
+    
+    logEntries.forEach(entry => {
+        const query = entry.querySelector('.sql-query code').textContent;
+        const header = entry.querySelector('small').textContent;
+        copyText += header + '\\n' + query + '\\n\\n';
+    });
+    
+    navigator.clipboard.writeText(copyText).then(() => {
+        alert('SQL logs copied to clipboard');
+    }).catch(err => {
+        console.error('Error copying to clipboard:', err);
+        alert('Failed to copy logs to clipboard');
+    });
+}
+
+function clearSQLFilters() {
+    document.getElementById('sqlComponentFilter').value = '';
+    document.getElementById('sqlStatusFilter').value = '';
+    document.getElementById('sqlSearchFilter').value = '';
+    // Apply filters
+    applySQLFilters();
+}
+
+function applySQLFilters() {
+    // Implement filtering logic here
+    const component = document.getElementById('sqlComponentFilter').value;
+    const status = document.getElementById('sqlStatusFilter').value;
+    const search = document.getElementById('sqlSearchFilter').value.toLowerCase();
+    
+    const entries = document.querySelectorAll('.sql-log-entry');
+    
+    entries.forEach(entry => {
+        let show = true;
+        
+        // Component filter
+        if (component) {
+            const entryComponent = entry.querySelector('.badge.bg-secondary').textContent;
+            if (entryComponent !== component) show = false;
+        }
+        
+        // Status filter
+        if (status) {
+            const entryStatus = entry.querySelector('.badge.bg-success, .badge.bg-danger').textContent;
+            if (entryStatus !== status) show = false;
+        }
+        
+        // Search filter
+        if (search) {
+            const query = entry.querySelector('.sql-query code').textContent.toLowerCase();
+            if (!query.includes(search)) show = false;
+        }
+        
+        entry.style.display = show ? 'block' : 'none';
+    });
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Add event listeners for filters
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('sqlComponentFilter').addEventListener('change', applySQLFilters);
+    document.getElementById('sqlStatusFilter').addEventListener('change', applySQLFilters);
+    document.getElementById('sqlSearchFilter').addEventListener('input', applySQLFilters);
+    
+    // Initialize
+    loadSQLTab();
+});
+</script>

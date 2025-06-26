@@ -1586,247 +1586,36 @@
         
         <!-- Logs Tab -->
         <div class="tab-pane fade" id="logs" role="tabpanel">
-            <div class="card mt-3">
-                <div class="card-body">
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <h5 class="card-title">
-                                <i class="bi bi-file-text"></i> System Logs
-                            </h5>
-                        </div>
-                        <div class="col-md-6 text-end">
-                            <div class="btn-group" role="group">
-                                <button type="button" class="btn btn-outline-primary" onclick="refreshLogs()" title="Refresh logs">
-                                    <i class="bi bi-arrow-clockwise"></i> Refresh
-                                </button>
-                                <button type="button" class="btn btn-outline-primary" onclick="clearLogs()">
-                                    <i class="bi bi-trash"></i> Clear
-                                </button>
-                                <button type="button" class="btn btn-outline-primary" onclick="toggleAutoScroll()" id="autoScrollBtn">
-                                    <i class="bi bi-arrow-down-circle"></i> Auto-scroll: ON
-                                </button>
-                                <button type="button" class="btn btn-outline-primary" onclick="toggleLogStreaming()" id="streamingBtn">
-                                    <i class="bi bi-play-circle"></i> Start Streaming
-                                </button>
-                            </div>
-                        </div>
+            <div id="logsContent">
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
                     </div>
-                    
-                    <!-- Log Filters -->
-                    <div class="row mb-3">
-                        <div class="col-md-4">
-                            <label for="logLevel" class="form-label">Log Level</label>
-                            <select class="form-select" id="logLevel" onchange="filterLogs()">
-                                <option value="">All Levels</option>
-                                <option value="DEBUG">Debug</option>
-                                <option value="INFO">Info</option>
-                                <option value="WARNING">Warning</option>
-                                <option value="ERROR">Error</option>
-                                <option value="CRITICAL">Critical</option>
-                            </select>
-                        </div>
-                        <div class="col-md-4">
-                            <label for="logSource" class="form-label">Source</label>
-                            <select class="form-select" id="logSource" onchange="filterLogs()">
-                                <option value="">All Sources</option>
-                                <option value="transcribe">Transcription</option>
-                                <option value="download">Downloads</option>
-                                <option value="app">Application</option>
-                                <option value="api">API</option>
-                            </select>
-                        </div>
-                        <div class="col-md-4">
-                            <label for="logSearch" class="form-label">Search</label>
-                            <div class="input-group">
-                                <input type="text" class="form-control" id="logSearch" placeholder="Search logs..." onkeyup="filterLogs()">
-                                <button class="btn btn-outline-secondary" type="button" onclick="resetFilters()" title="Reset all filters">
-                                    <i class="bi bi-x-circle"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Log Display -->
-                    <div class="card">
-                        <div class="card-header bg-dark text-white">
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <small>Live System Logs</small>
-                                </div>
-                                <div class="col-md-6 text-end">
-                                    <small id="logStatus">Stopped</small>
-                                    <span class="badge bg-secondary ms-2" id="logCount">0 lines</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="card-body p-0" style="background-color: #1e1e1e;">
-                            <div id="logContainer" style="height: 500px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 12px; color: #f8f9fa; padding: 10px;">
-                                <div class="text-muted text-center mt-5">
-                                    <i class="bi bi-file-text" style="font-size: 2rem;"></i>
-                                    <p>Click "Start Streaming" to view live logs</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Log Legend -->
-                    <div class="mt-3">
-                        <small class="text-muted">
-                            <strong>Legend:</strong>
-                            <span class="badge bg-primary ms-2">INFO</span>
-                            <span class="badge bg-warning ms-2">WARNING</span>
-                            <span class="badge bg-danger ms-2">ERROR</span>
-                            <span class="badge bg-success ms-2">OPENAI</span>
-                            <span class="badge bg-info ms-2">LOCAL</span>
-                        </small>
-                    </div>
+                    <p class="mt-2">Loading logs...</p>
                 </div>
             </div>
         </div>
 
         <!-- SQL Query Logs Tab -->
         <div class="tab-pane fade" id="sql" role="tabpanel">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <div>
-                        <h5 class="mb-0"><i class="bi bi-database"></i> SQL Query Logs</h5>
-                        <small class="text-muted">Monitor database query performance and execution</small>
+            <div id="sqlContent">
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
                     </div>
-                    <div class="btn-group" role="group">
-                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleSQLLogging()">
-                            <i class="bi bi-power" id="sqlToggleIcon"></i> <span id="sqlToggleText">Enable</span>
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="refreshSQLLogs()">
-                            <i class="bi bi-arrow-clockwise"></i> Refresh
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="clearSQLLogs()">
-                            <i class="bi bi-trash"></i> Clear
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-info" onclick="copySQLLogs()">
-                            <i class="bi bi-clipboard"></i> Copy All
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <!-- SQL Logging Status -->
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <div class="d-flex align-items-center">
-                                <span class="me-2">Status:</span>
-                                <span class="badge" id="sqlLogStatus">Checking...</span>
-                            </div>
-                        </div>
-                        <div class="col-md-6 text-end">
-                            <small class="text-muted">
-                                Showing last <span id="sqlLogCount">0</span> queries
-                            </small>
-                        </div>
-                    </div>
-
-                    <!-- Filters -->
-                    <div class="row mb-3">
-                        <div class="col-md-3">
-                            <select class="form-select form-select-sm" id="sqlComponentFilter">
-                                <option value="">All Components</option>
-                                <option value="Space">Space</option>
-                                <option value="User">User</option>
-                                <option value="Tag">Tag</option>
-                                <option value="DatabaseManager">DatabaseManager</option>
-                                <option value="DownloadSpace">DownloadSpace</option>
-                                <option value="SpeechToText">SpeechToText</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <select class="form-select form-select-sm" id="sqlStatusFilter">
-                                <option value="">All Status</option>
-                                <option value="SUCCESS">Success</option>
-                                <option value="ERROR">Error</option>
-                            </select>
-                        </div>
-                        <div class="col-md-4">
-                            <input type="text" class="form-control form-control-sm" id="sqlSearchFilter" 
-                                   placeholder="Search queries...">
-                        </div>
-                        <div class="col-md-2">
-                            <button type="button" class="btn btn-sm btn-outline-secondary w-100" onclick="clearSQLFilters()">
-                                <i class="bi bi-x-circle"></i> Clear
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- SQL Query Display -->
-                    <div class="border rounded" style="background-color: #1e1e1e; color: #d4d4d4; height: 500px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.875rem;">
-                        <div id="sqlContainer" class="p-3">
-                            <div class="text-center text-muted">
-                                <i class="bi bi-database fs-1"></i>
-                                <p class="mt-2">SQL query logs will appear here when logging is enabled.</p>
-                                <p class="small">Enable SQL logging to monitor database performance.</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- SQL Query Statistics -->
-                    <div class="row mt-3">
-                        <div class="col-md-3">
-                            <small class="text-muted">
-                                <i class="bi bi-clock"></i> Avg Time: 
-                                <span id="sqlAvgTime">-</span>ms
-                            </small>
-                        </div>
-                        <div class="col-md-3">
-                            <small class="text-muted">
-                                <i class="bi bi-lightning"></i> Fastest: 
-                                <span id="sqlFastestTime">-</span>ms
-                            </small>
-                        </div>
-                        <div class="col-md-3">
-                            <small class="text-muted">
-                                <i class="bi bi-hourglass"></i> Slowest: 
-                                <span id="sqlSlowestTime">-</span>ms
-                            </small>
-                        </div>
-                        <div class="col-md-3">
-                            <small class="text-muted">
-                                <i class="bi bi-exclamation-triangle"></i> Errors: 
-                                <span id="sqlErrorCount">-</span>
-                            </small>
-                        </div>
-                    </div>
-
-                    <!-- Performance Warning -->
-                    <div class="alert alert-warning mt-3" style="display: none;" id="sqlPerformanceWarning">
-                        <i class="bi bi-exclamation-triangle"></i>
-                        <strong>Performance Impact:</strong> SQL logging may impact database performance. 
-                        Disable logging in production environments when not needed for debugging.
-                    </div>
+                    <p class="mt-2">Loading SQL logs...</p>
                 </div>
             </div>
         </div>
         
         <!-- System Status Tab -->
         <div class="tab-pane fade" id="status" role="tabpanel">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <div>
-                        <h5 class="mb-0"><i class="bi bi-activity"></i> System Status</h5>
-                        <small class="text-muted">Monitor background processes, system resources, and application health</small>
+            <div id="statusContent">
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
                     </div>
-                    <div class="btn-group" role="group">
-                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadSystemStatus()">
-                            <i class="bi bi-arrow-clockwise"></i> Refresh
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAutoRefresh()" id="autoRefreshBtn">
-                            <i class="bi bi-play"></i> Auto Refresh
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body" id="systemStatusContent">
-                    <div class="text-center py-5">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <p class="mt-2">Loading system status...</p>
-                    </div>
+                    <p class="mt-2">Loading system status...</p>
                 </div>
             </div>
         </div>
@@ -6469,6 +6258,67 @@ document.addEventListener('DOMContentLoaded', function() {
     
     document.getElementById('systemMessageStartDate').value = formatForInput(now);
     document.getElementById('systemMessageEndDate').value = formatForInput(nextWeek);
+});
+
+// Dynamic tab loading
+const loadedTabs = new Set();
+
+function loadTabContent(tabId, templateUrl) {
+    if (loadedTabs.has(tabId)) {
+        return; // Already loaded
+    }
+    
+    const contentDiv = document.getElementById(tabId + 'Content');
+    if (!contentDiv) {
+        console.error('Content div not found for tab:', tabId);
+        return;
+    }
+    
+    fetch(templateUrl)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return response.text();
+        })
+        .then(html => {
+            contentDiv.innerHTML = html;
+            loadedTabs.add(tabId);
+            console.log(`Tab ${tabId} loaded successfully`);
+        })
+        .catch(error => {
+            console.error(`Error loading tab ${tabId}:`, error);
+            contentDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>Error loading content:</strong> ${error.message}
+                </div>
+            `;
+        });
+}
+
+// Tab event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    // Add event listeners for the three problematic tabs
+    const tabButtons = {
+        'logs-tab': { tabId: 'logs', url: '/admin/templates/logs' },
+        'sql-tab': { tabId: 'sql', url: '/admin/templates/sql' },
+        'status-tab': { tabId: 'status', url: '/admin/templates/system-status' }
+    };
+    
+    Object.keys(tabButtons).forEach(buttonId => {
+        const button = document.getElementById(buttonId);
+        if (button) {
+            button.addEventListener('shown.bs.tab', function() {
+                const config = tabButtons[buttonId];
+                loadTabContent(config.tabId, config.url);
+            });
+        } else {
+            console.warn(`Tab button ${buttonId} not found`);
+        }
+    });
+    
+    console.log('Dynamic tab loading initialized');
 });
 
 </script>

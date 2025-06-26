@@ -1,0 +1,235 @@
+<div class="card mt-3">
+    <div class="card-body">
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <h5 class="card-title">
+                    <i class="bi bi-file-text"></i> System Logs
+                </h5>
+            </div>
+            <div class="col-md-6 text-end">
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-outline-primary" onclick="refreshLogs()" title="Refresh logs">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                    <button type="button" class="btn btn-outline-primary" onclick="clearLogs()">
+                        <i class="bi bi-trash"></i> Clear
+                    </button>
+                    <button type="button" class="btn btn-outline-primary" onclick="toggleAutoScroll()" id="autoScrollBtn">
+                        <i class="bi bi-arrow-down-circle"></i> Auto-scroll: ON
+                    </button>
+                    <button type="button" class="btn btn-outline-primary" onclick="toggleLogStreaming()" id="streamingBtn">
+                        <i class="bi bi-play-circle"></i> Start Streaming
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Log Filters -->
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <label for="logLevel" class="form-label">Log Level</label>
+                <select class="form-select" id="logLevel" onchange="filterLogs()">
+                    <option value="">All Levels</option>
+                    <option value="DEBUG">Debug</option>
+                    <option value="INFO">Info</option>
+                    <option value="WARNING">Warning</option>
+                    <option value="ERROR">Error</option>
+                    <option value="CRITICAL">Critical</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label for="logSource" class="form-label">Source</label>
+                <select class="form-select" id="logSource" onchange="filterLogs()">
+                    <option value="">All Sources</option>
+                    <option value="transcribe">Transcription</option>
+                    <option value="download">Downloads</option>
+                    <option value="app">Application</option>
+                    <option value="api">API</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label for="logSearch" class="form-label">Search</label>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="logSearch" placeholder="Search logs..." onkeyup="filterLogs()">
+                    <button class="btn btn-outline-secondary" type="button" onclick="resetFilters()" title="Reset all filters">
+                        <i class="bi bi-x-circle"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Log Display -->
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <div class="row">
+                    <div class="col-md-6">
+                        <small>Live System Logs</small>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <small id="logStatus">Stopped</small>
+                        <span class="badge bg-secondary ms-2" id="logCount">0 lines</span>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-0" style="background-color: #1e1e1e;">
+                <div id="logContainer" style="height: 500px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 12px; color: #f8f9fa; padding: 10px;">
+                    <div class="text-muted text-center mt-5">
+                        <i class="bi bi-file-text" style="font-size: 2rem;"></i>
+                        <p>Click "Start Streaming" to view live logs</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Log Legend -->
+        <div class="mt-3">
+            <small class="text-muted">
+                <strong>Legend:</strong>
+                <span class="badge bg-primary ms-2">INFO</span>
+                <span class="badge bg-warning ms-2">WARNING</span>
+                <span class="badge bg-danger ms-2">ERROR</span>
+                <span class="badge bg-success ms-2">OPENAI</span>
+                <span class="badge bg-info ms-2">LOCAL</span>
+            </small>
+        </div>
+    </div>
+</div>
+
+<script>
+// Logs Tab JavaScript
+let logsSocket;
+let autoScroll = true;
+let logStreamingActive = false;
+
+function loadLogs() {
+    if (!logStreamingActive) {
+        fetch('/admin/api/logs?offset=0')
+            .then(response => response.json())
+            .then(data => {
+                if (data.logs) {
+                    displayLogs(data.logs);
+                } else {
+                    console.error('No logs data received');
+                }
+            })
+            .catch(error => {
+                console.error('Error loading logs:', error);
+                document.getElementById('logContainer').innerHTML = '<div class="text-danger text-center mt-5"><i class="bi bi-exclamation-triangle"></i><p>Error loading logs: ' + error.message + '</p></div>';
+            });
+    }
+}
+
+function refreshLogs() {
+    if (!logStreamingActive) {
+        loadLogs();
+    }
+}
+
+function clearLogs() {
+    document.getElementById('logContainer').innerHTML = '<div class="text-muted text-center mt-5"><i class="bi bi-file-text" style="font-size: 2rem;"></i><p>Logs cleared</p></div>';
+    document.getElementById('logCount').textContent = '0 lines';
+}
+
+function displayLogs(logs) {
+    const container = document.getElementById('logContainer');
+    container.innerHTML = '';
+    
+    logs.forEach(log => {
+        const logLine = document.createElement('div');
+        logLine.className = 'log-line';
+        logLine.innerHTML = formatLogLine(log);
+        container.appendChild(logLine);
+    });
+    
+    document.getElementById('logCount').textContent = logs.length + ' lines';
+    
+    if (autoScroll) {
+        container.scrollTop = container.scrollHeight;
+    }
+}
+
+function formatLogLine(log) {
+    const level = log.level || 'INFO';
+    const levelBadge = getLevelBadge(level);
+    const timestamp = new Date(log.timestamp).toLocaleString();
+    
+    return `<span class="text-muted">[${timestamp}]</span> ${levelBadge} <span class="text-info">${log.source || 'app'}</span>: ${log.message}`;
+}
+
+function getLevelBadge(level) {
+    const badges = {
+        'DEBUG': '<span class="badge bg-secondary">DEBUG</span>',
+        'INFO': '<span class="badge bg-primary">INFO</span>',
+        'WARNING': '<span class="badge bg-warning">WARN</span>',
+        'ERROR': '<span class="badge bg-danger">ERROR</span>',
+        'CRITICAL': '<span class="badge bg-danger">CRIT</span>'
+    };
+    return badges[level] || '<span class="badge bg-secondary">INFO</span>';
+}
+
+function toggleAutoScroll() {
+    autoScroll = !autoScroll;
+    const btn = document.getElementById('autoScrollBtn');
+    if (autoScroll) {
+        btn.innerHTML = '<i class="bi bi-arrow-down-circle"></i> Auto-scroll: ON';
+        btn.classList.remove('btn-outline-primary');
+        btn.classList.add('btn-primary');
+    } else {
+        btn.innerHTML = '<i class="bi bi-arrow-down-circle"></i> Auto-scroll: OFF';
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-outline-primary');
+    }
+}
+
+function toggleLogStreaming() {
+    const btn = document.getElementById('streamingBtn');
+    const status = document.getElementById('logStatus');
+    
+    if (!logStreamingActive) {
+        // Start streaming
+        logStreamingActive = true;
+        btn.innerHTML = '<i class="bi bi-stop-circle"></i> Stop Streaming';
+        btn.classList.remove('btn-outline-primary');
+        btn.classList.add('btn-danger');
+        status.textContent = 'Streaming';
+        
+        // Load initial logs
+        loadLogs();
+        
+        // Poll for new logs every 5 seconds
+        logsSocket = setInterval(() => {
+            if (logStreamingActive) {
+                loadLogs();
+            }
+        }, 5000);
+    } else {
+        // Stop streaming
+        logStreamingActive = false;
+        btn.innerHTML = '<i class="bi bi-play-circle"></i> Start Streaming';
+        btn.classList.remove('btn-danger');
+        btn.classList.add('btn-outline-primary');
+        status.textContent = 'Stopped';
+        
+        if (logsSocket) {
+            clearInterval(logsSocket);
+        }
+    }
+}
+
+function filterLogs() {
+    // Implement log filtering logic here
+    console.log('Filtering logs...');
+}
+
+function resetFilters() {
+    document.getElementById('logLevel').value = '';
+    document.getElementById('logSource').value = '';
+    document.getElementById('logSearch').value = '';
+    filterLogs();
+}
+
+// Initialize when tab is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    loadLogs();
+});
+</script>
