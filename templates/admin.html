@@ -6113,6 +6113,19 @@ window.debugTabVisibility = function(tabId) {
     console.log('Content div:', contentDiv);
     console.log('Content div innerHTML length:', contentDiv ? contentDiv.innerHTML.length : 'NOT FOUND');
     console.log('Content div visible:', contentDiv ? contentDiv.offsetParent !== null : 'NOT FOUND');
+    
+    if (contentDiv) {
+        const computedStyle = window.getComputedStyle(contentDiv);
+        console.log('Content div computed styles:');
+        console.log('  display:', computedStyle.display);
+        console.log('  visibility:', computedStyle.visibility);
+        console.log('  opacity:', computedStyle.opacity);
+        console.log('  height:', computedStyle.height);
+        console.log('  overflow:', computedStyle.overflow);
+        console.log('  position:', computedStyle.position);
+        console.log('Content div bounding rect:', contentDiv.getBoundingClientRect());
+    }
+    
     console.log('Tab button:', tabButton);
     console.log('Tab button classes:', tabButton ? tabButton.className : 'NOT FOUND');
     console.log('Tab button aria-selected:', tabButton ? tabButton.getAttribute('aria-selected') : 'NOT FOUND');
@@ -6130,6 +6143,20 @@ window.debugTabVisibility = function(tabId) {
     };
 };
 
+// Quick fix function to try making content visible
+window.fixTabVisibility = function(tabId) {
+    const contentDiv = document.getElementById(tabId + 'Content');
+    if (contentDiv) {
+        console.log(`Attempting to fix visibility for: ${tabId}`);
+        contentDiv.style.display = 'block';
+        contentDiv.style.visibility = 'visible';
+        contentDiv.style.opacity = '1';
+        contentDiv.style.height = 'auto';
+        console.log('Applied visibility fixes');
+        return debugTabVisibility(tabId);
+    }
+};
+
 function loadTabContent(tabId, templateUrl) {
     console.log(`Loading tab content for: ${tabId} from ${templateUrl}`);
     
@@ -6139,7 +6166,11 @@ function loadTabContent(tabId, templateUrl) {
     // Check if already loaded AND content still exists
     if (loadedTabs.has(tabId) && contentDiv && contentDiv.innerHTML.includes('card')) {
         console.log(`Tab ${tabId} already loaded and content exists, skipping`);
-        return; // Already loaded and content is present
+        // Make sure the tab pane is visible
+        ensureTabPaneVisible(tabId);
+        // Trigger initialization for already loaded content
+        initializeTabContent(tabId);
+        return;
     }
     
     if (loadedTabs.has(tabId)) {
@@ -6169,6 +6200,14 @@ function loadTabContent(tabId, templateUrl) {
             contentDiv.innerHTML = html;
             loadedTabs.add(tabId);
             console.log(`Tab ${tabId} loaded successfully and marked as loaded`);
+            
+            // Ensure tab pane is visible
+            ensureTabPaneVisible(tabId);
+            
+            // Initialize the loaded content
+            setTimeout(() => {
+                initializeTabContent(tabId);
+            }, 100);
         })
         .catch(error => {
             console.error(`Error loading tab ${tabId}:`, error);
@@ -6180,6 +6219,54 @@ function loadTabContent(tabId, templateUrl) {
                 </div>
             `;
         });
+}
+
+// Ensure the Bootstrap tab pane is visible
+function ensureTabPaneVisible(tabId) {
+    const tabPane = document.getElementById(tabId);
+    if (tabPane) {
+        // Make sure the tab pane has the right classes to be visible
+        if (!tabPane.classList.contains('show')) {
+            console.log(`Making tab pane ${tabId} visible`);
+            tabPane.classList.add('show', 'active');
+        }
+    }
+}
+
+// Initialize tab-specific functionality after content is loaded
+function initializeTabContent(tabId) {
+    console.log(`Initializing content for tab: ${tabId}`);
+    
+    try {
+        switch(tabId) {
+            case 'logs':
+                // Initialize logs functionality
+                if (typeof initializeLogs === 'function') {
+                    console.log('Calling initializeLogs()');
+                    initializeLogs();
+                } else if (typeof loadLogs === 'function') {
+                    console.log('Calling loadLogs()');
+                    loadLogs();
+                }
+                break;
+            case 'sql':
+                // Initialize SQL functionality
+                if (typeof loadSQLTab === 'function') {
+                    console.log('Calling loadSQLTab()');
+                    loadSQLTab();
+                }
+                break;
+            case 'status':
+                // Initialize system status functionality
+                if (typeof loadSystemStatus === 'function') {
+                    console.log('Calling loadSystemStatus()');
+                    loadSystemStatus();
+                }
+                break;
+        }
+    } catch (error) {
+        console.error(`Error initializing ${tabId} tab:`, error);
+    }
 }
 
 // Tab event listeners
