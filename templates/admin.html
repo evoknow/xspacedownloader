@@ -6099,6 +6099,37 @@ window.forceReloadTab = function(tabId) {
     }
 };
 
+// Debug function to check tab visibility
+window.debugTabVisibility = function(tabId) {
+    const tabPane = document.getElementById(tabId);
+    const contentDiv = document.getElementById(tabId + 'Content');
+    const tabButton = document.getElementById(tabId + '-tab');
+    
+    console.log(`=== Tab Visibility Debug for: ${tabId} ===`);
+    console.log('Tab pane:', tabPane);
+    console.log('Tab pane classes:', tabPane ? tabPane.className : 'NOT FOUND');
+    console.log('Tab pane style.display:', tabPane ? tabPane.style.display : 'NOT FOUND');
+    console.log('Tab pane computed style:', tabPane ? window.getComputedStyle(tabPane).display : 'NOT FOUND');
+    console.log('Content div:', contentDiv);
+    console.log('Content div innerHTML length:', contentDiv ? contentDiv.innerHTML.length : 'NOT FOUND');
+    console.log('Content div visible:', contentDiv ? contentDiv.offsetParent !== null : 'NOT FOUND');
+    console.log('Tab button:', tabButton);
+    console.log('Tab button classes:', tabButton ? tabButton.className : 'NOT FOUND');
+    console.log('Tab button aria-selected:', tabButton ? tabButton.getAttribute('aria-selected') : 'NOT FOUND');
+    
+    // Check if Bootstrap tab is actually active
+    const activeTab = document.querySelector('#adminTabs .nav-link.active');
+    console.log('Currently active tab:', activeTab ? activeTab.id : 'NONE');
+    
+    return {
+        tabPane,
+        contentDiv,
+        tabButton,
+        isVisible: tabPane ? tabPane.offsetParent !== null : false,
+        hasContent: contentDiv ? contentDiv.innerHTML.length > 100 : false
+    };
+};
+
 function loadTabContent(tabId, templateUrl) {
     console.log(`Loading tab content for: ${tabId} from ${templateUrl}`);
     
