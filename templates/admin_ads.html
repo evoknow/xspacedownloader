@@ -134,17 +134,13 @@
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label for="start_date" class="form-label">Start Date</label>
-                            <input type="text" class="form-control" name="start_date" id="start_date" 
-                                   placeholder="YYYY-MM-DD HH:MM:SS" required
-                                   pattern="\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}">
-                            <div class="form-text">Format: 2025-01-01 00:00:00</div>
+                            <input type="datetime-local" class="form-control" name="start_date" id="start_date" required>
+                            <div class="form-text">Cannot be set to past date/time</div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="end_date" class="form-label">End Date</label>
-                            <input type="text" class="form-control" name="end_date" id="end_date" 
-                                   placeholder="YYYY-MM-DD HH:MM:SS" required
-                                   pattern="\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}">
-                            <div class="form-text">Format: 2025-12-31 23:59:59</div>
+                            <input type="datetime-local" class="form-control" name="end_date" id="end_date" required>
+                            <div class="form-text">Must be after start date</div>
                         </div>
                     </div>
                     <div class="mb-3">
@@ -180,19 +176,17 @@
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label for="edit_start_date_{{ ad.id }}" class="form-label">Start Date</label>
-                            <input type="text" class="form-control" name="start_date" id="edit_start_date_{{ ad.id }}" 
-                                   value="{{ ad.start_date }}"
-                                   placeholder="YYYY-MM-DD HH:MM:SS" required
-                                   pattern="\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}">
-                            <div class="form-text">Format: 2025-01-01 00:00:00</div>
+                            <input type="datetime-local" class="form-control" name="start_date" id="edit_start_date_{{ ad.id }}" 
+                                   value="{{ ad.start_date.replace(' ', 'T') if ad.start_date else '' }}"
+                                   required>
+                            <div class="form-text">Cannot be set to past date/time</div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="edit_end_date_{{ ad.id }}" class="form-label">End Date</label>
-                            <input type="text" class="form-control" name="end_date" id="edit_end_date_{{ ad.id }}" 
-                                   value="{{ ad.end_date }}"
-                                   placeholder="YYYY-MM-DD HH:MM:SS" required
-                                   pattern="\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}">
-                            <div class="form-text">Format: 2025-12-31 23:59:59</div>
+                            <input type="datetime-local" class="form-control" name="end_date" id="edit_end_date_{{ ad.id }}" 
+                                   value="{{ ad.end_date.replace(' ', 'T') if ad.end_date else '' }}"
+                                   required>
+                            <div class="form-text">Must be after start date</div>
                         </div>
                     </div>
                     <div class="mb-3">
@@ -261,4 +255,89 @@
     </div>
 </div>
 {% endfor %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Get current datetime in local timezone
+    const now = new Date();
+    const nowString = now.toISOString().slice(0, 16);
+    
+    // Set minimum date for create form
+    const createStartDate = document.getElementById('start_date');
+    const createEndDate = document.getElementById('end_date');
+    
+    if (createStartDate) {
+        createStartDate.min = nowString;
+        createStartDate.value = nowString;
+        
+        // Update end date minimum when start date changes
+        createStartDate.addEventListener('change', function() {
+            createEndDate.min = this.value;
+            if (createEndDate.value && createEndDate.value < this.value) {
+                createEndDate.value = this.value;
+            }
+        });
+    }
+    
+    if (createEndDate) {
+        createEndDate.min = nowString;
+        // Set default end date to one month from now
+        const defaultEnd = new Date(now);
+        defaultEnd.setMonth(defaultEnd.getMonth() + 1);
+        createEndDate.value = defaultEnd.toISOString().slice(0, 16);
+    }
+    
+    // Convert datetime-local to MySQL format on form submit
+    const createForm = document.querySelector('form[action*="admin_ads_create"]');
+    if (createForm) {
+        createForm.addEventListener('submit', function(e) {
+            // Convert datetime-local format to MySQL datetime format
+            if (createStartDate.value) {
+                const startDateTime = new Date(createStartDate.value);
+                createStartDate.value = startDateTime.toISOString().slice(0, 19).replace('T', ' ');
+            }
+            if (createEndDate.value) {
+                const endDateTime = new Date(createEndDate.value);
+                createEndDate.value = endDateTime.toISOString().slice(0, 19).replace('T', ' ');
+            }
+        });
+    }
+    
+    // Handle edit forms
+    const editForms = document.querySelectorAll('form[action*="admin/ads"][action*="edit"]');
+    editForms.forEach(form => {
+        const adId = form.action.match(/\/admin\/ads\/(\d+)\/edit/)[1];
+        const editStartDate = document.getElementById(`edit_start_date_${adId}`);
+        const editEndDate = document.getElementById(`edit_end_date_${adId}`);
+        
+        if (editStartDate && editEndDate) {
+            // Set minimum dates
+            editStartDate.min = nowString;
+            editEndDate.min = editStartDate.value || nowString;
+            
+            // Update end date minimum when start date changes
+            editStartDate.addEventListener('change', function() {
+                editEndDate.min = this.value;
+                if (editEndDate.value && editEndDate.value < this.value) {
+                    editEndDate.value = this.value;
+                }
+            });
+            
+            // Convert on submit
+            form.addEventListener('submit', function(e) {
+                if (editStartDate.value) {
+                    const startDateTime = new Date(editStartDate.value);
+                    editStartDate.value = startDateTime.toISOString().slice(0, 19).replace('T', ' ');
+                }
+                if (editEndDate.value) {
+                    const endDateTime = new Date(editEndDate.value);
+                    editEndDate.value = endDateTime.toISOString().slice(0, 19).replace('T', ' ');
+                }
+            });
+        }
+    });
+});
+</script>
 {% endblock %}
