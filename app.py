@@ -5119,6 +5119,34 @@ def admin_dashboard():
         flash('An error occurred loading the admin dashboard.', 'error')
         return redirect(url_for('index'))
 
+# Dedicated admin pages
+@app.route('/admin/logs')
+def admin_logs():
+    """Admin logs page - dedicated page for viewing system logs."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        flash('Admin access required.', 'error')
+        return redirect(url_for('index'))
+    
+    return render_template('admin_logs.html')
+
+@app.route('/admin/sql')
+def admin_sql():
+    """Admin SQL page - dedicated page for SQL query monitoring."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        flash('Admin access required.', 'error')
+        return redirect(url_for('index'))
+    
+    return render_template('admin_sql.html')
+
+@app.route('/admin/status')
+def admin_status():
+    """Admin system status page - dedicated page for system monitoring."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        flash('Admin access required.', 'error')
+        return redirect(url_for('index'))
+    
+    return render_template('admin_status.html')
+
 # Admin template routes for dynamic loading
 @app.route('/admin/templates/logs')
 def admin_logs_template():

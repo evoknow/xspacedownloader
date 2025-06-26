@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+
+{% block title %}Admin System Status - XSpace Downloader{% endblock %}
+
+{% block head %}
+<style>
+.spin {
+    animation: spin 1s linear infinite;
+}
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>
+            <i class="bi bi-activity"></i> System Status
+        </h1>
+        <div>
+            <a href="/admin" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Admin
+            </a>
+        </div>
+    </div>
+    
+    <!-- System status content -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <div>
+                <h5 class="mb-0"><i class="bi bi-activity"></i> System Status</h5>
+                <small class="text-muted">Monitor background processes, system resources, and application health</small>
+            </div>
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadSystemStatus()">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAutoRefresh()" id="autoRefreshBtn">
+                    <i class="bi bi-play"></i> Auto Refresh
+                </button>
+            </div>
+        </div>
+        <div class="card-body" id="systemStatusContent">
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2">Loading system status...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// System Status JavaScript - simplified for dedicated page
+let autoRefreshInterval;
+let autoRefreshActive = false;
+
+function loadSystemStatus() {
+    const content = document.getElementById('systemStatusContent');
+    content.innerHTML = `
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading system status...</p>
+        </div>
+    `;
+    
+    fetch('/admin/api/system_status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            displaySystemStatus(data);
+        })
+        .catch(error => {
+            console.error('Error loading system status:', error);
+            content.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>Error loading system status:</strong> ${error.message}
+                </div>
+            `;
+        });
+}
+
+function displaySystemStatus(data) {
+    const content = document.getElementById('systemStatusContent');
+    
+    const html = `
+        <!-- System Overview -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card bg-primary text-white">
+                    <div class="card-body text-center">
+                        <i class="bi bi-cpu-fill" style="font-size: 2rem;"></i>
+                        <h5 class="mt-2">CPU Usage</h5>
+                        <h3>${data.cpu_usage || 'N/A'}%</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-success text-white">
+                    <div class="card-body text-center">
+                        <i class="bi bi-memory" style="font-size: 2rem;"></i>
+                        <h5 class="mt-2">Memory</h5>
+                        <h3>${data.memory_usage || 'N/A'}%</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-info text-white">
+                    <div class="card-body text-center">
+                        <i class="bi bi-hdd-fill" style="font-size: 2rem;"></i>
+                        <h5 class="mt-2">Disk Usage</h5>
+                        <h3>${data.disk_usage || 'N/A'}%</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-warning text-dark">
+                    <div class="card-body text-center">
+                        <i class="bi bi-clock-fill" style="font-size: 2rem;"></i>
+                        <h5 class="mt-2">Uptime</h5>
+                        <h3>${data.uptime || 'N/A'}</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Background Processes -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="bi bi-gear-fill"></i> Background Processes</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Process</th>
+                                        <th>Status</th>
+                                        <th>PID</th>
+                                        <th>CPU</th>
+                                        <th>Memory</th>
+                                        <th>Started</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${generateProcessRows(data.processes || [])}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- System Information -->
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="bi bi-info-circle"></i> System Information</h6>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm table-borderless">
+                            <tr><td><strong>OS:</strong></td><td>${data.os_info || 'N/A'}</td></tr>
+                            <tr><td><strong>Python:</strong></td><td>${data.python_version || 'N/A'}</td></tr>
+                            <tr><td><strong>Flask:</strong></td><td>${data.flask_version || 'N/A'}</td></tr>
+                            <tr><td><strong>Server Time:</strong></td><td>${data.server_time || 'N/A'}</td></tr>
+                            <tr><td><strong>Load Average:</strong></td><td>${data.load_average || 'N/A'}</td></tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="bi bi-database"></i> Database Status</h6>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm table-borderless">
+                            <tr><td><strong>Connection:</strong></td><td><span class="badge ${data.db_status === 'Connected' ? 'bg-success' : 'bg-danger'}">${data.db_status || 'Unknown'}</span></td></tr>
+                            <tr><td><strong>Active Connections:</strong></td><td>${data.db_connections || 'N/A'}</td></tr>
+                            <tr><td><strong>Total Queries:</strong></td><td>${data.db_queries || 'N/A'}</td></tr>
+                            <tr><td><strong>Cache Hit Rate:</strong></td><td>${data.cache_hit_rate || 'N/A'}</td></tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    content.innerHTML = html;
+}
+
+function generateProcessRows(processes) {
+    if (!processes.length) {
+        return '<tr><td colspan="7" class="text-center text-muted">No process information available</td></tr>';
+    }
+    
+    return processes.map(process => `
+        <tr>
+            <td><strong>${process.name}</strong></td>
+            <td><span class="badge ${process.status === 'running' ? 'bg-success' : 'bg-danger'}">${process.status}</span></td>
+            <td><code>${process.pid || 'N/A'}</code></td>
+            <td>${process.cpu || 'N/A'}%</td>
+            <td>${process.memory || 'N/A'}MB</td>
+            <td><small>${process.started || 'N/A'}</small></td>
+            <td>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-success btn-sm" onclick="restartProcess('${process.name}')" title="Restart">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" onclick="stopProcess('${process.name}')" title="Stop">
+                        <i class="bi bi-stop-circle"></i>
+                    </button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function toggleAutoRefresh() {
+    const btn = document.getElementById('autoRefreshBtn');
+    
+    if (!autoRefreshActive) {
+        // Start auto refresh
+        autoRefreshActive = true;
+        btn.innerHTML = '<i class="bi bi-pause"></i> Auto Refresh';
+        btn.classList.remove('btn-outline-secondary');
+        btn.classList.add('btn-secondary');
+        
+        autoRefreshInterval = setInterval(() => {
+            if (autoRefreshActive) {
+                loadSystemStatus();
+            }
+        }, 10000); // Refresh every 10 seconds
+    } else {
+        // Stop auto refresh
+        autoRefreshActive = false;
+        btn.innerHTML = '<i class="bi bi-play"></i> Auto Refresh';
+        btn.classList.remove('btn-secondary');
+        btn.classList.add('btn-outline-secondary');
+        
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+        }
+    }
+}
+
+function restartProcess(processName) {
+    if (confirm(`Are you sure you want to restart ${processName}?`)) {
+        fetch(`/admin/api/restart_process/${processName}`, {method: 'POST'})
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`${processName} restarted successfully`);
+                    loadSystemStatus();
+                } else {
+                    alert(`Failed to restart ${processName}: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                alert(`Error restarting ${processName}: ${error.message}`);
+            });
+    }
+}
+
+function stopProcess(processName) {
+    if (confirm(`Are you sure you want to stop ${processName}?`)) {
+        fetch(`/admin/api/stop_process/${processName}`, {method: 'POST'})
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`${processName} stopped successfully`);
+                    loadSystemStatus();
+                } else {
+                    alert(`Failed to stop ${processName}: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                alert(`Error stopping ${processName}: ${error.message}`);
+            });
+    }
+}
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Admin status page loaded, initializing...');
+    loadSystemStatus();
+});
+</script>
+{% endblock %}
