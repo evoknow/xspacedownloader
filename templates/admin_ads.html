@@ -186,7 +186,7 @@
                             <input type="datetime-local" class="form-control" name="start_date" id="edit_start_date_{{ ad.id }}" 
                                    value="{{ ad.start_date.replace(' ', 'T') if ad.start_date else '' }}"
                                    required>
-                            <div class="form-text">Cannot be set to past date/time</div>
+                            <div class="form-text">Past dates allowed when editing</div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="edit_end_date_{{ ad.id }}" class="form-label">End Date</label>
@@ -310,12 +310,26 @@ document.addEventListener('DOMContentLoaded', function() {
         createForm.addEventListener('submit', function(e) {
             // Convert datetime-local format to MySQL datetime format
             if (createStartDate.value) {
-                const startDateTime = new Date(createStartDate.value);
-                createStartDate.value = startDateTime.toISOString().slice(0, 19).replace('T', ' ');
+                let dateTimeValue = createStartDate.value;
+                if (dateTimeValue.includes('T')) {
+                    dateTimeValue = dateTimeValue.replace('T', ' ');
+                    // Add seconds if not present
+                    if (dateTimeValue.length === 16) {
+                        dateTimeValue += ':00';
+                    }
+                }
+                createStartDate.value = dateTimeValue;
             }
             if (createEndDate.value) {
-                const endDateTime = new Date(createEndDate.value);
-                createEndDate.value = endDateTime.toISOString().slice(0, 19).replace('T', ' ');
+                let dateTimeValue = createEndDate.value;
+                if (dateTimeValue.includes('T')) {
+                    dateTimeValue = dateTimeValue.replace('T', ' ');
+                    // Add seconds if not present
+                    if (dateTimeValue.length === 16) {
+                        dateTimeValue += ':00';
+                    }
+                }
+                createEndDate.value = dateTimeValue;
             }
         });
     }
@@ -328,9 +342,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const editEndDate = document.getElementById(`edit_end_date_${adId}`);
         
         if (editStartDate && editEndDate) {
-            // Set minimum dates
-            editStartDate.min = nowString;
-            editEndDate.min = editStartDate.value || nowString;
+            // For edit forms, don't restrict past dates - allow editing existing ads
+            // Only ensure end date is after start date
+            editEndDate.min = editStartDate.value;
             
             // Update end date minimum when start date changes
             editStartDate.addEventListener('change', function() {
@@ -343,12 +357,28 @@ document.addEventListener('DOMContentLoaded', function() {
             // Convert on submit
             form.addEventListener('submit', function(e) {
                 if (editStartDate.value) {
-                    const startDateTime = new Date(editStartDate.value);
-                    editStartDate.value = startDateTime.toISOString().slice(0, 19).replace('T', ' ');
+                    // Convert from datetime-local format (YYYY-MM-DDTHH:MM) to MySQL format (YYYY-MM-DD HH:MM:SS)
+                    let dateTimeValue = editStartDate.value;
+                    if (dateTimeValue.includes('T')) {
+                        dateTimeValue = dateTimeValue.replace('T', ' ');
+                        // Add seconds if not present
+                        if (dateTimeValue.length === 16) {
+                            dateTimeValue += ':00';
+                        }
+                    }
+                    editStartDate.value = dateTimeValue;
                 }
                 if (editEndDate.value) {
-                    const endDateTime = new Date(editEndDate.value);
-                    editEndDate.value = endDateTime.toISOString().slice(0, 19).replace('T', ' ');
+                    // Convert from datetime-local format (YYYY-MM-DDTHH:MM) to MySQL format (YYYY-MM-DD HH:MM:SS)
+                    let dateTimeValue = editEndDate.value;
+                    if (dateTimeValue.includes('T')) {
+                        dateTimeValue = dateTimeValue.replace('T', ' ');
+                        // Add seconds if not present
+                        if (dateTimeValue.length === 16) {
+                            dateTimeValue += ':00';
+                        }
+                    }
+                    editEndDate.value = dateTimeValue;
                 }
             });
         }
