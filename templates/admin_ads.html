@@ -143,10 +143,17 @@
                             <div class="form-text">Must be after start date</div>
                         </div>
                     </div>
-                    <div class="mb-3">
-                        <label for="max_impressions" class="form-label">Max Impressions (optional)</label>
-                        <input type="number" class="form-control" name="max_impressions" id="max_impressions" min="0">
-                        <div class="form-text">Leave empty for unlimited impressions</div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="max_impressions" class="form-label">Max Impressions (optional)</label>
+                            <input type="number" class="form-control" name="max_impressions" id="max_impressions" min="0">
+                            <div class="form-text">Leave empty for unlimited impressions</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="background_color" class="form-label">Background Color</label>
+                            <input type="color" class="form-control form-control-color" name="background_color" id="background_color" value="#ffffff">
+                            <div class="form-text">Choose the background color for the ad container</div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -189,11 +196,19 @@
                             <div class="form-text">Must be after start date</div>
                         </div>
                     </div>
-                    <div class="mb-3">
-                        <label for="edit_max_impressions_{{ ad.id }}" class="form-label">Max Impressions (optional)</label>
-                        <input type="number" class="form-control" name="max_impressions" id="edit_max_impressions_{{ ad.id }}" 
-                               value="{{ ad.max_impressions if ad.max_impressions != 'Unlimited' else '' }}" min="0">
-                        <div class="form-text">Leave empty for unlimited impressions</div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="edit_max_impressions_{{ ad.id }}" class="form-label">Max Impressions (optional)</label>
+                            <input type="number" class="form-control" name="max_impressions" id="edit_max_impressions_{{ ad.id }}" 
+                                   value="{{ ad.max_impressions if ad.max_impressions != 'Unlimited' else '' }}" min="0">
+                            <div class="form-text">Leave empty for unlimited impressions</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="edit_background_color_{{ ad.id }}" class="form-label">Background Color</label>
+                            <input type="color" class="form-control form-control-color" name="background_color" id="edit_background_color_{{ ad.id }}" 
+                                   value="{{ ad.background_color }}">
+                            <div class="form-text">Choose the background color for the ad container</div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -220,7 +235,7 @@
                     <div class="card-header bg-primary text-white py-2">
                         <h6 class="mb-0"><i class="bi bi-star me-1"></i> For You</h6>
                     </div>
-                    <div class="card-body p-2">
+                    <div class="card-body p-2" style="background-color: {{ ad.background_color }};">
                         <div class="advertisement-container">
                             {{ ad['copy']|safe }}
                         </div>

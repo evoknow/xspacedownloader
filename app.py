@@ -641,11 +641,13 @@ def all_spaces():
     try:
         # Load advertisement for logged in users
         advertisement_html = None
+        advertisement_bg = '#ffffff'
         if session.get('user_id'):
             try:
                 ad = Ad.get_active_ad()
                 if ad and ad.copy:
                     advertisement_html = ad.copy
+                    advertisement_bg = ad.background_color or '#ffffff'
             except Exception as e:
                 logger.warning(f"Error loading advertisement: {e}")
         
@@ -655,7 +657,8 @@ def all_spaces():
             return render_template('all_spaces.html', 
                                  spaces=cached_data['completed_spaces'], 
                                  popular_tags=cached_data['popular_tags'],
-                                 advertisement_html=advertisement_html)
+                                 advertisement_html=advertisement_html,
+                                 advertisement_bg=advertisement_bg)
         
         # No valid cache, generate fresh data
         logger.info("Generating fresh spaces data (cache miss or expired)")
@@ -761,7 +764,7 @@ def all_spaces():
         }
         set_spaces_cache(cache_data)
         
-        return render_template('all_spaces.html', spaces=completed_spaces, popular_tags=popular_tags, advertisement_html=advertisement_html)
+        return render_template('all_spaces.html', spaces=completed_spaces, popular_tags=popular_tags, advertisement_html=advertisement_html, advertisement_bg=advertisement_bg)
         
     except Exception as e:
         logger.error(f"Error listing all spaces: {e}", exc_info=True)
@@ -957,11 +960,13 @@ def view_queue():
         
         # Load advertisement for logged in users
         advertisement_html = None
+        advertisement_bg = '#ffffff'
         if session.get('user_id'):
             try:
                 ad = Ad.get_active_ad()
                 if ad and ad.copy:
                     advertisement_html = ad.copy
+                    advertisement_bg = ad.background_color or '#ffffff'
             except Exception as e:
                 logger.warning(f"Error loading advertisement: {e}")
         
@@ -970,7 +975,8 @@ def view_queue():
                              transcript_jobs=transcript_jobs,
                              transcription_only_jobs=transcription_only_jobs,
                              translation_jobs=translation_jobs,
-                             advertisement_html=advertisement_html)
+                             advertisement_html=advertisement_html,
+                             advertisement_bg=advertisement_bg)
         
     except Exception as e:
         logger.error(f"Error viewing queue: {e}", exc_info=True)
@@ -991,15 +997,17 @@ def index():
         if cached_data:
             # Load advertisement for logged in users
             advertisement_html = None
+            advertisement_bg = '#ffffff'
             if session.get('user_id'):
                 try:
                     ad = Ad.get_active_ad()
                     if ad and ad.copy:
                         advertisement_html = ad.copy
+                        advertisement_bg = ad.background_color or '#ffffff'
                 except Exception as e:
                     logger.warning(f"Error loading advertisement: {e}")
             
-            return render_template('index.html', completed_spaces=cached_data, advertisement_html=advertisement_html)
+            return render_template('index.html', completed_spaces=cached_data, advertisement_html=advertisement_html, advertisement_bg=advertisement_bg)
         
         # No valid cache, generate fresh data
         logger.info("Generating fresh index data (cache miss or expired)")
@@ -1040,15 +1048,17 @@ def index():
         
         # Load advertisement for logged in users
         advertisement_html = None
+        advertisement_bg = '#ffffff'
         if session.get('user_id'):
             try:
                 ad = Ad.get_active_ad()
                 if ad and ad.copy:
                     advertisement_html = ad.copy
+                    advertisement_bg = ad.background_color or '#ffffff'
             except Exception as e:
                 logger.warning(f"Error loading advertisement: {e}")
         
-        return render_template('index.html', completed_spaces=completed_spaces, advertisement_html=advertisement_html)
+        return render_template('index.html', completed_spaces=completed_spaces, advertisement_html=advertisement_html, advertisement_bg=advertisement_bg)
     except Exception as e:
         logger.error(f"Error loading completed spaces: {e}", exc_info=True)
         return render_template('index.html')
@@ -2718,11 +2728,13 @@ def favorites():
     try:
         # Load advertisement for logged in users
         advertisement_html = None
+        advertisement_bg = '#ffffff'
         if session.get('user_id'):
             try:
                 ad = Ad.get_active_ad()
                 if ad and ad.copy:
                     advertisement_html = ad.copy
+                    advertisement_bg = ad.background_color or '#ffffff'
             except Exception as e:
                 logger.warning(f"Error loading advertisement: {e}")
         
@@ -2787,7 +2799,7 @@ def favorites():
                 fav['metadata'] = None
                 fav['summary'] = None
         
-        return render_template('favorites.html', favorites=favorites, advertisement_html=advertisement_html)
+        return render_template('favorites.html', favorites=favorites, advertisement_html=advertisement_html, advertisement_bg=advertisement_bg)
         
     except Exception as e:
         logger.error(f"Error loading favorites: {e}", exc_info=True)
@@ -4414,11 +4426,13 @@ def profile():
     try:
         # Load advertisement for logged in users
         advertisement_html = None
+        advertisement_bg = '#ffffff'
         if session.get('user_id'):
             try:
                 ad = Ad.get_active_ad()
                 if ad and ad.copy:
                     advertisement_html = ad.copy
+                    advertisement_bg = ad.background_color or '#ffffff'
             except Exception as e:
                 logger.warning(f"Error loading advertisement: {e}")
         
@@ -4467,7 +4481,8 @@ def profile():
                              user_info=user_info, 
                              compute_transactions=compute_transactions,
                              ai_transactions=ai_transactions,
-                             advertisement_html=advertisement_html)
+                             advertisement_html=advertisement_html,
+                             advertisement_bg=advertisement_bg)
                              
     except Exception as e:
         logger.error(f"Error loading profile: {e}", exc_info=True)
@@ -6741,7 +6756,7 @@ def faq():
         except Exception as e:
             logger.warning(f"Error loading advertisement: {e}")
     
-    return render_template('faq.html', advertisement_html=advertisement_html)
+    return render_template('faq.html', advertisement_html=advertisement_html, advertisement_bg=advertisement_bg)
 
 @app.route('/admin/api/jobs/<int:job_id>/priority', methods=['PUT'])
 def admin_set_job_priority(job_id):
@@ -8666,6 +8681,7 @@ def admin_ads_page():
             ads_list.append({
                 'id': ad['id'],
                 'copy': ad['copy'],
+                'background_color': ad.get('background_color', '#ffffff'),
                 'start_date': ad['start_date'].strftime('%Y-%m-%d %H:%M:%S') if ad['start_date'] else '',
                 'end_date': ad['end_date'].strftime('%Y-%m-%d %H:%M:%S') if ad['end_date'] else '',
                 'status': ad['status'],
@@ -8691,6 +8707,7 @@ def admin_ads_create():
             return redirect(url_for('index'))
         ad = Ad()
         ad.copy = request.form.get('copy', '')
+        ad.background_color = request.form.get('background_color', '#ffffff')
         ad.start_date = datetime.datetime.strptime(request.form.get('start_date'), '%Y-%m-%d %H:%M:%S')
         ad.end_date = datetime.datetime.strptime(request.form.get('end_date'), '%Y-%m-%d %H:%M:%S')
         max_impressions_str = request.form.get('max_impressions', '').strip()
@@ -8772,6 +8789,7 @@ def admin_ads_edit(ad_id):
         
         # Update ad properties
         ad.copy = request.form.get('copy', '')
+        ad.background_color = request.form.get('background_color', '#ffffff')
         ad.start_date = datetime.datetime.strptime(request.form.get('start_date'), '%Y-%m-%d %H:%M:%S')
         ad.end_date = datetime.datetime.strptime(request.form.get('end_date'), '%Y-%m-%d %H:%M:%S')
         max_impressions_str = request.form.get('max_impressions', '').strip()
@@ -8799,7 +8817,7 @@ def about():
         except Exception as e:
             logger.warning(f"Error loading advertisement: {e}")
     
-    return render_template('about.html', advertisement_html=advertisement_html)
+    return render_template('about.html', advertisement_html=advertisement_html, advertisement_bg=advertisement_bg)
 
 # Route to check transcription job status for a space
 @app.route('/api/transcribe/<space_id>/status', methods=['GET'])

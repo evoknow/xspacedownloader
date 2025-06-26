@@ -11,6 +11,7 @@ class Ad:
         
         self.ad_id = ad_id
         self.copy = None
+        self.background_color = '#ffffff'
         self.start_date = None
         self.end_date = None
         self.status = None
@@ -42,6 +43,7 @@ class Ad:
         result = cursor.fetchone()
         if result:
             self.copy = result['copy']
+            self.background_color = result.get('background_color', '#ffffff')
             self.start_date = result['start_date']
             self.end_date = result['end_date']
             self.status = result['status']
@@ -62,17 +64,17 @@ class Ad:
         if self.ad_id:
             cursor.execute("""
                 UPDATE advertisements 
-                SET copy = %s, start_date = %s, end_date = %s, 
+                SET copy = %s, background_color = %s, start_date = %s, end_date = %s, 
                     status = %s, max_impressions = %s
                 WHERE id = %s
-            """, (self.copy, self.start_date, self.end_date, 
+            """, (self.copy, self.background_color, self.start_date, self.end_date, 
                   self.status, self.max_impressions, self.ad_id))
         else:
             cursor.execute("""
                 INSERT INTO advertisements 
-                (copy, start_date, end_date, status, max_impressions)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (self.copy, self.start_date, self.end_date, 
+                (copy, background_color, start_date, end_date, status, max_impressions)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (self.copy, self.background_color, self.start_date, self.end_date, 
                   self.status, self.max_impressions))
             self.ad_id = cursor.lastrowid
         

@@ -94,7 +94,7 @@
                     {% endif %}
                 </h4>
             </div>
-            <div class="card-body">
+            <div class="card-body" style="background-color: {{ advertisement_bg if advertisement_html else '#ffffff' }};">
                 {% if session.get('user_id') %}
                     {% if advertisement_html %}
                     <div class="advertisement-container">
