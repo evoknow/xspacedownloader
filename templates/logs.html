@@ -131,20 +131,32 @@ function clearLogs() {
 }
 
 function displayLogs(logs) {
-    const container = document.getElementById('logContainer');
-    container.innerHTML = '';
-    
-    logs.forEach(log => {
-        const logLine = document.createElement('div');
-        logLine.className = 'log-line';
-        logLine.innerHTML = formatLogLine(log);
-        container.appendChild(logLine);
-    });
-    
-    document.getElementById('logCount').textContent = logs.length + ' lines';
-    
-    if (autoScroll) {
-        container.scrollTop = container.scrollHeight;
+    try {
+        const container = document.getElementById('logContainer');
+        if (!container) {
+            console.error('logContainer not found');
+            return;
+        }
+        
+        container.innerHTML = '';
+        
+        logs.forEach(log => {
+            const logLine = document.createElement('div');
+            logLine.className = 'log-line';
+            logLine.innerHTML = formatLogLine(log);
+            container.appendChild(logLine);
+        });
+        
+        const logCountEl = document.getElementById('logCount');
+        if (logCountEl) {
+            logCountEl.textContent = logs.length + ' lines';
+        }
+        
+        if (autoScroll && container) {
+            container.scrollTop = container.scrollHeight;
+        }
+    } catch (error) {
+        console.error('Error in displayLogs:', error);
     }
 }
 
@@ -170,6 +182,11 @@ function getLevelBadge(level) {
 function toggleAutoScroll() {
     autoScroll = !autoScroll;
     const btn = document.getElementById('autoScrollBtn');
+    if (!btn) {
+        console.error('autoScrollBtn not found');
+        return;
+    }
+    
     if (autoScroll) {
         btn.innerHTML = '<i class="bi bi-arrow-down-circle"></i> Auto-scroll: ON';
         btn.classList.remove('btn-outline-primary');
@@ -184,6 +201,11 @@ function toggleAutoScroll() {
 function toggleLogStreaming() {
     const btn = document.getElementById('streamingBtn');
     const status = document.getElementById('logStatus');
+    
+    if (!btn || !status) {
+        console.error('streamingBtn or logStatus not found');
+        return;
+    }
     
     if (!logStreamingActive) {
         // Start streaming
@@ -222,14 +244,32 @@ function filterLogs() {
 }
 
 function resetFilters() {
-    document.getElementById('logLevel').value = '';
-    document.getElementById('logSource').value = '';
-    document.getElementById('logSearch').value = '';
+    const logLevel = document.getElementById('logLevel');
+    const logSource = document.getElementById('logSource');
+    const logSearch = document.getElementById('logSearch');
+    
+    if (logLevel) logLevel.value = '';
+    if (logSource) logSource.value = '';
+    if (logSearch) logSearch.value = '';
+    
     filterLogs();
 }
 
-// Initialize when tab is loaded
-document.addEventListener('DOMContentLoaded', function() {
-    loadLogs();
-});
+// Initialize when tab content is loaded
+function initializeLogs() {
+    console.log('Initializing logs tab...');
+    try {
+        loadLogs();
+    } catch (error) {
+        console.error('Error initializing logs:', error);
+    }
+}
+
+// Initialize immediately if DOM is ready, or wait for it
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeLogs);
+} else {
+    // DOM is already ready, initialize immediately
+    setTimeout(initializeLogs, 100);
+}
 </script>

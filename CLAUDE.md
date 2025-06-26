@@ -85,3 +85,36 @@ Do NOT look for or modify systemd service files for these background processes.
 3. Validate database operations against the schema definition
 4. Ensure proper error handling for network and database operations
 5. Document any changes to the component structure or database schema
+
+## CRITICAL DEPLOYMENT WORKFLOW
+
+**ALWAYS follow this exact sequence when making changes:**
+
+### 1. Make Code Changes
+- Edit files as needed in the development directory
+
+### 2. Commit Changes
+```bash
+git add [modified files]
+git commit -m "Descriptive commit message
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>"
+```
+
+### 3. Run killall.sh
+```bash
+./killall.sh
+```
+**Purpose**: Stops any conflicting background processes
+
+### 4. Run update.py
+```bash
+python update.py
+```
+**Purpose**: Deploys changes to production, restarts services
+
+### 5. NEVER declare "ready" or "fixed" until ALL 4 steps are completed
+
+**The user has reminded Claude multiple times about this workflow. ALWAYS follow it completely before saying anything is deployed or ready.**

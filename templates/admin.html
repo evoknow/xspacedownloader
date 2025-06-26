@@ -6264,27 +6264,37 @@ document.addEventListener('DOMContentLoaded', function() {
 const loadedTabs = new Set();
 
 function loadTabContent(tabId, templateUrl) {
+    console.log(`Loading tab content for: ${tabId} from ${templateUrl}`);
+    
     if (loadedTabs.has(tabId)) {
+        console.log(`Tab ${tabId} already loaded, skipping`);
         return; // Already loaded
     }
     
-    const contentDiv = document.getElementById(tabId + 'Content');
+    const contentDivId = tabId + 'Content';
+    const contentDiv = document.getElementById(contentDivId);
+    console.log(`Looking for content div: ${contentDivId}`, contentDiv);
+    
     if (!contentDiv) {
-        console.error('Content div not found for tab:', tabId);
+        console.error('Content div not found for tab:', tabId, 'Expected ID:', contentDivId);
         return;
     }
     
+    console.log(`Fetching template from: ${templateUrl}`);
     fetch(templateUrl)
         .then(response => {
+            console.log(`Fetch response for ${tabId}:`, response.status, response.statusText);
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             return response.text();
         })
         .then(html => {
+            console.log(`Template HTML received for ${tabId}, length:`, html.length);
+            console.log(`HTML preview:`, html.substring(0, 200) + '...');
             contentDiv.innerHTML = html;
             loadedTabs.add(tabId);
-            console.log(`Tab ${tabId} loaded successfully`);
+            console.log(`Tab ${tabId} loaded successfully and marked as loaded`);
         })
         .catch(error => {
             console.error(`Error loading tab ${tabId}:`, error);
@@ -6292,6 +6302,7 @@ function loadTabContent(tabId, templateUrl) {
                 <div class="alert alert-danger">
                     <i class="bi bi-exclamation-triangle"></i>
                     <strong>Error loading content:</strong> ${error.message}
+                    <br><small>Tab: ${tabId}, URL: ${templateUrl}</small>
                 </div>
             `;
         });
@@ -6299,6 +6310,8 @@ function loadTabContent(tabId, templateUrl) {
 
 // Tab event listeners
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded, setting up dynamic tab loading...');
+    
     // Add event listeners for the three problematic tabs
     const tabButtons = {
         'logs-tab': { tabId: 'logs', url: '/admin/templates/logs' },
@@ -6306,13 +6319,31 @@ document.addEventListener('DOMContentLoaded', function() {
         'status-tab': { tabId: 'status', url: '/admin/templates/system-status' }
     };
     
+    console.log('Tab button configuration:', tabButtons);
+    
     Object.keys(tabButtons).forEach(buttonId => {
         const button = document.getElementById(buttonId);
+        console.log(`Checking for button: ${buttonId}`, button);
+        
         if (button) {
-            button.addEventListener('shown.bs.tab', function() {
+            button.addEventListener('shown.bs.tab', function(event) {
+                console.log(`Tab event fired for: ${buttonId}`, event);
                 const config = tabButtons[buttonId];
+                console.log(`Loading config:`, config);
                 loadTabContent(config.tabId, config.url);
             });
+            
+            // Also add click event as backup
+            button.addEventListener('click', function(event) {
+                console.log(`Tab clicked: ${buttonId}`, event);
+                // Small delay to ensure tab is shown
+                setTimeout(() => {
+                    const config = tabButtons[buttonId];
+                    loadTabContent(config.tabId, config.url);
+                }, 100);
+            });
+            
+            console.log(`Event listeners added for: ${buttonId}`);
         } else {
             console.warn(`Tab button ${buttonId} not found`);
         }
