@@ -1257,6 +1257,9 @@
 
 {% block scripts %}
 <script>
+    // Global space ID for use throughout the page
+    const spaceId = '{{ space.space_id }}';
+    
     // Language code to name mapping - define globally for template access
     const languageNames = {
         'en': 'English',
