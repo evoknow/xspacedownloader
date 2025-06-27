@@ -206,6 +206,80 @@ class SQLLogger:
         
         return logs
     
+    def get_logs(self, limit: int = 100) -> list:
+        """Get SQL query logs with proper format for frontend."""
+        logs = []
+        try:
+            sql_log_file = self.log_dir / 'sql_queries.log'
+            if not sql_log_file.exists():
+                return logs
+            
+            with open(sql_log_file, 'r') as f:
+                lines = f.readlines()
+                
+            # Get last 'limit' lines
+            for line in lines[-limit:]:
+                try:
+                    # Parse JSON log entry
+                    log_entry = json.loads(line.strip())
+                    logs.append({
+                        'timestamp': log_entry.get('timestamp', ''),
+                        'component': log_entry.get('component', 'Unknown'),
+                        'query': log_entry.get('query', ''),
+                        'execution_time': log_entry.get('execution_time', 0),
+                        'status': log_entry.get('status', 'SUCCESS'),
+                        'error': log_entry.get('error', '')
+                    })
+                except json.JSONDecodeError:
+                    # Handle non-JSON log lines
+                    continue
+                    
+            # Reverse to show newest first
+            logs.reverse()
+            
+        except Exception as e:
+            self.logger.error(f"Error reading SQL logs: {e}")
+        
+        return logs
+    
+    def get_stats(self) -> dict:
+        """Get SQL query statistics."""
+        stats = {
+            'avg_time': 0,
+            'fastest_time': 0,
+            'slowest_time': 0,
+            'error_count': 0,
+            'total_queries': 0
+        }
+        
+        try:
+            logs = self.get_logs(limit=1000)  # Get more logs for statistics
+            
+            if logs:
+                execution_times = []
+                error_count = 0
+                
+                for log in logs:
+                    if log['status'] == 'ERROR':
+                        error_count += 1
+                    else:
+                        exec_time = log.get('execution_time', 0)
+                        if exec_time > 0:
+                            execution_times.append(exec_time)
+                
+                if execution_times:
+                    stats['avg_time'] = round(sum(execution_times) / len(execution_times), 2)
+                    stats['fastest_time'] = round(min(execution_times), 2)
+                    stats['slowest_time'] = round(max(execution_times), 2)
+                
+                stats['error_count'] = error_count
+                stats['total_queries'] = len(logs)
+                
+        except Exception as e:
+            self.logger.error(f"Error calculating SQL stats: {e}")
+        
+        return stats
+    
     def clear_logs(self) -> bool:
         """Clear all SQL query logs."""
         try:
