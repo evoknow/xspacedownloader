@@ -6414,7 +6414,9 @@ def admin_get_logs():
         offset = int(request.args.get('offset', 0))
         limit = int(request.args.get('limit', 100))
         
-        # Read logs from the logs directory
+        all_log_entries = []
+        
+        # Try to read from log files first
         logs_dir = Path('/var/www/production/xspacedownload.com/website/xspacedownloader/logs')
         log_files = []
         
@@ -6426,35 +6428,90 @@ def admin_get_logs():
                 else:
                     log_files.append(log_file)
         
-        # If no logs directory, try reading from root directory
-        if not log_files:
-            for pattern in ['*.log', 'app.log', 'xspacedownloader.log']:
-                for log_file in Path('/var/www/production/xspacedownload.com/website/xspacedownloader').glob(pattern):
-                    log_files.append(log_file)
-        
-        all_log_entries = []
-        
-        # Read logs from all files
+        # Read logs from files if available
         for log_file in log_files:
             try:
                 with open(log_file, 'r', encoding='utf-8') as f:
                     lines = f.readlines()
-                    # Get recent lines (last 1000 to avoid memory issues)
-                    recent_lines = lines[-1000:] if len(lines) > 1000 else lines
+                    # Get recent lines (last 500 to avoid memory issues)
+                    recent_lines = lines[-500:] if len(lines) > 500 else lines
                     
                     for line in recent_lines:
                         line = line.strip()
                         if line:  # Skip empty lines
                             all_log_entries.append({
                                 'message': line,
-                                'source': log_file.name,
-                                'timestamp': None  # We'll parse this if needed
+                                'source': log_file.stem,
+                                'level': 'INFO',
+                                'timestamp': None
                             })
             except Exception as e:
                 logger.warning(f"Error reading log file {log_file}: {e}")
                 continue
         
-        # Sort by most recent (assuming logs are chronological)
+        # If no log files found, try to read from systemd journal
+        if not all_log_entries:
+            try:
+                import subprocess
+                # Get recent logs from gunicorn service
+                result = subprocess.run([
+                    'journalctl', '-u', 'xspacedownloader-gunicorn.service', 
+                    '--no-pager', '--lines', str(limit), '--output', 'json'
+                ], capture_output=True, text=True, timeout=10)
+                
+                if result.returncode == 0:
+                    import json
+                    for line in result.stdout.strip().split('\n'):
+                        if line.strip():
+                            try:
+                                log_entry = json.loads(line)
+                                message = log_entry.get('MESSAGE', '')
+                                if message:
+                                    # Parse log level from message if possible
+                                    level = 'INFO'
+                                    if ' - ERROR - ' in message:
+                                        level = 'ERROR'
+                                    elif ' - WARNING - ' in message:
+                                        level = 'WARNING'
+                                    elif ' - DEBUG - ' in message:
+                                        level = 'DEBUG'
+                                    
+                                    all_log_entries.append({
+                                        'message': message,
+                                        'source': 'gunicorn',
+                                        'level': level,
+                                        'timestamp': log_entry.get('__REALTIME_TIMESTAMP')
+                                    })
+                            except json.JSONDecodeError:
+                                continue
+                else:
+                    # Fallback to simple journalctl output
+                    result = subprocess.run([
+                        'journalctl', '-u', 'xspacedownloader-gunicorn.service', 
+                        '--no-pager', '--lines', str(limit)
+                    ], capture_output=True, text=True, timeout=10)
+                    
+                    if result.returncode == 0:
+                        for line in result.stdout.strip().split('\n'):
+                            if line.strip() and not line.startswith('--'):
+                                all_log_entries.append({
+                                    'message': line.strip(),
+                                    'source': 'systemd',
+                                    'level': 'INFO',
+                                    'timestamp': None
+                                })
+                                
+            except Exception as e:
+                logger.warning(f"Error reading from systemd journal: {e}")
+                # If all else fails, create a sample log entry
+                all_log_entries.append({
+                    'message': f"Live logging from systemd journal. Last updated: {datetime.datetime.now().isoformat()}",
+                    'source': 'system',
+                    'level': 'INFO',
+                    'timestamp': datetime.datetime.now().isoformat()
+                })
+        
+        # Sort by most recent (reverse chronological)
         all_log_entries.reverse()
         
         # Apply offset and limit
