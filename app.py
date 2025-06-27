@@ -4632,7 +4632,7 @@ def profile():
             FROM computes 
             WHERE user_id = %s 
             ORDER BY created_at DESC 
-            LIMIT 50
+            LIMIT 100
         """, (user_id,))
         compute_transactions = cursor.fetchall()
         
@@ -4643,7 +4643,7 @@ def profile():
             FROM transactions 
             WHERE user_id = %s 
             ORDER BY created_at DESC 
-            LIMIT 50
+            LIMIT 100
         """, (user_id,))
         ai_transactions = cursor.fetchall()
         

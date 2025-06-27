@@ -2,6 +2,70 @@
 
 {% block title %}Profile - XSpace Downloader{% endblock %}
 
+{% block head %}
+<!-- List.js for pagination and search -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<style>
+/* List.js styling */
+.search {
+    width: 100%;
+    padding: 0.375rem 0.75rem;
+    margin-bottom: 1rem;
+    font-size: 1rem;
+    border: 1px solid #ced4da;
+    border-radius: 0.25rem;
+}
+
+.pagination {
+    display: flex;
+    justify-content: center;
+    margin-top: 1rem;
+    list-style: none;
+    padding: 0;
+}
+
+.pagination li {
+    display: inline-block;
+    margin: 0 2px;
+}
+
+.pagination li a {
+    display: block;
+    padding: 0.375rem 0.75rem;
+    color: #0d6efd;
+    text-decoration: none;
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+}
+
+.pagination li.active a {
+    background-color: #0d6efd;
+    color: white;
+    border-color: #0d6efd;
+}
+
+.pagination li a:hover {
+    background-color: #e9ecef;
+}
+
+.sort {
+    cursor: pointer;
+}
+
+.sort:hover {
+    background-color: #f8f9fa;
+}
+
+.sort.asc:after {
+    content: " ↑";
+}
+
+.sort.desc:after {
+    content: " ↓";
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="mt-4">
     <div class="row">
@@ -151,87 +215,104 @@
                         <h5>Usage History</h5>
                         
                         {% if compute_transactions or ai_transactions %}
-                            <div class="table-responsive">
-                                <table class="table table-striped">
-                                    <thead>
-                                        <tr>
-                                            <th>Date</th>
-                                            <th>Type</th>
-                                            <th>Space</th>
-                                            <th class="d-none d-md-table-cell">Description</th>
-                                            <th>Cost (Credits)</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <!-- Compute transactions -->
-                                        {% for transaction in compute_transactions %}
-                                        <tr>
-                                            <td>{{ transaction.created_at.strftime('%m/%d/%Y %I:%M %p') if transaction.created_at else 'N/A' }}</td>
-                                            <td>
-                                                <span class="badge bg-warning">Compute</span>
-                                            </td>
-                                            <td>
-                                                {% if transaction.space_id %}
-                                                    <a href="/spaces/{{ transaction.space_id }}" class="text-decoration-none">
-                                                        {{ transaction.space_id[:13] }}...
-                                                    </a>
-                                                {% else %}
-                                                    -
-                                                {% endif %}
-                                            </td>
-                                            <td class="d-none d-md-table-cell">
-                                                {{ transaction.action|title }}
-                                                <br>
-                                                <small class="text-muted">
-                                                    {{ transaction.compute_time_seconds }}s @ {{ "{:g}".format(transaction.cost_per_second) }}/s
-                                                </small>
-                                            </td>
-                                            <td>
-                                                <span class="text-danger">-{{ transaction.total_cost|int }}</span>
-                                            </td>
-                                        </tr>
-                                        {% endfor %}
-                                        
-                                        <!-- AI transactions -->
-                                        {% for transaction in ai_transactions %}
-                                        <tr>
-                                            <td>{{ transaction.created_at.strftime('%m/%d/%Y %I:%M %p') if transaction.created_at else 'N/A' }}</td>
-                                            <td>
-                                                <span class="badge bg-info">AI</span>
-                                            </td>
-                                            <td>
-                                                {% if transaction.space_id %}
-                                                    <a href="/spaces/{{ transaction.space_id }}" class="text-decoration-none">
-                                                        {{ transaction.space_id[:13] }}...
-                                                    </a>
-                                                {% else %}
-                                                    -
-                                                {% endif %}
-                                            </td>
-                                            <td class="d-none d-md-table-cell">
-                                                {{ transaction.action|title }}
-                                                {% if transaction.source_language and transaction.target_language %}
-                                                    <small class="text-muted">({{ transaction.source_language }} → {{ transaction.target_language }})</small>
-                                                {% elif transaction.ai_model %}
-                                                    <small class="text-muted">({{ transaction.ai_model }})</small>
-                                                {% endif %}
-                                                {% if transaction.input_tokens and transaction.output_tokens %}
-                                                    <br><small class="text-muted">{{ transaction.input_tokens }} in + {{ transaction.output_tokens }} out tokens</small>
-                                                {% endif %}
-                                            </td>
-                                            <td>
-                                                <span class="text-danger">-{{ transaction.cost|int }}</span>
-                                            </td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
+                            <div id="transaction-history">
+                                <!-- Search box -->
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <input class="search form-control" placeholder="Search transactions..." />
+                                    </div>
+                                    <div class="col-md-6 text-end">
+                                        <small class="text-muted">
+                                            Showing <span class="showing-count">10</span> of <span class="total-count">{{ (compute_transactions|length + ai_transactions|length) }}</span> transactions
+                                        </small>
+                                    </div>
+                                </div>
+                                
+                                <div class="table-responsive">
+                                    <table class="table table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th class="sort" data-sort="date">Date</th>
+                                                <th class="sort" data-sort="type">Type</th>
+                                                <th class="sort" data-sort="space">Space</th>
+                                                <th class="d-none d-md-table-cell sort" data-sort="description">Description</th>
+                                                <th class="sort" data-sort="cost">Cost (Credits)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="list">
+                                            <!-- Compute transactions -->
+                                            {% for transaction in compute_transactions %}
+                                            <tr>
+                                                <td class="date">{{ transaction.created_at.strftime('%m/%d/%Y %I:%M %p') if transaction.created_at else 'N/A' }}</td>
+                                                <td class="type">
+                                                    <span class="badge bg-warning">Compute</span>
+                                                </td>
+                                                <td class="space">
+                                                    {% if transaction.space_id %}
+                                                        <a href="/spaces/{{ transaction.space_id }}" class="text-decoration-none">
+                                                            {{ transaction.space_id[:13] }}...
+                                                        </a>
+                                                    {% else %}
+                                                        -
+                                                    {% endif %}
+                                                </td>
+                                                <td class="d-none d-md-table-cell description">
+                                                    {{ transaction.action|title }}
+                                                    <br>
+                                                    <small class="text-muted">
+                                                        {{ transaction.compute_time_seconds }}s @ {{ "{:g}".format(transaction.cost_per_second) }}/s
+                                                    </small>
+                                                </td>
+                                                <td class="cost" data-cost="{{ transaction.total_cost|int }}">
+                                                    <span class="text-danger">-{{ transaction.total_cost|int }}</span>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                            
+                                            <!-- AI transactions -->
+                                            {% for transaction in ai_transactions %}
+                                            <tr>
+                                                <td class="date">{{ transaction.created_at.strftime('%m/%d/%Y %I:%M %p') if transaction.created_at else 'N/A' }}</td>
+                                                <td class="type">
+                                                    <span class="badge bg-info">AI</span>
+                                                </td>
+                                                <td class="space">
+                                                    {% if transaction.space_id %}
+                                                        <a href="/spaces/{{ transaction.space_id }}" class="text-decoration-none">
+                                                            {{ transaction.space_id[:13] }}...
+                                                        </a>
+                                                    {% else %}
+                                                        -
+                                                    {% endif %}
+                                                </td>
+                                                <td class="d-none d-md-table-cell description">
+                                                    {{ transaction.action|title }}
+                                                    {% if transaction.source_language and transaction.target_language %}
+                                                        <small class="text-muted">({{ transaction.source_language }} → {{ transaction.target_language }})</small>
+                                                    {% elif transaction.ai_model %}
+                                                        <small class="text-muted">({{ transaction.ai_model }})</small>
+                                                    {% endif %}
+                                                    {% if transaction.input_tokens and transaction.output_tokens %}
+                                                        <br><small class="text-muted">{{ transaction.input_tokens }} in + {{ transaction.output_tokens }} out tokens</small>
+                                                    {% endif %}
+                                                </td>
+                                                <td class="cost" data-cost="{{ transaction.cost|int }}">
+                                                    <span class="text-danger">-{{ transaction.cost|int }}</span>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <!-- Pagination -->
+                                <ul class="pagination"></ul>
                             </div>
                             
-                            {% if (compute_transactions|length + ai_transactions|length) >= 50 %}
+                            {% if (compute_transactions|length + ai_transactions|length) >= 100 %}
                                 <div class="alert alert-info">
                                     <i class="bi bi-info-circle"></i>
-                                    Showing the last 50 transactions. Contact support if you need a complete history.
+                                    Showing the last 100 transactions. Contact support if you need a complete history.
                                 </div>
                             {% endif %}
                         {% else %}
@@ -291,5 +372,43 @@ function copyAffiliateLink() {
         console.error('Failed to copy: ', err);
     }
 }
+
+// Initialize List.js for transaction history
+document.addEventListener('DOMContentLoaded', function() {
+    {% if compute_transactions or ai_transactions %}
+    var options = {
+        valueNames: [
+            'date',
+            'type', 
+            'space',
+            'description',
+            { name: 'cost', attr: 'data-cost' }
+        ],
+        page: 10,
+        pagination: true,
+        searchColumns: ['date', 'type', 'space', 'description']
+    };
+
+    var transactionList = new List('transaction-history', options);
+    
+    // Update showing count when list changes
+    function updateShowingCount() {
+        const visibleItems = transactionList.visibleItems.length;
+        const totalItems = transactionList.items.length;
+        const showingElement = document.querySelector('.showing-count');
+        if (showingElement) {
+            showingElement.textContent = visibleItems;
+        }
+    }
+    
+    // Update count on search
+    transactionList.on('searchComplete', updateShowingCount);
+    transactionList.on('filterComplete', updateShowingCount);
+    transactionList.on('updated', updateShowingCount);
+    
+    // Initial count update
+    updateShowingCount();
+    {% endif %}
+});
 </script>
 {% endblock %}
