@@ -1218,18 +1218,9 @@ Language code:"""
                                     input_tokens = usage.get('input_tokens', 0)
                                     output_tokens = usage.get('output_tokens', 0)
                                     
-                                    # Track cost
-                                    ai_cost.track_cost(
-                                        space_id=space_id,
-                                        action='language_detection',
-                                        vendor='openai',
-                                        model=ai.model,  # Use the model from AI component
-                                        input_tokens=input_tokens,
-                                        output_tokens=output_tokens
-                                    )
-                                    logger.info(f"Tracked AI cost for language detection: {input_tokens} input + {output_tokens} output tokens")
+                                    logger.info(f"Language detection tokens: {input_tokens} input + {output_tokens} output tokens")
                                 except Exception as cost_error:
-                                    logger.warning(f"Failed to track AI cost for language detection: {cost_error}")
+                                    logger.warning(f"Failed to estimate language detection tokens: {cost_error}")
                             
                             if success:
                                 # Extract content from the response dict
