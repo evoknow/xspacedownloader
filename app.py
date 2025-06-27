@@ -6527,6 +6527,8 @@ def admin_get_logs():
         
         # Try to read from log files first
         logs_dir = Path('/var/www/production/xspacedownload.com/website/htdocs/logs')
+        logger.info(f"DEBUG: Starting admin_get_logs, offset={offset}, limit={limit}")
+        logger.info(f"DEBUG: Logs directory path: {logs_dir}")
         log_files = []
         
         # Find all log files, prioritizing the main app log
@@ -6647,7 +6649,15 @@ def admin_get_logs():
             'total': len(all_log_entries),
             'offset': offset,
             'next_offset': end_idx if end_idx < len(all_log_entries) else None,
-            'has_more': end_idx < len(all_log_entries)
+            'has_more': end_idx < len(all_log_entries),
+            'debug_info': {
+                'logs_dir_exists': logs_dir.exists(),
+                'log_files_found': [f.name for f in logs_dir.glob('*.log')] if logs_dir.exists() else [],
+                'total_entries_collected': len(all_log_entries),
+                'slice_start': start_idx,
+                'slice_end': end_idx,
+                'slice_length': len(logs_slice)
+            }
         })
         
     except Exception as e:
