@@ -73,6 +73,7 @@ except ImportError:
 from components.Space import Space
 from components.Ad import Ad
 from components.LoggingCursor import wrap_cursor
+from components.Affiliate import Affiliate
 # Import SpeechToText component if available
 try:
     from components.SpeechToText import SpeechToText
@@ -1044,6 +1045,38 @@ def view_queue():
 def favicon():
     """Serve favicon to avoid 404 errors."""
     return send_from_directory('static', 'favicon.svg', mimetype='image/svg+xml')
+
+@app.route('/a/<int:affiliate_user_id>')
+def affiliate_tracking(affiliate_user_id):
+    """Track affiliate visits and redirect to home page."""
+    try:
+        # Get visitor information
+        visitor_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+        if visitor_ip and ',' in visitor_ip:
+            visitor_ip = visitor_ip.split(',')[0].strip()
+        visitor_user_agent = request.headers.get('User-Agent', '')
+        
+        # Track the visit
+        affiliate = Affiliate()
+        tracking_id = affiliate.track_visit(affiliate_user_id, visitor_ip, visitor_user_agent)
+        
+        if tracking_id:
+            # Store tracking info in session for conversion tracking
+            session['affiliate_tracking'] = {
+                'affiliate_user_id': affiliate_user_id,
+                'tracking_id': tracking_id
+            }
+            logger.info(f"Tracked affiliate visit from user {affiliate_user_id}")
+        else:
+            logger.warning(f"Failed to track affiliate visit from user {affiliate_user_id}")
+        
+        # Redirect to home page
+        return redirect(url_for('index'))
+        
+    except Exception as e:
+        logger.error(f"Error in affiliate tracking: {e}", exc_info=True)
+        # Still redirect to home even on error
+        return redirect(url_for('index'))
 
 @app.route('/', methods=['GET'])
 def index():
@@ -4300,6 +4333,22 @@ def send_login_link():
             )
             space.connection.commit()
             user_id = cursor.lastrowid
+            
+            # Check for affiliate tracking and record conversion
+            if session.get('affiliate_tracking'):
+                try:
+                    affiliate = Affiliate()
+                    visitor_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+                    if visitor_ip and ',' in visitor_ip:
+                        visitor_ip = visitor_ip.split(',')[0].strip()
+                    
+                    # Record the conversion
+                    if affiliate.convert_visitor(user_id, visitor_ip):
+                        logger.info(f"Recorded affiliate conversion for new user {user_id}")
+                        # Clear the tracking from session
+                        session.pop('affiliate_tracking', None)
+                except Exception as aff_error:
+                    logger.error(f"Error recording affiliate conversion: {aff_error}")
         else:
             user_id = user['id']
         
@@ -4570,12 +4619,21 @@ def profile():
         """, (user_id,))
         ai_transactions = cursor.fetchall()
         
+        # Get affiliate statistics
+        affiliate_stats = None
+        try:
+            affiliate = Affiliate()
+            affiliate_stats = affiliate.get_affiliate_stats(user_id)
+        except Exception as aff_error:
+            logger.error(f"Error getting affiliate stats: {aff_error}")
+        
         cursor.close()
         
         return render_template('profile.html', 
                              user_info=user_info, 
                              compute_transactions=compute_transactions,
                              ai_transactions=ai_transactions,
+                             affiliate_stats=affiliate_stats,
                              advertisement_html=advertisement_html,
                              advertisement_bg=advertisement_bg)
                              
@@ -9661,6 +9719,127 @@ def queue_translation():
         
     except Exception as e:
         logger.error(f"Error queuing translation: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+# Affiliate Admin Routes
+@app.route('/admin/affiliates')
+def admin_affiliates():
+    """Admin page for managing affiliates."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        flash('Admin access required.', 'error')
+        return redirect(url_for('index'))
+    
+    try:
+        affiliate = Affiliate()
+        
+        # Get dashboard stats
+        stats = affiliate.get_admin_dashboard_stats()
+        
+        # Get pending earnings
+        pending_credit_earnings = affiliate.get_pending_earnings('credit')
+        pending_money_earnings = affiliate.get_pending_earnings('money')
+        
+        # Get settings
+        settings = affiliate.get_affiliate_settings()
+        
+        return render_template('admin_affiliates.html',
+                             stats=stats,
+                             pending_credit_earnings=pending_credit_earnings,
+                             pending_money_earnings=pending_money_earnings,
+                             settings=settings)
+        
+    except Exception as e:
+        logger.error(f"Error loading affiliate admin page: {e}", exc_info=True)
+        flash('Error loading affiliate data.', 'error')
+        return redirect(url_for('admin'))
+
+@app.route('/admin/api/affiliates/approve', methods=['POST'])
+def admin_approve_affiliate_earnings():
+    """Approve affiliate earnings."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        data = request.get_json()
+        earning_ids = data.get('earning_ids', [])
+        earning_type = data.get('earning_type', 'credit')
+        
+        if not earning_ids:
+            return jsonify({'error': 'No earnings selected'}), 400
+        
+        affiliate = Affiliate()
+        success, message = affiliate.approve_earnings(
+            earning_ids, earning_type, session['user_id']
+        )
+        
+        if success:
+            return jsonify({'success': True, 'message': message})
+        else:
+            return jsonify({'error': message}), 400
+            
+    except Exception as e:
+        logger.error(f"Error approving earnings: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/affiliates/pay-credits', methods=['POST'])
+def admin_pay_affiliate_credits():
+    """Pay all approved credit earnings."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        affiliate = Affiliate()
+        success, message = affiliate.pay_credits(session['user_id'])
+        
+        if success:
+            return jsonify({'success': True, 'message': message})
+        else:
+            return jsonify({'error': message}), 400
+            
+    except Exception as e:
+        logger.error(f"Error paying credits: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/affiliates/create-payout-csv', methods=['POST'])
+def admin_create_affiliate_payout_csv():
+    """Create CSV for money payouts."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        affiliate = Affiliate()
+        success, message, csv_path = affiliate.create_money_payout_csv(session['user_id'])
+        
+        if success and csv_path:
+            # Return the file
+            return send_file(csv_path, as_attachment=True, 
+                           download_name=os.path.basename(csv_path))
+        else:
+            return jsonify({'message': message})
+            
+    except Exception as e:
+        logger.error(f"Error creating payout CSV: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/affiliates/settings', methods=['PUT'])
+def admin_update_affiliate_settings():
+    """Update affiliate settings."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        data = request.get_json()
+        
+        affiliate = Affiliate()
+        success = affiliate.update_affiliate_settings(data, session['user_id'])
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Settings updated successfully'})
+        else:
+            return jsonify({'error': 'Failed to update settings'}), 400
+            
+    except Exception as e:
+        logger.error(f"Error updating affiliate settings: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

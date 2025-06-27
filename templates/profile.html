@@ -55,6 +55,97 @@
                         </div>
                     </div>
 
+                    <!-- Affiliate Program Section -->
+                    {% if affiliate_stats %}
+                    <div class="mt-4">
+                        <h5>Affiliate Program</h5>
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <div class="row mb-3">
+                                    <div class="col-md-12">
+                                        <h6>Your Affiliate Link</h6>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control" id="affiliate-link" 
+                                                   value="{{ request.url_root.rstrip('/') }}/a/{{ session.user_id }}" readonly>
+                                            <button class="btn btn-outline-secondary" type="button" 
+                                                    onclick="copyAffiliateLink()">
+                                                <i class="bi bi-clipboard"></i> Copy
+                                            </button>
+                                        </div>
+                                        <small class="text-muted">Share this link to earn rewards when people sign up!</small>
+                                    </div>
+                                </div>
+                                
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <div class="text-center">
+                                            <h6 class="text-muted">Total Referrals</h6>
+                                            <h3 class="mb-0">{{ affiliate_stats.total_referrals or 0 }}</h3>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="text-center">
+                                            <h6 class="text-muted">Credits Earned</h6>
+                                            <h3 class="mb-0">{{ affiliate_stats.total_credits_earned|int if affiliate_stats.total_credits_earned else 0 }}</h3>
+                                            <small class="text-success">{{ affiliate_stats.pending_credits|int if affiliate_stats.pending_credits else 0 }} pending</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="text-center">
+                                            <h6 class="text-muted">Money Earned</h6>
+                                            <h3 class="mb-0">${{ "%.2f"|format(affiliate_stats.total_money_earned|float if affiliate_stats.total_money_earned else 0) }}</h3>
+                                            <small class="text-success">${{ "%.2f"|format(affiliate_stats.pending_money|float if affiliate_stats.pending_money else 0) }} pending</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                {% if affiliate_stats.recent_referrals %}
+                                <div class="mt-4">
+                                    <h6>Recent Referrals</h6>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>Date</th>
+                                                    <th>User</th>
+                                                    <th>Credits</th>
+                                                    <th>Money</th>
+                                                    <th>Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for referral in affiliate_stats.recent_referrals[:5] %}
+                                                <tr>
+                                                    <td>{{ referral.earned_date.strftime('%m/%d') }}</td>
+                                                    <td>{{ referral.username or referral.email.split('@')[0][:10] }}...</td>
+                                                    <td>{{ referral.credits_earned|int }}</td>
+                                                    <td>${{ "%.2f"|format(referral.money_earned) }}</td>
+                                                    <td>
+                                                        <span class="badge bg-{{ 'success' if referral.credit_status == 'paid' else 'warning' if referral.credit_status == 'approved' else 'secondary' }}">
+                                                            {{ referral.credit_status }}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                {% endif %}
+                                
+                                <div class="mt-3">
+                                    <small class="text-muted">
+                                        <i class="bi bi-info-circle"></i>
+                                        Earn {{ affiliate_stats.credits_per_registration|int }} credits and 
+                                        ${{ "%.2f"|format(affiliate_stats.money_per_registration) }} for each new user who signs up!
+                                        Minimum payout: ${{ "%.2f"|format(affiliate_stats.minimum_payout_amount) }}
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
                     <!-- Transaction History -->
                     <div class="mt-4">
                         <h5>Usage History</h5>
@@ -172,4 +263,33 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copyAffiliateLink() {
+    const linkInput = document.getElementById('affiliate-link');
+    linkInput.select();
+    linkInput.setSelectionRange(0, 99999); // For mobile devices
+    
+    try {
+        document.execCommand('copy');
+        
+        // Update button text temporarily
+        const button = event.target.closest('button');
+        const originalHTML = button.innerHTML;
+        button.innerHTML = '<i class="bi bi-check"></i> Copied!';
+        button.classList.remove('btn-outline-secondary');
+        button.classList.add('btn-success');
+        
+        setTimeout(() => {
+            button.innerHTML = originalHTML;
+            button.classList.remove('btn-success');
+            button.classList.add('btn-outline-secondary');
+        }, 2000);
+    } catch (err) {
+        console.error('Failed to copy: ', err);
+    }
+}
+</script>
 {% endblock %}

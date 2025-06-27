@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+
+{% block title %}Affiliate Management - Admin{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h1><i class="bi bi-people"></i> Affiliate Management</h1>
+            
+            <!-- Overview Stats -->
+            <div class="row mt-4">
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">Total Affiliates</h5>
+                            <h2>{{ stats.total_affiliates or 0 }}</h2>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">Total Referrals</h5>
+                            <h2>{{ stats.total_referrals or 0 }}</h2>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">Pending Credits</h5>
+                            <h2>{{ stats.pending_credits|int if stats.pending_credits else 0 }}</h2>
+                            <small class="text-muted">{{ stats.pending_credit_count or 0 }} earnings</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">Pending Money</h5>
+                            <h2>${{ "%.2f"|format(stats.pending_money|float if stats.pending_money else 0) }}</h2>
+                            <small class="text-muted">{{ stats.pending_money_count or 0 }} earnings</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Settings -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Affiliate Settings</h5>
+                </div>
+                <div class="card-body">
+                    <form id="affiliate-settings-form">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label class="form-label">Credits per Registration</label>
+                                    <input type="number" class="form-control" id="credits_per_registration" 
+                                           value="{{ settings.credits_per_registration|int }}" min="0">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label class="form-label">Money per Registration ($)</label>
+                                    <input type="number" class="form-control" id="money_per_registration" 
+                                           value="{{ settings.money_per_registration }}" min="0" step="0.01">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label class="form-label">Minimum Payout ($)</label>
+                                    <input type="number" class="form-control" id="minimum_payout_amount" 
+                                           value="{{ settings.minimum_payout_amount }}" min="0" step="0.01">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label class="form-label">Tax Reporting Threshold ($)</label>
+                                    <input type="number" class="form-control" id="tax_reporting_threshold" 
+                                           value="{{ settings.tax_reporting_threshold }}" min="0" step="0.01">
+                                </div>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Save Settings</button>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Pending Credit Earnings -->
+            {% if pending_credit_earnings %}
+            <div class="card mt-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Pending Credit Earnings</h5>
+                    <div>
+                        <button class="btn btn-sm btn-success" onclick="approveSelected('credit')">
+                            <i class="bi bi-check-circle"></i> Approve Selected
+                        </button>
+                        <button class="btn btn-sm btn-primary" onclick="payAllApprovedCredits()">
+                            <i class="bi bi-cash"></i> Pay All Approved
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th><input type="checkbox" id="select-all-credit" onchange="toggleAllCheckboxes('credit')"></th>
+                                    <th>Date</th>
+                                    <th>Affiliate</th>
+                                    <th>Referred User</th>
+                                    <th>Credits</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for earning in pending_credit_earnings %}
+                                <tr>
+                                    <td><input type="checkbox" class="earning-checkbox credit-checkbox" value="{{ earning.id }}"></td>
+                                    <td>{{ earning.earned_date.strftime('%m/%d/%Y') }}</td>
+                                    <td>{{ earning.affiliate_username or earning.affiliate_email }}</td>
+                                    <td>{{ earning.referred_username or earning.referred_email }}</td>
+                                    <td>{{ earning.credits_earned|int }}</td>
+                                    <td><span class="badge bg-warning">{{ earning.credit_status }}</span></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Pending Money Earnings -->
+            {% if pending_money_earnings %}
+            <div class="card mt-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Pending Money Earnings</h5>
+                    <div>
+                        <button class="btn btn-sm btn-success" onclick="approveSelected('money')">
+                            <i class="bi bi-check-circle"></i> Approve Selected
+                        </button>
+                        <button class="btn btn-sm btn-primary" onclick="createPayoutCSV()">
+                            <i class="bi bi-file-earmark-spreadsheet"></i> Create Payout CSV
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th><input type="checkbox" id="select-all-money" onchange="toggleAllCheckboxes('money')"></th>
+                                    <th>Date</th>
+                                    <th>Affiliate</th>
+                                    <th>Referred User</th>
+                                    <th>Money</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for earning in pending_money_earnings %}
+                                <tr>
+                                    <td><input type="checkbox" class="earning-checkbox money-checkbox" value="{{ earning.id }}"></td>
+                                    <td>{{ earning.earned_date.strftime('%m/%d/%Y') }}</td>
+                                    <td>{{ earning.affiliate_username or earning.affiliate_email }}</td>
+                                    <td>{{ earning.referred_username or earning.referred_email }}</td>
+                                    <td>${{ "%.2f"|format(earning.money_earned) }}</td>
+                                    <td><span class="badge bg-warning">{{ earning.money_status }}</span></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Top Affiliates -->
+            {% if stats.top_affiliates %}
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Top Affiliates</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Affiliate</th>
+                                    <th>Total Referrals</th>
+                                    <th>Total Credits</th>
+                                    <th>Total Money</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for affiliate in stats.top_affiliates %}
+                                <tr>
+                                    <td>{{ affiliate.username or affiliate.email }}</td>
+                                    <td>{{ affiliate.referral_count }}</td>
+                                    <td>{{ affiliate.total_credits|int }}</td>
+                                    <td>${{ "%.2f"|format(affiliate.total_money) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Toggle all checkboxes
+function toggleAllCheckboxes(type) {
+    const selectAll = document.getElementById(`select-all-${type}`);
+    const checkboxes = document.querySelectorAll(`.${type}-checkbox`);
+    checkboxes.forEach(cb => cb.checked = selectAll.checked);
+}
+
+// Get selected earning IDs
+function getSelectedIds(type) {
+    const checkboxes = document.querySelectorAll(`.${type}-checkbox:checked`);
+    return Array.from(checkboxes).map(cb => parseInt(cb.value));
+}
+
+// Approve selected earnings
+async function approveSelected(type) {
+    const ids = getSelectedIds(type);
+    if (ids.length === 0) {
+        alert('Please select earnings to approve');
+        return;
+    }
+    
+    if (!confirm(`Approve ${ids.length} ${type} earnings?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/admin/api/affiliates/approve', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                earning_ids: ids,
+                earning_type: type
+            })
+        });
+        
+        const data = await response.json();
+        if (response.ok) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error approving earnings: ' + error.message);
+    }
+}
+
+// Pay all approved credits
+async function payAllApprovedCredits() {
+    if (!confirm('Pay all approved credit earnings to affiliates?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/admin/api/affiliates/pay-credits', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+        
+        const data = await response.json();
+        if (response.ok) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error paying credits: ' + error.message);
+    }
+}
+
+// Create payout CSV
+async function createPayoutCSV() {
+    if (!confirm('Create CSV file for money payouts?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/admin/api/affiliates/create-payout-csv', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+        
+        if (response.ok) {
+            // Check if response is a file or JSON
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                const data = await response.json();
+                alert(data.message);
+            } else {
+                // Download the file
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'affiliate_payout.csv';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                setTimeout(() => location.reload(), 1000);
+            }
+        } else {
+            const data = await response.json();
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error creating payout CSV: ' + error.message);
+    }
+}
+
+// Save settings
+document.getElementById('affiliate-settings-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const settings = {
+        credits_per_registration: parseFloat(document.getElementById('credits_per_registration').value),
+        money_per_registration: parseFloat(document.getElementById('money_per_registration').value),
+        minimum_payout_amount: parseFloat(document.getElementById('minimum_payout_amount').value),
+        tax_reporting_threshold: parseFloat(document.getElementById('tax_reporting_threshold').value)
+    };
+    
+    try {
+        const response = await fetch('/admin/api/affiliates/settings', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(settings)
+        });
+        
+        const data = await response.json();
+        if (response.ok) {
+            alert(data.message);
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error saving settings: ' + error.message);
+    }
+});
+</script>
+{% endblock %}
