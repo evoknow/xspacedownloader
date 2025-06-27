@@ -6530,20 +6530,29 @@ def admin_get_logs():
         log_files = []
         
         # Find all log files, prioritizing the main app log
+        logger.info(f"DEBUG: Checking logs directory: {logs_dir}, exists: {logs_dir.exists()}")
         if logs_dir.exists():
-            for log_file in logs_dir.glob('*.log'):
+            found_files = list(logs_dir.glob('*.log'))
+            logger.info(f"DEBUG: Found {len(found_files)} log files: {[f.name for f in found_files]}")
+            for log_file in found_files:
                 if log_file.name in ['app.log', 'xspacedownloader.log']:
                     log_files.insert(0, log_file)  # Main logs first
                 else:
                     log_files.append(log_file)
+        else:
+            logger.warning(f"DEBUG: Logs directory does not exist: {logs_dir}")
         
         # Read logs from files if available
+        logger.info(f"DEBUG: Processing {len(log_files)} log files: {[f.name for f in log_files]}")
         for log_file in log_files:
             try:
+                logger.info(f"DEBUG: Reading log file: {log_file}")
                 with open(log_file, 'r', encoding='utf-8') as f:
                     lines = f.readlines()
                     # Get recent lines (last 500 to avoid memory issues)
                     recent_lines = lines[-500:] if len(lines) > 500 else lines
+                    
+                    logger.info(f"DEBUG: Read {len(lines)} total lines, using {len(recent_lines)} recent lines from {log_file.name}")
                     
                     for line in recent_lines:
                         line = line.strip()
@@ -6554,9 +6563,13 @@ def admin_get_logs():
                                 'level': 'INFO',
                                 'timestamp': None
                             })
+                    
+                    logger.info(f"DEBUG: Added {len([l for l in recent_lines if l.strip()])} log entries from {log_file.name}")
             except Exception as e:
                 logger.warning(f"Error reading log file {log_file}: {e}")
                 continue
+        
+        logger.info(f"DEBUG: Total log entries collected: {len(all_log_entries)}")
         
         # If no log files found, try to read from systemd journal
         if not all_log_entries:
