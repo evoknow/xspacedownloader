@@ -6506,8 +6506,18 @@ def admin_get_stats(stat_type):
 @app.route('/admin/api/logs')
 def admin_get_logs():
     """Get system logs for admin dashboard."""
+    # Debug session state
+    logger.info(f"Admin logs API called - user_id: {session.get('user_id')}, is_admin: {session.get('is_admin')}, session: {dict(session)}")
+    
     if not session.get('user_id') or not session.get('is_admin'):
-        return jsonify({'error': 'Unauthorized'}), 403
+        return jsonify({
+            'error': 'Unauthorized', 
+            'debug': {
+                'user_id': session.get('user_id'),
+                'is_admin': session.get('is_admin'),
+                'has_session': bool(session)
+            }
+        }), 403
     
     try:
         offset = int(request.args.get('offset', 0))
@@ -8336,8 +8346,18 @@ def admin_system_status():
 @app.route('/admin/api/sql_logging_status')
 def admin_sql_logging_status():
     """Get SQL logging status (admin only)."""
+    # Debug session state
+    logger.info(f"SQL logging status API called - user_id: {session.get('user_id')}, is_admin: {session.get('is_admin')}")
+    
     if not session.get('user_id') or not session.get('is_admin'):
-        return jsonify({'error': 'Unauthorized'}), 403
+        return jsonify({
+            'error': 'Unauthorized',
+            'debug': {
+                'user_id': session.get('user_id'),
+                'is_admin': session.get('is_admin'),
+                'has_session': bool(session)
+            }
+        }), 403
     
     try:
         if not SQL_LOGGER_AVAILABLE:
