@@ -137,34 +137,30 @@ let logStreamingActive = false;
 function loadLogs() {
     console.log('loadLogs() called, logStreamingActive:', logStreamingActive);
     
-    if (!logStreamingActive) {
-        console.log('Fetching logs from /admin/api/logs?offset=0');
-        fetch('/admin/api/logs?offset=0', {
-            credentials: 'same-origin'
+    console.log('Fetching logs from /admin/api/logs?offset=0');
+    fetch('/admin/api/logs?offset=0', {
+        credentials: 'same-origin'
+    })
+        .then(response => {
+            console.log('Logs API response:', response.status, response.statusText);
+            return response.json();
         })
-            .then(response => {
-                console.log('Logs API response:', response.status, response.statusText);
-                return response.json();
-            })
-            .then(data => {
-                console.log('Logs data received:', data);
-                if (data.logs) {
-                    console.log('Calling displayLogs with', data.logs.length, 'logs');
-                    displayLogs(data.logs);
-                } else {
-                    console.error('No logs data received', data);
-                }
-            })
-            .catch(error => {
-                console.error('Error loading logs:', error);
-                const container = document.getElementById('logContainer');
-                if (container) {
-                    container.innerHTML = '<div class="text-danger text-center mt-5"><i class="bi bi-exclamation-triangle"></i><p>Error loading logs: ' + error.message + '</p></div>';
-                }
-            });
-    } else {
-        console.log('Log streaming is active, skipping loadLogs');
-    }
+        .then(data => {
+            console.log('Logs data received:', data);
+            if (data.logs) {
+                console.log('Calling displayLogs with', data.logs.length, 'logs');
+                displayLogs(data.logs);
+            } else {
+                console.error('No logs data received', data);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading logs:', error);
+            const container = document.getElementById('logContainer');
+            if (container) {
+                container.innerHTML = '<div class="text-danger text-center mt-5"><i class="bi bi-exclamation-triangle"></i><p>Error loading logs: ' + error.message + '</p></div>';
+            }
+        });
 }
 
 function displayLogs(logs) {
