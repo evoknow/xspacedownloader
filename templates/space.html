@@ -812,6 +812,9 @@
                                             <i class="bi bi-translate"></i>
                                         </button>
                                     </div>
+                                    <button id="tts-btn" class="btn btn-sm btn-outline-success" data-bs-toggle="tooltip" data-bs-placement="top" title="Convert transcript to speech (MP3)" style="display: none;">
+                                        <i class="bi bi-volume-up"></i>
+                                    </button>
                                     <button id="summarize-btn" class="btn btn-sm btn-outline-warning" data-bs-toggle="tooltip" data-bs-placement="top" title="Generate AI summary">
                                         <i class="bi bi-lightbulb"></i>
                                     </button>
@@ -5443,6 +5446,144 @@ ${videoUrl}`;
     
     // Poll transcription status every 10 seconds
     setInterval(checkTranscriptionStatus, 10000);
+    
+    // Text-to-Speech (TTS) functionality
+    document.addEventListener('DOMContentLoaded', function() {
+        const ttsBtn = document.getElementById('tts-btn');
+        const languageSelector = document.getElementById('language-selector');
+        const transcriptContent = document.getElementById('transcript-content');
+        
+        // Show TTS button when transcript is available
+        function updateTTSButtonVisibility() {
+            if (transcriptContent && transcriptContent.innerText.trim() && languageSelector) {
+                const selectedOption = languageSelector.selectedOptions[0];
+                if (selectedOption && ttsBtn) {
+                    ttsBtn.style.display = 'inline-block';
+                }
+            }
+        }
+        
+        // Monitor transcript content changes
+        if (transcriptContent) {
+            const observer = new MutationObserver(updateTTSButtonVisibility);
+            observer.observe(transcriptContent, { childList: true, subtree: true });
+            
+            // Initial check
+            setTimeout(updateTTSButtonVisibility, 1000);
+        }
+        
+        // Language selector change event
+        if (languageSelector) {
+            languageSelector.addEventListener('change', function() {
+                setTimeout(updateTTSButtonVisibility, 500);
+            });
+        }
+        
+        // TTS button click handler
+        if (ttsBtn) {
+            ttsBtn.addEventListener('click', function() {
+                const transcriptText = transcriptContent.innerText.trim();
+                const selectedOption = languageSelector.selectedOptions[0];
+                const language = selectedOption ? selectedOption.getAttribute('data-language') : 'en';
+                
+                if (!transcriptText) {
+                    showToast('No transcript text available for TTS generation', 'warning');
+                    return;
+                }
+                
+                if (transcriptText.length < 10) {
+                    showToast('Transcript text is too short for TTS generation', 'warning');
+                    return;
+                }
+                
+                // Disable button and show loading state
+                ttsBtn.disabled = true;
+                ttsBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Processing...';
+                
+                // Make TTS generation request
+                fetch('/api/tts/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        space_id: '{{ space.space_id }}',
+                        language: language,
+                        transcript_id: selectedOption ? selectedOption.value : null
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.job_id) {
+                        showToast(`TTS generation started! Estimated cost: ${data.estimated_cost} credits`, 'success');
+                        
+                        // Start polling for job status
+                        pollTTSStatus(data.job_id);
+                    } else if (data.error) {
+                        if (data.error.includes('already exists') || data.error.includes('already in progress')) {
+                            showToast('TTS already exists or is being generated for this transcript', 'info');
+                            if (data.job_id) {
+                                pollTTSStatus(data.job_id);
+                            }
+                        } else if (data.error.includes('Insufficient credits')) {
+                            showToast(`Insufficient credits. Required: ${data.required}, Available: ${data.available}`, 'warning');
+                        } else {
+                            showToast('Error: ' + data.error, 'danger');
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error generating TTS:', error);
+                    showToast('Error generating TTS audio', 'danger');
+                })
+                .finally(() => {
+                    // Reset button
+                    ttsBtn.disabled = false;
+                    ttsBtn.innerHTML = '<i class="bi bi-volume-up"></i>';
+                });
+            });
+        }
+        
+        // Poll TTS job status
+        function pollTTSStatus(jobId) {
+            const pollInterval = setInterval(() => {
+                fetch(`/api/tts/status/${jobId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'completed') {
+                        clearInterval(pollInterval);
+                        showToast('TTS generation completed! Click to download MP3', 'success');
+                        
+                        // Create download link
+                        const downloadLink = document.createElement('a');
+                        downloadLink.href = `/api/tts/download/${jobId}`;
+                        downloadLink.download = `tts_{{ space.space_id }}_${data.space_id || 'audio'}.mp3`;
+                        downloadLink.style.display = 'none';
+                        document.body.appendChild(downloadLink);
+                        downloadLink.click();
+                        document.body.removeChild(downloadLink);
+                        
+                    } else if (data.status === 'failed') {
+                        clearInterval(pollInterval);
+                        showToast('TTS generation failed: ' + (data.error_message || 'Unknown error'), 'danger');
+                        
+                    } else if (data.status === 'in_progress') {
+                        const progress = data.progress || 0;
+                        showToast(`TTS generation in progress... ${progress}%`, 'info');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking TTS status:', error);
+                    clearInterval(pollInterval);
+                });
+            }, 3000); // Poll every 3 seconds
+            
+            // Stop polling after 5 minutes
+            setTimeout(() => {
+                clearInterval(pollInterval);
+            }, 300000);
+        }
+    });
     
 </script>
 {% endblock %}

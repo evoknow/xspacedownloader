@@ -1000,6 +1000,43 @@ def view_queue():
         # Sort video jobs by created_at
         video_jobs.sort(key=lambda x: x.get('created_at', ''))
         
+        # Get TTS jobs from database
+        tts_jobs = []
+        try:
+            cursor = space.connection.cursor(dictionary=True)
+            cursor.execute("""
+                SELECT id, space_id, user_id, target_language, status, progress, 
+                       created_at, error_message
+                FROM tts_jobs
+                WHERE status IN ('pending', 'in_progress')
+                ORDER BY created_at ASC
+            """)
+            tts_jobs_data = cursor.fetchall()
+            
+            for job_data in tts_jobs_data:
+                # Get space details for title
+                space_details = space.get_space(job_data.get('space_id'))
+                if space_details:
+                    job_data['title'] = space_details.get('title', f"Space {job_data.get('space_id')}")
+                else:
+                    job_data['title'] = f"Space {job_data.get('space_id')}"
+                
+                job_data['is_tts'] = True
+                
+                if job_data.get('status') == 'pending':
+                    job_data['status_label'] = 'Pending TTS'
+                    job_data['status_class'] = 'warning'
+                elif job_data.get('status') == 'in_progress':
+                    job_data['status_label'] = f'Generating TTS ({job_data.get("target_language")})'
+                    job_data['status_class'] = 'info'
+                    job_data['progress_percent'] = job_data.get('progress', 0)
+                
+                tts_jobs.append(job_data)
+            
+            cursor.close()
+        except Exception as e:
+            logger.error(f"Error getting TTS jobs: {e}")
+        
         # Deduplicate jobs by space_id - keep only the most recent job per space
         def deduplicate_jobs(jobs_list):
             space_jobs = {}
@@ -1015,6 +1052,7 @@ def view_queue():
         transcription_only_jobs = deduplicate_jobs(transcription_only_jobs)
         translation_jobs = deduplicate_jobs(translation_jobs)
         video_jobs = deduplicate_jobs(video_jobs)
+        tts_jobs = deduplicate_jobs(tts_jobs)
         
         # Load advertisement for all users (logged in or not)
         advertisement_html = None
@@ -1033,6 +1071,7 @@ def view_queue():
                              transcription_only_jobs=transcription_only_jobs,
                              translation_jobs=translation_jobs,
                              video_jobs=video_jobs,
+                             tts_jobs=tts_jobs,
                              advertisement_html=advertisement_html,
                              advertisement_bg=advertisement_bg)
         
@@ -7756,6 +7795,94 @@ def admin_get_video_queue():
         logger.error(f"Error getting video queue: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
+@app.route('/admin/api/queue/tts')
+def admin_get_tts_queue():
+    """Get TTS queue status (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        from datetime import datetime, timedelta
+        
+        # Get database connection
+        db_manager = get_db_manager()
+        connection = db_manager.get_connection()
+        cursor = connection.cursor(dictionary=True)
+        
+        # Get current time and yesterday for filtering
+        yesterday = datetime.now() - timedelta(days=1)
+        
+        # Get pending jobs
+        cursor.execute("""
+            SELECT id, space_id, user_id, target_language, status, progress, 
+                   created_at, updated_at, error_message, output_file
+            FROM tts_jobs 
+            WHERE status = 'pending' 
+            ORDER BY priority DESC, created_at ASC 
+            LIMIT 100
+        """)
+        pending_jobs = cursor.fetchall()
+        
+        # Get in-progress jobs
+        cursor.execute("""
+            SELECT id, space_id, user_id, target_language, status, progress, 
+                   created_at, updated_at, error_message, output_file
+            FROM tts_jobs 
+            WHERE status = 'in_progress' 
+            ORDER BY updated_at DESC 
+            LIMIT 50
+        """)
+        in_progress_jobs = cursor.fetchall()
+        
+        # Get completed jobs from last 24 hours
+        cursor.execute("""
+            SELECT id, space_id, user_id, target_language, status, progress, 
+                   created_at, updated_at, completed_at, output_file
+            FROM tts_jobs 
+            WHERE status = 'completed' AND updated_at >= %s
+            ORDER BY completed_at DESC 
+            LIMIT 20
+        """, (yesterday,))
+        completed_jobs = cursor.fetchall()
+        
+        # Get failed jobs from last 24 hours
+        cursor.execute("""
+            SELECT id, space_id, user_id, target_language, status, progress, 
+                   created_at, updated_at, failed_at, error_message
+            FROM tts_jobs 
+            WHERE status = 'failed' AND updated_at >= %s
+            ORDER BY failed_at DESC 
+            LIMIT 10
+        """, (yesterday,))
+        failed_jobs = cursor.fetchall()
+        
+        # Convert datetime objects to strings for JSON serialization
+        def format_job(job):
+            if job:
+                for key in ['created_at', 'updated_at', 'completed_at', 'failed_at']:
+                    if job.get(key):
+                        job[key] = job[key].isoformat()
+            return job
+        
+        pending_jobs = [format_job(job) for job in pending_jobs]
+        in_progress_jobs = [format_job(job) for job in in_progress_jobs]
+        completed_jobs = [format_job(job) for job in completed_jobs]
+        failed_jobs = [format_job(job) for job in failed_jobs]
+        
+        cursor.close()
+        connection.close()
+        
+        return jsonify({
+            'pending': pending_jobs,
+            'in_progress': in_progress_jobs,
+            'completed': completed_jobs,
+            'failed': failed_jobs
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting TTS queue: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/admin/api/cache/status')
 def admin_cache_status():
     """Get cache status information (admin only)."""
@@ -9747,6 +9874,188 @@ def queue_translation():
         
     except Exception as e:
         logger.error(f"Error queuing translation: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/tts/generate', methods=['POST'])
+def generate_tts():
+    """Generate text-to-speech audio from transcript."""
+    try:
+        data = request.get_json()
+        space_id = data.get('space_id')
+        language = data.get('language', 'en')
+        transcript_id = data.get('transcript_id')
+        
+        if not space_id:
+            return jsonify({'error': 'Space ID is required'}), 400
+        
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'error': 'User must be logged in'}), 401
+        
+        # Get space component
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        # Get transcript text
+        cursor.execute("""
+            SELECT transcript, language as original_language
+            FROM transcripts 
+            WHERE space_id = %s AND language = %s
+            LIMIT 1
+        """, (space_id, language))
+        
+        transcript = cursor.fetchone()
+        if not transcript:
+            cursor.close()
+            return jsonify({'error': 'Transcript not found for specified language'}), 404
+        
+        transcript_text = transcript['transcript']
+        if not transcript_text or len(transcript_text.strip()) < 10:
+            cursor.close()
+            return jsonify({'error': 'Transcript text is too short for TTS generation'}), 400
+        
+        # Check for existing TTS job
+        cursor.execute("""
+            SELECT id, status, output_file
+            FROM tts_jobs 
+            WHERE space_id = %s AND target_language = %s AND user_id = %s
+            AND status IN ('pending', 'in_progress', 'completed')
+            ORDER BY created_at DESC
+            LIMIT 1
+        """, (space_id, language, user_id))
+        
+        existing_job = cursor.fetchone()
+        if existing_job:
+            if existing_job['status'] in ['pending', 'in_progress']:
+                cursor.close()
+                return jsonify({
+                    'error': 'TTS job already in progress',
+                    'job_id': existing_job['id'],
+                    'status': existing_job['status']
+                }), 409
+            elif existing_job['status'] == 'completed':
+                cursor.close()
+                return jsonify({
+                    'error': 'TTS already exists for this transcript',
+                    'job_id': existing_job['id'],
+                    'output_file': existing_job['output_file']
+                }), 409
+        
+        # Check user balance
+        cursor.execute("SELECT credits FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+        if not user:
+            cursor.close()
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Calculate estimated cost
+        character_count = len(transcript_text)
+        estimated_cost = max(1, character_count / 100 * 0.1)  # 0.1 credits per 100 characters
+        
+        if float(user['credits']) < estimated_cost:
+            cursor.close()
+            return jsonify({
+                'error': 'Insufficient credits',
+                'required': estimated_cost,
+                'available': float(user['credits'])
+            }), 400
+        
+        # Create TTS job
+        cursor.execute("""
+            INSERT INTO tts_jobs 
+            (space_id, user_id, source_text, target_language, job_data, priority)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (space_id, user_id, transcript_text, language, 
+              json.dumps({'transcript_id': transcript_id, 'character_count': character_count}), 
+              1))
+        
+        job_id = cursor.lastrowid
+        space.connection.commit()
+        cursor.close()
+        
+        logger.info(f"Created TTS job {job_id} for space {space_id} in {language}")
+        
+        return jsonify({
+            'job_id': job_id,
+            'status': 'pending',
+            'estimated_cost': estimated_cost,
+            'character_count': character_count,
+            'message': 'TTS job queued for background processing'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error generating TTS: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/tts/status/<int:job_id>', methods=['GET'])
+def get_tts_status(job_id):
+    """Get TTS job status."""
+    try:
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'error': 'User must be logged in'}), 401
+        
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        cursor.execute("""
+            SELECT id, space_id, status, progress, output_file, error_message,
+                   created_at, updated_at, completed_at
+            FROM tts_jobs 
+            WHERE id = %s AND user_id = %s
+        """, (job_id, user_id))
+        
+        job = cursor.fetchone()
+        cursor.close()
+        
+        if not job:
+            return jsonify({'error': 'TTS job not found'}), 404
+        
+        # Convert datetime objects to strings
+        for field in ['created_at', 'updated_at', 'completed_at']:
+            if job[field]:
+                job[field] = job[field].isoformat()
+        
+        return jsonify(job)
+        
+    except Exception as e:
+        logger.error(f"Error getting TTS status: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/tts/download/<int:job_id>')
+def download_tts(job_id):
+    """Download generated TTS audio file."""
+    try:
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'error': 'User must be logged in'}), 401
+        
+        space = get_space_component()
+        cursor = space.connection.cursor(dictionary=True)
+        
+        cursor.execute("""
+            SELECT output_file, space_id, target_language
+            FROM tts_jobs 
+            WHERE id = %s AND user_id = %s AND status = 'completed'
+        """, (job_id, user_id))
+        
+        job = cursor.fetchone()
+        cursor.close()
+        
+        if not job or not job['output_file']:
+            return jsonify({'error': 'TTS file not found or not ready'}), 404
+        
+        output_file = job['output_file']
+        if not os.path.exists(output_file):
+            return jsonify({'error': 'TTS file not found on disk'}), 404
+        
+        # Generate download filename
+        filename = f"tts_{job['space_id']}_{job['target_language']}.mp3"
+        
+        return send_file(output_file, as_attachment=True, download_name=filename)
+        
+    except Exception as e:
+        logger.error(f"Error downloading TTS: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 # Affiliate Admin Routes
