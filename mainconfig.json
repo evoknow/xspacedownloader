@@ -51,5 +51,6 @@
   "video_watermark_text": "xspacedownload.com",
   "font_family": "Trebuchet MS",
   "branding_enabled": true,
-  "background_color": "#2a2727"
+  "background_color": "#2a2727",
+  "sql_logging_enabled": true
 }

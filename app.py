@@ -72,6 +72,7 @@ except ImportError:
 # Import application components
 from components.Space import Space
 from components.Ad import Ad
+from components.LoggingCursor import wrap_cursor
 # Import SpeechToText component if available
 try:
     from components.SpeechToText import SpeechToText
@@ -666,7 +667,8 @@ def all_spaces():
         space = get_space_component()
         
         # Get all completed spaces directly from spaces table - only latest entry per space_id
-        cursor = space.connection.cursor(dictionary=True)
+        raw_cursor = space.connection.cursor(dictionary=True)
+        cursor = wrap_cursor(raw_cursor, "SpacesList")
         query = """
             SELECT s.* FROM spaces s
             INNER JOIN (
