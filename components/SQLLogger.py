@@ -15,7 +15,7 @@ from typing import Optional, Dict, Any
 class SQLLogger:
     """Handles SQL query logging with performance metrics."""
     
-    def __init__(self, log_dir='./logs'):
+    def __init__(self, log_dir='/var/www/production/xspacedownload.com/website/htdocs/logs'):
         """
         Initialize SQL Logger.
         
@@ -47,7 +47,7 @@ class SQLLogger:
     def _load_settings(self):
         """Load SQL logging settings from config."""
         try:
-            config_file = Path('./mainconfig.json')
+            config_file = Path('/var/www/production/xspacedownload.com/website/xspacedownloader/mainconfig.json')
             if config_file.exists():
                 with open(config_file, 'r') as f:
                     config = json.load(f)
@@ -63,7 +63,7 @@ class SQLLogger:
     def enable_logging(self) -> bool:
         """Enable SQL query logging."""
         try:
-            config_file = Path('./mainconfig.json')
+            config_file = Path('/var/www/production/xspacedownload.com/website/xspacedownloader/mainconfig.json')
             config = {}
             
             if config_file.exists():
@@ -85,7 +85,7 @@ class SQLLogger:
     def disable_logging(self) -> bool:
         """Disable SQL query logging."""
         try:
-            config_file = Path('./mainconfig.json')
+            config_file = Path('/var/www/production/xspacedownload.com/website/xspacedownloader/mainconfig.json')
             config = {}
             
             if config_file.exists():

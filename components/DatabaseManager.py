@@ -10,6 +10,7 @@ import time
 from contextlib import contextmanager
 import mysql.connector
 from mysql.connector import pooling
+from .SQLLogger import execute_with_logging
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +169,7 @@ class DatabaseManager:
     
     def execute_query(self, query, params=None, fetch_one=False, fetch_all=False):
         """
-        Execute a query with automatic connection management.
+        Execute a query with automatic connection management and SQL logging.
         
         Args:
             query (str): SQL query to execute
@@ -182,7 +183,8 @@ class DatabaseManager:
         with self.get_connection() as connection:
             cursor = connection.cursor(dictionary=True)
             try:
-                cursor.execute(query, params or ())
+                # Execute with SQL logging
+                execute_with_logging(cursor, query, params or (), "DatabaseManager")
                 
                 if fetch_one:
                     return cursor.fetchone()
