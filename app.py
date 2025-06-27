@@ -639,17 +639,16 @@ def status(job_id):
 def all_spaces():
     """Display all downloaded spaces."""
     try:
-        # Load advertisement for logged in users
+        # Load advertisement for all users (logged in or not)
         advertisement_html = None
         advertisement_bg = '#ffffff'
-        if session.get('user_id'):
-            try:
-                ad = Ad.get_active_ad()
-                if ad and ad.copy:
-                    advertisement_html = ad.copy
-                    advertisement_bg = ad.background_color or '#ffffff'
-            except Exception as e:
-                logger.warning(f"Error loading advertisement: {e}")
+        try:
+            ad = Ad.get_active_ad()
+            if ad and ad.copy:
+                advertisement_html = ad.copy
+                advertisement_bg = ad.background_color or '#ffffff'
+        except Exception as e:
+            logger.warning(f"Error loading advertisement: {e}")
         
         # Check if we have cached data
         cached_data = get_cached_spaces_data()
@@ -958,17 +957,16 @@ def view_queue():
         transcription_only_jobs = [job for job in transcript_jobs if not job.get('is_translation')]
         translation_jobs = [job for job in transcript_jobs if job.get('is_translation')]
         
-        # Load advertisement for logged in users
+        # Load advertisement for all users (logged in or not)
         advertisement_html = None
         advertisement_bg = '#ffffff'
-        if session.get('user_id'):
-            try:
-                ad = Ad.get_active_ad()
-                if ad and ad.copy:
-                    advertisement_html = ad.copy
-                    advertisement_bg = ad.background_color or '#ffffff'
-            except Exception as e:
-                logger.warning(f"Error loading advertisement: {e}")
+        try:
+            ad = Ad.get_active_ad()
+            if ad and ad.copy:
+                advertisement_html = ad.copy
+                advertisement_bg = ad.background_color or '#ffffff'
+        except Exception as e:
+            logger.warning(f"Error loading advertisement: {e}")
         
         return render_template('queue.html', 
                              queue_jobs=queue_jobs, 
@@ -995,17 +993,16 @@ def index():
         # Check if we have cached data
         cached_data = get_cached_index_data()
         if cached_data:
-            # Load advertisement for logged in users
+            # Load advertisement for all users (logged in or not)
             advertisement_html = None
             advertisement_bg = '#ffffff'
-            if session.get('user_id'):
-                try:
-                    ad = Ad.get_active_ad()
-                    if ad and ad.copy:
-                        advertisement_html = ad.copy
-                        advertisement_bg = ad.background_color or '#ffffff'
-                except Exception as e:
-                    logger.warning(f"Error loading advertisement: {e}")
+            try:
+                ad = Ad.get_active_ad()
+                if ad and ad.copy:
+                    advertisement_html = ad.copy
+                    advertisement_bg = ad.background_color or '#ffffff'
+            except Exception as e:
+                logger.warning(f"Error loading advertisement: {e}")
             
             return render_template('index.html', completed_spaces=cached_data, advertisement_html=advertisement_html, advertisement_bg=advertisement_bg)
         
@@ -1046,17 +1043,16 @@ def index():
         # Cache the data
         set_index_cache(completed_spaces)
         
-        # Load advertisement for logged in users
+        # Load advertisement for all users (logged in or not)
         advertisement_html = None
         advertisement_bg = '#ffffff'
-        if session.get('user_id'):
-            try:
-                ad = Ad.get_active_ad()
-                if ad and ad.copy:
-                    advertisement_html = ad.copy
-                    advertisement_bg = ad.background_color or '#ffffff'
-            except Exception as e:
-                logger.warning(f"Error loading advertisement: {e}")
+        try:
+            ad = Ad.get_active_ad()
+            if ad and ad.copy:
+                advertisement_html = ad.copy
+                advertisement_bg = ad.background_color or '#ffffff'
+        except Exception as e:
+            logger.warning(f"Error loading advertisement: {e}")
         
         return render_template('index.html', completed_spaces=completed_spaces, advertisement_html=advertisement_html, advertisement_bg=advertisement_bg)
     except Exception as e:
@@ -2726,17 +2722,16 @@ def check_favorite(space_id):
 def favorites():
     """Display user's favorite spaces."""
     try:
-        # Load advertisement for logged in users
+        # Load advertisement for all users (logged in or not)
         advertisement_html = None
         advertisement_bg = '#ffffff'
-        if session.get('user_id'):
-            try:
-                ad = Ad.get_active_ad()
-                if ad and ad.copy:
-                    advertisement_html = ad.copy
-                    advertisement_bg = ad.background_color or '#ffffff'
-            except Exception as e:
-                logger.warning(f"Error loading advertisement: {e}")
+        try:
+            ad = Ad.get_active_ad()
+            if ad and ad.copy:
+                advertisement_html = ad.copy
+                advertisement_bg = ad.background_color or '#ffffff'
+        except Exception as e:
+            logger.warning(f"Error loading advertisement: {e}")
         
         # Get Space component
         space = get_space_component()
@@ -4424,17 +4419,16 @@ def profile():
         return redirect(url_for('index'))
     
     try:
-        # Load advertisement for logged in users
+        # Load advertisement for all users (logged in or not)
         advertisement_html = None
         advertisement_bg = '#ffffff'
-        if session.get('user_id'):
-            try:
-                ad = Ad.get_active_ad()
-                if ad and ad.copy:
-                    advertisement_html = ad.copy
-                    advertisement_bg = ad.background_color or '#ffffff'
-            except Exception as e:
-                logger.warning(f"Error loading advertisement: {e}")
+        try:
+            ad = Ad.get_active_ad()
+            if ad and ad.copy:
+                advertisement_html = ad.copy
+                advertisement_bg = ad.background_color or '#ffffff'
+        except Exception as e:
+            logger.warning(f"Error loading advertisement: {e}")
         
         space = get_space_component()
         cursor = space.connection.cursor(dictionary=True)
@@ -6798,17 +6792,16 @@ def admin_dev_clear_non_admin_users():
 @app.route('/faq')
 def faq():
     """Display the FAQ page."""
-    # Load advertisement for logged in users
+    # Load advertisement for all users (logged in or not)
     advertisement_html = None
     advertisement_bg = '#ffffff'
-    if session.get('user_id'):
-        try:
-            ad = Ad.get_active_ad()
-            if ad and ad.copy:
-                advertisement_html = ad.copy
-                advertisement_bg = ad.background_color or '#ffffff'
-        except Exception as e:
-            logger.warning(f"Error loading advertisement: {e}")
+    try:
+        ad = Ad.get_active_ad()
+        if ad and ad.copy:
+            advertisement_html = ad.copy
+            advertisement_bg = ad.background_color or '#ffffff'
+    except Exception as e:
+        logger.warning(f"Error loading advertisement: {e}")
     
     return render_template('faq.html', advertisement_html=advertisement_html, advertisement_bg=advertisement_bg)
 
@@ -9025,17 +9018,16 @@ def admin_ads_edit(ad_id):
 @app.route('/about')
 def about():
     """Display the About page."""
-    # Load advertisement for logged in users
+    # Load advertisement for all users (logged in or not)
     advertisement_html = None
     advertisement_bg = '#ffffff'
-    if session.get('user_id'):
-        try:
-            ad = Ad.get_active_ad()
-            if ad and ad.copy:
-                advertisement_html = ad.copy
-                advertisement_bg = ad.background_color or '#ffffff'
-        except Exception as e:
-            logger.warning(f"Error loading advertisement: {e}")
+    try:
+        ad = Ad.get_active_ad()
+        if ad and ad.copy:
+            advertisement_html = ad.copy
+            advertisement_bg = ad.background_color or '#ffffff'
+    except Exception as e:
+        logger.warning(f"Error loading advertisement: {e}")
     
     return render_template('about.html', advertisement_html=advertisement_html, advertisement_bg=advertisement_bg)
 
