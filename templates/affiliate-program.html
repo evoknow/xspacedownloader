@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+
+{% block title %}Affiliate Program - XSpace Downloader{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-lg-9 col-md-8 col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h1 class="card-title mb-0">
+                        <i class="bi bi-people"></i> Affiliate Program
+                    </h1>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-success mb-4">
+                        <h4 class="alert-heading">
+                            <i class="bi bi-cash-coin"></i> Earn Rewards for Every Referral!
+                        </h4>
+                        <p class="mb-0">
+                            Join our affiliate program and earn <strong>{{ settings.credits_per_registration|int }} credits</strong> 
+                            and <strong>${{ "%.2f"|format(settings.money_per_registration) }}</strong> for every new user who signs up 
+                            using your unique referral link.
+                        </p>
+                    </div>
+
+                    <h2 class="h4 mt-4">How It Works</h2>
+                    <ol class="mb-4">
+                        <li class="mb-2">
+                            <strong>Get Your Link:</strong> Sign in to your account and visit your 
+                            <a href="/profile">profile page</a> to find your unique affiliate link.
+                        </li>
+                        <li class="mb-2">
+                            <strong>Share It:</strong> Share your link on social media, forums, blogs, or with friends 
+                            who might benefit from XSpace Downloader.
+                        </li>
+                        <li class="mb-2">
+                            <strong>Earn Rewards:</strong> When someone clicks your link and creates an account, 
+                            you automatically earn credits and cash rewards.
+                        </li>
+                        <li class="mb-2">
+                            <strong>Get Paid:</strong> Credits are added to your account immediately after approval. 
+                            Cash payouts are processed monthly once you reach the minimum threshold.
+                        </li>
+                    </ol>
+
+                    <h2 class="h4">Commission Structure</h2>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>Action</th>
+                                    <th>Credit Reward</th>
+                                    <th>Cash Reward</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>New User Registration</td>
+                                    <td><span class="badge bg-success">{{ settings.credits_per_registration|int }} Credits</span></td>
+                                    <td><span class="badge bg-primary">${{ "%.2f"|format(settings.money_per_registration) }}</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <h2 class="h4">Payment Details</h2>
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h5 class="card-title">
+                                        <i class="bi bi-coin"></i> Credit Rewards
+                                    </h5>
+                                    <ul class="mb-0">
+                                        <li>Added to your account after approval</li>
+                                        <li>Can be used immediately for downloads</li>
+                                        <li>Never expire</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h5 class="card-title">
+                                        <i class="bi bi-cash"></i> Cash Rewards
+                                    </h5>
+                                    <ul class="mb-0">
+                                        <li>Minimum payout: ${{ "%.2f"|format(settings.minimum_payout_amount) }}</li>
+                                        <li>Paid monthly via PayPal or bank transfer</li>
+                                        <li>Tax forms provided for earnings over ${{ "%.2f"|format(settings.tax_reporting_threshold) }}</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h2 class="h4">Program Rules</h2>
+                    <div class="card border-warning mb-4">
+                        <div class="card-body">
+                            <h5 class="card-title text-warning">
+                                <i class="bi bi-exclamation-triangle"></i> Important Guidelines
+                            </h5>
+                            <ul class="mb-0">
+                                <li>Self-referrals are not allowed and will be rejected</li>
+                                <li>Spam or misleading promotion is strictly prohibited</li>
+                                <li>Referrals must be genuine new users who verify their email</li>
+                                <li>We reserve the right to review and approve all earnings</li>
+                                <li>Violations may result in account suspension and forfeiture of earnings</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <h2 class="h4">Best Practices for Success</h2>
+                    <div class="mb-4">
+                        <ul>
+                            <li>
+                                <strong>Be Honest:</strong> Only recommend XSpace Downloader to people who will genuinely benefit from it
+                            </li>
+                            <li>
+                                <strong>Add Value:</strong> Write reviews or create tutorials showing how to use the service effectively
+                            </li>
+                            <li>
+                                <strong>Target Your Audience:</strong> Share with communities interested in X Spaces, podcasts, or audio content
+                            </li>
+                            <li>
+                                <strong>Track Performance:</strong> Monitor your affiliate stats in your profile to see what's working
+                            </li>
+                        </ul>
+                    </div>
+
+                    <h2 class="h4">Frequently Asked Questions</h2>
+                    <div class="accordion mb-4" id="affiliateFAQ">
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#faq1">
+                                    When do I get paid?
+                                </button>
+                            </h2>
+                            <div id="faq1" class="accordion-collapse collapse show" data-bs-parent="#affiliateFAQ">
+                                <div class="accordion-body">
+                                    Credits are typically approved within 24-48 hours and added to your account immediately. 
+                                    Cash payments are processed monthly for all approved earnings that meet the minimum threshold.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2">
+                                    Can I promote on social media?
+                                </button>
+                            </h2>
+                            <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#affiliateFAQ">
+                                <div class="accordion-body">
+                                    Yes! Social media is a great way to share your affiliate link. Just make sure to follow 
+                                    each platform's guidelines and always disclose that you're using an affiliate link.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3">
+                                    Is there a limit to how much I can earn?
+                                </button>
+                            </h2>
+                            <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#affiliateFAQ">
+                                <div class="accordion-body">
+                                    No! There's no cap on your earnings. The more people you successfully refer, the more you earn. 
+                                    Some of our top affiliates earn hundreds of dollars per month.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq4">
+                                    What counts as a valid referral?
+                                </button>
+                            </h2>
+                            <div id="faq4" class="accordion-collapse collapse" data-bs-parent="#affiliateFAQ">
+                                <div class="accordion-body">
+                                    A valid referral is a new user who:
+                                    <ul>
+                                        <li>Clicks your unique affiliate link</li>
+                                        <li>Creates a new account within 30 days</li>
+                                        <li>Verifies their email address</li>
+                                        <li>Is not an existing user or yourself</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="text-center mt-5">
+                        {% if session.user_id %}
+                            <a href="/profile" class="btn btn-primary btn-lg">
+                                <i class="bi bi-person-circle"></i> View Your Affiliate Dashboard
+                            </a>
+                        {% else %}
+                            <p class="text-muted mb-3">Ready to start earning?</p>
+                            <button type="button" class="btn btn-primary btn-lg" data-bs-toggle="modal" data-bs-target="#loginModal">
+                                <i class="bi bi-box-arrow-in-right"></i> Sign In to Get Started
+                            </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Right Sidebar -->
+        <div class="col-lg-3 col-md-4 col-12">
+            {% if advertisement_html %}
+            <!-- Advertisement Section -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white py-2">
+                    <h6 class="mb-0"><i class="bi bi-star me-1"></i> For You</h6>
+                </div>
+                <div class="card-body p-2" style="background-color: {{ advertisement_bg }};">
+                    <div class="advertisement-container">
+                        {{ advertisement_html|safe }}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Quick Stats -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="mb-0">Program Highlights</h6>
+                </div>
+                <div class="card-body">
+                    <ul class="list-unstyled mb-0">
+                        <li class="mb-2">
+                            <i class="bi bi-check-circle-fill text-success"></i>
+                            Instant credit rewards
+                        </li>
+                        <li class="mb-2">
+                            <i class="bi bi-check-circle-fill text-success"></i>
+                            Monthly cash payouts
+                        </li>
+                        <li class="mb-2">
+                            <i class="bi bi-check-circle-fill text-success"></i>
+                            No earning limits
+                        </li>
+                        <li class="mb-2">
+                            <i class="bi bi-check-circle-fill text-success"></i>
+                            Real-time tracking
+                        </li>
+                        <li>
+                            <i class="bi bi-check-circle-fill text-success"></i>
+                            30-day cookie window
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

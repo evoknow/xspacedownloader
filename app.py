@@ -1078,6 +1078,34 @@ def affiliate_tracking(affiliate_user_id):
         # Still redirect to home even on error
         return redirect(url_for('index'))
 
+@app.route('/affiliate-program')
+def affiliate_program():
+    """Display information about the affiliate program."""
+    try:
+        # Load advertisement for all users (logged in or not)
+        advertisement_html = None
+        advertisement_bg = '#ffffff'
+        try:
+            ad = Ad.get_active_ad()
+            if ad and ad.copy:
+                advertisement_html = ad.copy
+                advertisement_bg = ad.background_color or '#ffffff'
+        except Exception as e:
+            logger.warning(f"Error loading advertisement: {e}")
+        
+        # Get current affiliate settings for display
+        affiliate = Affiliate()
+        settings = affiliate.get_affiliate_settings()
+        
+        return render_template('affiliate-program.html',
+                             settings=settings,
+                             advertisement_html=advertisement_html,
+                             advertisement_bg=advertisement_bg)
+    except Exception as e:
+        logger.error(f"Error loading affiliate program page: {e}", exc_info=True)
+        flash('Error loading page. Please try again.', 'error')
+        return redirect(url_for('index'))
+
 @app.route('/', methods=['GET'])
 def index():
     """Home page with form to submit a space URL."""
