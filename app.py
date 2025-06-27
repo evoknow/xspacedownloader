@@ -8307,49 +8307,6 @@ def admin_disable_sql_logging():
         logger.error(f"Error disabling SQL logging: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
-@app.route('/admin/api/sql-logs')
-def admin_get_sql_logs():
-    """Get recent SQL query logs (admin only)."""
-    if not session.get('user_id') or not session.get('is_admin'):
-        return jsonify({'error': 'Unauthorized'}), 403
-    
-    try:
-        if not SQL_LOGGER_AVAILABLE:
-            return jsonify({'error': 'SQL Logger not available'}), 500
-        
-        limit = min(int(request.args.get('limit', 100)), 500)  # Max 500 logs
-        logs = sql_logger.get_recent_logs(limit)
-        
-        return jsonify({
-            'logs': logs,
-            'enabled': sql_logger.is_enabled(),
-            'count': len(logs)
-        })
-        
-    except Exception as e:
-        logger.error(f"Error getting SQL logs: {e}", exc_info=True)
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/admin/api/sql-logs/clear', methods=['POST'])
-def admin_clear_sql_logs():
-    """Clear all SQL query logs (admin only)."""
-    if not session.get('user_id') or not session.get('is_admin'):
-        return jsonify({'error': 'Unauthorized'}), 403
-    
-    try:
-        if not SQL_LOGGER_AVAILABLE:
-            return jsonify({'error': 'SQL Logger not available'}), 500
-        
-        success = sql_logger.clear_logs()
-        if success:
-            logger.info(f"Admin user {session.get('user_id')} cleared SQL logs")
-            return jsonify({'success': True, 'message': 'SQL logs cleared'})
-        else:
-            return jsonify({'error': 'Failed to clear SQL logs'}), 500
-        
-    except Exception as e:
-        logger.error(f"Error clearing SQL logs: {e}", exc_info=True)
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/admin/api/administrator-guide', methods=['GET'])
 def admin_administrator_guide():
