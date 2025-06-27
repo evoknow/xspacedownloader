@@ -289,7 +289,6 @@ class Affiliate:
             cursor.execute("""
                 SELECT 
                     ae.referred_user_id,
-                    u.username,
                     u.email,
                     ae.earned_date,
                     ae.credits_earned,
@@ -414,10 +413,8 @@ class Affiliate:
                 SELECT 
                     ae.id,
                     ae.affiliate_user_id,
-                    au.username as affiliate_username,
                     au.email as affiliate_email,
                     ae.referred_user_id,
-                    ru.username as referred_username,
                     ru.email as referred_email,
                     ae.credits_earned,
                     ae.money_earned,
@@ -612,7 +609,6 @@ class Affiliate:
                 SELECT 
                     ae.affiliate_user_id as user_id,
                     u.email,
-                    u.username,
                     SUM(ae.money_earned) as money_earned,
                     GROUP_CONCAT(ae.id) as earning_ids
                 FROM affiliate_earnings ae
@@ -637,7 +633,7 @@ class Affiliate:
             csv_path = Path(f"/tmp/{csv_filename}")
             
             with open(csv_path, 'w', newline='') as csvfile:
-                fieldnames = ['user_id', 'email', 'username', 'money_earned']
+                fieldnames = ['user_id', 'email', 'money_earned']
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 
                 writer.writeheader()
@@ -651,7 +647,6 @@ class Affiliate:
                     writer.writerow({
                         'user_id': payout['user_id'],
                         'email': payout['email'],
-                        'username': payout['username'],
                         'money_earned': f"{money_earned:.2f}"
                     })
                     
@@ -747,7 +742,6 @@ class Affiliate:
             cursor.execute("""
                 SELECT 
                     ae.affiliate_user_id,
-                    u.username,
                     u.email,
                     COUNT(*) as referral_count,
                     SUM(ae.credits_earned) as total_credits,
