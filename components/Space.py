@@ -3097,27 +3097,33 @@ class Space:
                 ai_cost = AICost()
                 
                 # Prepare prompt for tag generation
-                prompt = f"""Analyze this transcript and generate {max_tags} meaningful tags for categorization and search.
+                prompt = f"""Analyze this transcript and extract up to {max_tags} **highly relevant** and **searchable** tags.
 
-IMPORTANT RULES:
-1. NO COMMON WORDS like: going, because, think, about, would, doesn't, really, maybe, probably, something, could, should, might, actually, basically, thing, stuff, people, good, nice, very
-2. PRIORITIZE THESE CATEGORIES:
-   - Countries, cities, places, regions mentioned (e.g., Bangladesh, New York, Silicon Valley, Europe)
-   - Specific topics and subjects discussed (e.g., cybersecurity, climate change, artificial intelligence)
-   - Organizations, companies, institutions mentioned
-   - Technical terms, industries, fields discussed
-   - Notable people or figures mentioned
-3. Tags should be specific words/phrases someone would search for to find this content
-4. Prefer proper nouns and domain-specific terminology
-5. Avoid standalone numbers or generic descriptors
+STRICT GUIDELINES:
+1. DO NOT use **common or vague words**, including: going, because, think, about, would, doesn't, really, maybe, probably, something, could, should, might, actually, basically, thing, stuff, people, good, nice, very, thank, there, here, prompt.
+2. PRIORITIZE the following:
+   - **Proper nouns**: Countries, cities, regions, places (e.g., Bangladesh, Silicon Valley)
+   - **Organizations**: Companies, institutions, political groups (e.g., Google, NATO)
+   - **Topics or disciplines**: Fields or subjects (e.g., artificial intelligence, biotechnology)
+   - **Technical terms or jargon**: Industry- or domain-specific keywords (e.g., zero-day exploit, blockchain)
+   - **Public figures**: Full names or distinct identifiers (e.g., Elon Musk, Sheikh Hasina)
+3. All tags must be **specific**, **meaningful**, and suitable for categorization or search indexing.
+4. AVOID:
+   - Single generic words (e.g., about, nice, people, would)
+   - Standalone numbers (e.g., 2024, 10, 5)
+   - Overly broad tags (e.g., technology, news) unless critical to topic
+   - Words without strong connection to topic
 
-Examples of GOOD tags: "Bangladesh", "cybersecurity", "Dhaka", "data breach", "IT industry", "PayPal", "machine learning", "climate change"
-Examples of BAD tags: "going", "think", "would", "really", "2024", "good", "nice", "people"
+FORMAT:
+- Return tags ONLY as a **comma-separated list**
+- NO extra text, no bullet points, no numbers
 
-Return ONLY the tags as a comma-separated list, nothing else.
+EXAMPLES:
+✅ Good tags: "Bangladesh", "OpenAI", "machine learning", "climate finance", "Elon Musk", "Dhaka", "data privacy", "nuclear submarine"
+❌ Bad tags: "thing", "nice", "about", "because", "there", "prompt", "2024"
 
 Transcript:
-{transcript_text[:3000]}...
+{transcript_text[:3000]}
 """
                 
                 # Log the prompt being sent
