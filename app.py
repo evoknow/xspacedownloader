@@ -953,9 +953,65 @@ def view_queue():
                 except Exception as e:
                     logger.error(f"Error reading translation job file {job_file}: {e}")
         
-        # Separate transcription and translation jobs
+        # Separate transcription and translation jobs  
         transcription_only_jobs = [job for job in transcript_jobs if not job.get('is_translation')]
         translation_jobs = [job for job in transcript_jobs if job.get('is_translation')]
+        
+        # Get video generation jobs from transcript_jobs directory
+        video_jobs = []
+        for transcript_jobs_dir in transcript_jobs_dirs:
+            if not transcript_jobs_dir.exists():
+                continue
+                
+            for job_file in transcript_jobs_dir.glob('*_video.json'):
+                try:
+                    with open(job_file, 'r') as f:
+                        job_data = json.load(f)
+                        # Only include pending, in_progress, or processing video jobs
+                        if job_data.get('status') in ['pending', 'in_progress', 'processing']:
+                            # Get space details for title
+                            space_details = space.get_space(job_data.get('space_id'))
+                            if space_details:
+                                job_data['title'] = space_details.get('title', f"Space {job_data.get('space_id')}")
+                            else:
+                                job_data['title'] = f"Space {job_data.get('space_id')}"
+                            
+                            job_data['is_video_generation'] = True
+                            
+                            if job_data.get('status') == 'pending':
+                                job_data['status_label'] = 'Pending Video Generation'
+                                job_data['status_class'] = 'warning'
+                            elif job_data.get('status') == 'processing':
+                                job_data['status_label'] = 'Generating Video'
+                                job_data['status_class'] = 'info'
+                                job_data['progress_percent'] = job_data.get('progress', 0)
+                            else:
+                                job_data['status_label'] = 'Processing Video'
+                                job_data['status_class'] = 'success'
+                                job_data['progress_percent'] = job_data.get('progress', 0)
+                            
+                            video_jobs.append(job_data)
+                except Exception as e:
+                    logger.error(f"Error reading video job file {job_file}: {e}")
+        
+        # Sort video jobs by created_at
+        video_jobs.sort(key=lambda x: x.get('created_at', ''))
+        
+        # Deduplicate jobs by space_id - keep only the most recent job per space
+        def deduplicate_jobs(jobs_list):
+            space_jobs = {}
+            for job in jobs_list:
+                space_id = job.get('space_id')
+                if space_id:
+                    created_at = job.get('created_at', '')
+                    if space_id not in space_jobs or created_at > space_jobs[space_id].get('created_at', ''):
+                        space_jobs[space_id] = job
+            return list(space_jobs.values())
+        
+        # Apply deduplication to prevent the same space appearing multiple times
+        transcription_only_jobs = deduplicate_jobs(transcription_only_jobs)
+        translation_jobs = deduplicate_jobs(translation_jobs)
+        video_jobs = deduplicate_jobs(video_jobs)
         
         # Load advertisement for all users (logged in or not)
         advertisement_html = None
@@ -973,6 +1029,7 @@ def view_queue():
                              transcript_jobs=transcript_jobs,
                              transcription_only_jobs=transcription_only_jobs,
                              translation_jobs=translation_jobs,
+                             video_jobs=video_jobs,
                              advertisement_html=advertisement_html,
                              advertisement_bg=advertisement_bg)
         
@@ -2089,11 +2146,53 @@ def api_queue_status():
         # Sort translation jobs by created_at
         translation_jobs.sort(key=lambda x: x.get('created_at', ''))
         
+        # Get video generation jobs
+        video_jobs = []
+        transcript_jobs_dirs = [
+            Path('transcript_jobs'),  # Old location
+            Path('/var/www/production/xspacedownload.com/website/htdocs/transcript_jobs')  # New location
+        ]
+        
+        for transcript_jobs_dir in transcript_jobs_dirs:
+            if not transcript_jobs_dir.exists():
+                continue
+                
+            for job_file in transcript_jobs_dir.glob('*_video.json'):
+                try:
+                    with open(job_file, 'r') as f:
+                        job_data = json.load(f)
+                        # Only include pending, in_progress, or processing video jobs
+                        if job_data.get('status') in ['pending', 'in_progress', 'processing']:
+                            # Get space details for title
+                            space_details = space.get_space(job_data.get('space_id'))
+                            if space_details:
+                                title = space_details.get('title', f"Space {job_data.get('space_id')}")
+                            else:
+                                title = f"Space {job_data.get('space_id')}"
+                            
+                            video_jobs.append({
+                                'id': job_data.get('id') or job_data.get('job_id'),
+                                'space_id': job_data.get('space_id'),
+                                'title': title,
+                                'status': job_data.get('status'),
+                                'status_label': 'Pending Video Generation' if job_data.get('status') == 'pending' else 'Generating Video',
+                                'status_class': 'warning' if job_data.get('status') == 'pending' else 'info',
+                                'created_at': job_data.get('created_at', ''),
+                                'progress_percent': job_data.get('progress', 0),
+                                'type': 'video'
+                            })
+                except Exception as e:
+                    logger.error(f"Error reading video job file {job_file}: {e}")
+        
+        # Sort video jobs by created_at
+        video_jobs.sort(key=lambda x: x.get('created_at', ''))
+        
         return jsonify({
             'jobs': queue_jobs,
             'transcript_jobs': transcript_jobs,
             'translation_jobs': translation_jobs,
-            'total': len(queue_jobs) + len(transcript_jobs) + len(translation_jobs)
+            'video_jobs': video_jobs,
+            'total': len(queue_jobs) + len(transcript_jobs) + len(translation_jobs) + len(video_jobs)
         })
         
     except Exception as e:

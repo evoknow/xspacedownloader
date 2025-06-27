@@ -139,7 +139,9 @@ function loadLogs() {
     
     if (!logStreamingActive) {
         console.log('Fetching logs from /admin/api/logs?offset=0');
-        fetch('/admin/api/logs?offset=0')
+        fetch('/admin/api/logs?offset=0', {
+            credentials: 'same-origin'
+        })
             .then(response => {
                 console.log('Logs API response:', response.status, response.statusText);
                 return response.json();

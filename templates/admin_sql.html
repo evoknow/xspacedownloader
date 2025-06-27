@@ -158,7 +158,9 @@ function loadSQLTab() {
 }
 
 function checkSQLLoggingStatus() {
-    fetch('/admin/api/sql_logging_status')
+    fetch('/admin/api/sql_logging_status', {
+        credentials: 'same-origin'
+    })
         .then(response => response.json())
         .then(data => {
             sqlLoggingEnabled = data.enabled;
@@ -198,7 +200,8 @@ function toggleSQLLogging() {
     fetch('/admin/api/toggle_sql_logging', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({enabled: newState})
+        body: JSON.stringify({enabled: newState}),
+        credentials: 'same-origin'
     })
     .then(response => response.json())
     .then(data => {
@@ -226,7 +229,9 @@ function refreshSQLLogs() {
         return;
     }
     
-    fetch('/admin/api/sql_logs')
+    fetch('/admin/api/sql_logs', {
+        credentials: 'same-origin'
+    })
         .then(response => response.json())
         .then(data => {
             if (data.logs) {
@@ -301,7 +306,10 @@ function updateSQLStatistics(stats) {
 
 function clearSQLLogs() {
     if (confirm('Are you sure you want to clear all SQL logs?')) {
-        fetch('/admin/api/clear_sql_logs', {method: 'POST'})
+        fetch('/admin/api/clear_sql_logs', {
+            method: 'POST',
+            credentials: 'same-origin'
+        })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
