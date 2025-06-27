@@ -6526,7 +6526,7 @@ def admin_get_logs():
         all_log_entries = []
         
         # Try to read from log files first
-        logs_dir = Path('/var/www/production/xspacedownload.com/website/xspacedownloader/logs')
+        logs_dir = Path('/var/www/production/xspacedownload.com/website/htdocs/logs')
         log_files = []
         
         # Find all log files, prioritizing the main app log
