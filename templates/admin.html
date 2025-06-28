@@ -1552,6 +1552,112 @@
                             </div>
                         </div>
                         
+                        <!-- Stripe API Configuration Section -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="stripeHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                        data-bs-target="#stripeCollapse" aria-expanded="false" aria-controls="stripeCollapse">
+                                    <i class="bi bi-credit-card me-2"></i> Stripe Payment Configuration
+                                </button>
+                            </h2>
+                            <div id="stripeCollapse" class="accordion-collapse collapse" 
+                                 aria-labelledby="stripeHeading" data-bs-parent="#settingsAccordion">
+                                <div class="accordion-body">
+                                    <div class="alert alert-warning">
+                                        <i class="bi bi-exclamation-triangle"></i> <strong>Important:</strong> 
+                                        Changing these keys will affect payment processing. Make sure to use the correct keys for your environment.
+                                    </div>
+                                    
+                                    <form id="stripeConfigForm">
+                                        <div class="mb-3">
+                                            <label for="stripePublishableKey" class="form-label">
+                                                <i class="bi bi-eye"></i> Stripe Publishable Key
+                                                <small class="text-muted">(pk_test_... or pk_live_...)</small>
+                                            </label>
+                                            <div class="input-group">
+                                                <input type="text" class="form-control font-monospace" id="stripePublishableKey" 
+                                                       placeholder="pk_test_..." autocomplete="off">
+                                                <button class="btn btn-outline-secondary" type="button" onclick="toggleKeyVisibility('stripePublishableKey')">
+                                                    <i class="bi bi-eye-slash"></i>
+                                                </button>
+                                            </div>
+                                            <div class="form-text">This key is used in the browser for Stripe.js</div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="stripeSecretKey" class="form-label">
+                                                <i class="bi bi-key"></i> Stripe Secret Key
+                                                <small class="text-muted">(sk_test_... or sk_live_...)</small>
+                                            </label>
+                                            <div class="input-group">
+                                                <input type="password" class="form-control font-monospace" id="stripeSecretKey" 
+                                                       placeholder="sk_test_..." autocomplete="off">
+                                                <button class="btn btn-outline-secondary" type="button" onclick="toggleKeyVisibility('stripeSecretKey')">
+                                                    <i class="bi bi-eye-slash"></i>
+                                                </button>
+                                            </div>
+                                            <div class="form-text text-danger">Keep this key secure! Never expose it publicly.</div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="stripeWebhookSecret" class="form-label">
+                                                <i class="bi bi-shield-lock"></i> Stripe Webhook Secret
+                                                <small class="text-muted">(whsec_...)</small>
+                                            </label>
+                                            <div class="input-group">
+                                                <input type="password" class="form-control font-monospace" id="stripeWebhookSecret" 
+                                                       placeholder="whsec_..." autocomplete="off">
+                                                <button class="btn btn-outline-secondary" type="button" onclick="toggleKeyVisibility('stripeWebhookSecret')">
+                                                    <i class="bi bi-eye-slash"></i>
+                                                </button>
+                                            </div>
+                                            <div class="form-text">Used to verify webhook signatures from Stripe</div>
+                                        </div>
+                                        
+                                        <div class="row mb-3">
+                                            <div class="col-md-6">
+                                                <div class="card bg-light">
+                                                    <div class="card-body">
+                                                        <h6 class="card-title">Test Mode</h6>
+                                                        <p class="card-text small">Use test keys for development</p>
+                                                        <ul class="small mb-0">
+                                                            <li>Keys start with _test_</li>
+                                                            <li>Use card: 4242 4242 4242 4242</li>
+                                                            <li>No real charges</li>
+                                                        </ul>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="card bg-light">
+                                                    <div class="card-body">
+                                                        <h6 class="card-title">Live Mode</h6>
+                                                        <p class="card-text small">Use live keys for production</p>
+                                                        <ul class="small mb-0">
+                                                            <li>Keys start with _live_</li>
+                                                            <li>Real payment processing</li>
+                                                            <li>Actual charges</li>
+                                                        </ul>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <button type="submit" class="btn btn-primary">
+                                                <i class="bi bi-save"></i> Save Stripe Configuration
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary" onclick="loadStripeConfig()">
+                                                <i class="bi bi-arrow-clockwise"></i> Reload Current
+                                            </button>
+                                        </div>
+                                    </form>
+                                    
+                                    <div class="alert alert-info mt-3" style="display: none;" id="stripeMessage"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <!-- System Messages Section -->
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="messagesHeading">
@@ -2702,6 +2808,7 @@ document.getElementById('settings-tab').addEventListener('shown.bs.tab', functio
     loadBrandingConfig();
     loadSystemMessages();
     loadServiceSettings();
+    loadStripeConfig();
 });
 
 // Transcription Configuration
@@ -6021,6 +6128,126 @@ function renderCostByVendorChart(data) {
         }
     });
 }
+
+// Stripe Configuration Functions
+async function loadStripeConfig() {
+    try {
+        const response = await fetch('/admin/api/stripe_config');
+        const result = await response.json();
+        
+        if (result.success && result.config) {
+            // Set form values
+            document.getElementById('stripePublishableKey').value = result.config.publishable_key || '';
+            document.getElementById('stripeSecretKey').value = result.config.secret_key || '';
+            document.getElementById('stripeWebhookSecret').value = result.config.webhook_secret || '';
+            
+            // Update key visibility status
+            updateStripeKeyStatus('stripePublishableKey', result.config.publishable_key);
+            updateStripeKeyStatus('stripeSecretKey', result.config.secret_key);
+            updateStripeKeyStatus('stripeWebhookSecret', result.config.webhook_secret);
+        }
+    } catch (error) {
+        console.error('Error loading Stripe config:', error);
+        showToast('Error loading Stripe configuration', 'danger');
+    }
+}
+
+function updateStripeKeyStatus(fieldId, value) {
+    const field = document.getElementById(fieldId);
+    const statusIcon = field.parentElement.querySelector('.input-group-text i');
+    
+    if (value) {
+        // Key is set
+        field.classList.remove('is-invalid');
+        field.classList.add('is-valid');
+        if (statusIcon) {
+            statusIcon.className = 'bi bi-check-circle text-success';
+        }
+    } else {
+        // Key is not set
+        field.classList.remove('is-valid');
+        field.classList.add('is-invalid');
+        if (statusIcon) {
+            statusIcon.className = 'bi bi-x-circle text-danger';
+        }
+    }
+}
+
+function toggleKeyVisibility(fieldId) {
+    const field = document.getElementById(fieldId);
+    const button = field.parentElement.querySelector('button');
+    const icon = button.querySelector('i');
+    
+    if (field.type === 'password') {
+        field.type = 'text';
+        icon.className = 'bi bi-eye-slash';
+    } else {
+        field.type = 'password';
+        icon.className = 'bi bi-eye';
+    }
+}
+
+// Stripe configuration form submission
+document.getElementById('stripeConfigForm')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const messageDiv = document.getElementById('stripeConfigMessage');
+    if (!messageDiv) {
+        // Create message div if it doesn't exist
+        const msgDiv = document.createElement('div');
+        msgDiv.id = 'stripeConfigMessage';
+        msgDiv.style.display = 'none';
+        this.parentElement.insertBefore(msgDiv, this);
+    }
+    
+    const data = {
+        publishable_key: document.getElementById('stripePublishableKey').value.trim(),
+        secret_key: document.getElementById('stripeSecretKey').value.trim(),
+        webhook_secret: document.getElementById('stripeWebhookSecret').value.trim()
+    };
+    
+    // Validate keys format
+    if (data.publishable_key && !data.publishable_key.startsWith('pk_')) {
+        showToast('Invalid publishable key format. Must start with pk_test_ or pk_live_', 'danger');
+        return;
+    }
+    
+    if (data.secret_key && !data.secret_key.startsWith('sk_')) {
+        showToast('Invalid secret key format. Must start with sk_test_ or sk_live_', 'danger');
+        return;
+    }
+    
+    if (data.webhook_secret && !data.webhook_secret.startsWith('whsec_')) {
+        showToast('Invalid webhook secret format. Must start with whsec_', 'danger');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/admin/api/update_stripe_config', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast(result.message || 'Stripe configuration updated successfully', 'success');
+            
+            // Update field status indicators
+            updateStripeKeyStatus('stripePublishableKey', data.publishable_key);
+            updateStripeKeyStatus('stripeSecretKey', data.secret_key);
+            updateStripeKeyStatus('stripeWebhookSecret', data.webhook_secret);
+        } else {
+            showToast('Error: ' + (result.error || 'Failed to update Stripe configuration'), 'danger');
+        }
+    } catch (error) {
+        console.error('Error updating Stripe config:', error);
+        showToast('Error: ' + error.message, 'danger');
+    }
+});
 
 // Load data when settings tab is shown
 document.addEventListener('DOMContentLoaded', function() {
