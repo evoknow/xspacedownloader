@@ -24,14 +24,42 @@ class Payment:
         if 'use_ssl' in self.db_config:
             del self.db_config['use_ssl']
         
-        # Initialize Stripe
-        stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
-        self.stripe_publishable_key = os.getenv('STRIPE_PUBLISHABLE_KEY')
+        # Initialize Stripe with mode-specific keys
+        self._load_stripe_keys()
         
         if not stripe.api_key:
-            logger.error("STRIPE_SECRET_KEY not found in environment variables")
+            logger.error("Stripe secret key not found or not configured properly")
         if not self.stripe_publishable_key:
-            logger.error("STRIPE_PUBLISHABLE_KEY not found in environment variables")
+            logger.error("Stripe publishable key not found or not configured properly")
+    
+    def _load_stripe_keys(self):
+        """Load appropriate Stripe keys based on current mode."""
+        try:
+            from components.EnvManager import EnvManager
+            env_manager = EnvManager()
+            config = env_manager.get_stripe_config()
+            
+            current_mode = config['mode']
+            
+            if current_mode == 'live':
+                stripe.api_key = config['live']['secret_key'] or os.getenv('STRIPE_SECRET_KEY')
+                self.stripe_publishable_key = config['live']['publishable_key'] or os.getenv('STRIPE_PUBLISHABLE_KEY')
+                self.webhook_secret = config['live']['webhook_secret'] or os.getenv('STRIPE_WEBHOOK_SECRET')
+            else:  # test mode (default)
+                stripe.api_key = config['test']['secret_key'] or os.getenv('STRIPE_SECRET_KEY')
+                self.stripe_publishable_key = config['test']['publishable_key'] or os.getenv('STRIPE_PUBLISHABLE_KEY')
+                self.webhook_secret = config['test']['webhook_secret'] or os.getenv('STRIPE_WEBHOOK_SECRET')
+            
+            self.current_mode = current_mode
+            logger.info(f"Stripe initialized in {current_mode.upper()} mode")
+            
+        except Exception as e:
+            logger.error(f"Error loading Stripe keys: {e}")
+            # Fallback to environment variables
+            stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
+            self.stripe_publishable_key = os.getenv('STRIPE_PUBLISHABLE_KEY')
+            self.webhook_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
+            self.current_mode = 'unknown'
     
     def create_checkout_session(self, user_id, product_id, success_url, cancel_url):
         """Create a Stripe checkout session for product purchase."""
@@ -125,9 +153,10 @@ class Payment:
     def handle_webhook(self, payload, sig_header):
         """Handle Stripe webhook events."""
         try:
-            webhook_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
+            # Use webhook secret from current configuration
+            webhook_secret = self.webhook_secret
             if not webhook_secret:
-                logger.error("STRIPE_WEBHOOK_SECRET not found in environment variables")
+                logger.error("Webhook secret not configured for current Stripe mode")
                 return {'error': 'Webhook secret not configured'}
             
             # Verify webhook signature

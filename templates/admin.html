@@ -1568,82 +1568,144 @@
                                         Changing these keys will affect payment processing. Make sure to use the correct keys for your environment.
                                     </div>
                                     
+                                    <!-- Mode Toggle -->
+                                    <div class="mb-4">
+                                        <label class="form-label fw-bold">
+                                            <i class="bi bi-toggle-on"></i> Active Mode
+                                        </label>
+                                        <div class="btn-group w-100" role="group">
+                                            <input type="radio" class="btn-check" name="stripeMode" id="liveMode" value="live">
+                                            <label class="btn btn-outline-danger" for="liveMode">
+                                                <i class="bi bi-broadcast"></i> LIVE MODE
+                                            </label>
+                                            <input type="radio" class="btn-check" name="stripeMode" id="testMode" value="test" checked>
+                                            <label class="btn btn-outline-warning" for="testMode">
+                                                <i class="bi bi-bug"></i> TEST MODE
+                                            </label>
+                                        </div>
+                                        <div class="form-text">
+                                            <strong>Warning:</strong> Live mode processes real payments. Test mode is safe for development.
+                                        </div>
+                                    </div>
+                                    
                                     <form id="stripeConfigForm">
-                                        <div class="mb-3">
-                                            <label for="stripePublishableKey" class="form-label">
-                                                <i class="bi bi-eye"></i> Stripe Publishable Key
-                                                <small class="text-muted">(pk_test_... or pk_live_...)</small>
-                                            </label>
-                                            <div class="input-group">
-                                                <input type="text" class="form-control font-monospace" id="stripePublishableKey" 
-                                                       placeholder="pk_test_..." autocomplete="off">
-                                                <button class="btn btn-outline-secondary" type="button" onclick="toggleKeyVisibility('stripePublishableKey')">
-                                                    <i class="bi bi-eye-slash"></i>
-                                                </button>
-                                            </div>
-                                            <div class="form-text">This key is used in the browser for Stripe.js</div>
-                                        </div>
-                                        
-                                        <div class="mb-3">
-                                            <label for="stripeSecretKey" class="form-label">
-                                                <i class="bi bi-key"></i> Stripe Secret Key
-                                                <small class="text-muted">(sk_test_... or sk_live_...)</small>
-                                            </label>
-                                            <div class="input-group">
-                                                <input type="password" class="form-control font-monospace" id="stripeSecretKey" 
-                                                       placeholder="sk_test_..." autocomplete="off">
-                                                <button class="btn btn-outline-secondary" type="button" onclick="toggleKeyVisibility('stripeSecretKey')">
-                                                    <i class="bi bi-eye-slash"></i>
-                                                </button>
-                                            </div>
-                                            <div class="form-text text-danger">Keep this key secure! Never expose it publicly.</div>
-                                        </div>
-                                        
-                                        <div class="mb-3">
-                                            <label for="stripeWebhookSecret" class="form-label">
-                                                <i class="bi bi-shield-lock"></i> Stripe Webhook Secret
-                                                <small class="text-muted">(whsec_...)</small>
-                                            </label>
-                                            <div class="input-group">
-                                                <input type="password" class="form-control font-monospace" id="stripeWebhookSecret" 
-                                                       placeholder="whsec_..." autocomplete="off">
-                                                <button class="btn btn-outline-secondary" type="button" onclick="toggleKeyVisibility('stripeWebhookSecret')">
-                                                    <i class="bi bi-eye-slash"></i>
-                                                </button>
-                                            </div>
-                                            <div class="form-text">Used to verify webhook signatures from Stripe</div>
-                                        </div>
-                                        
-                                        <div class="row mb-3">
+                                        <div class="row">
+                                            <!-- LIVE MODE Column -->
                                             <div class="col-md-6">
-                                                <div class="card bg-light">
+                                                <div class="card border-danger">
+                                                    <div class="card-header bg-danger text-white">
+                                                        <h6 class="mb-0">
+                                                            <i class="bi bi-broadcast"></i> LIVE MODE
+                                                            <span class="badge bg-light text-danger ms-2" id="liveStatus">Not Configured</span>
+                                                        </h6>
+                                                    </div>
                                                     <div class="card-body">
-                                                        <h6 class="card-title">Test Mode</h6>
-                                                        <p class="card-text small">Use test keys for development</p>
-                                                        <ul class="small mb-0">
-                                                            <li>Keys start with _test_</li>
-                                                            <li>Use card: 4242 4242 4242 4242</li>
-                                                            <li>No real charges</li>
-                                                        </ul>
+                                                        <div class="mb-3">
+                                                            <label for="livePublishableKey" class="form-label">
+                                                                <i class="bi bi-eye"></i> Publishable Key
+                                                            </label>
+                                                            <div class="input-group">
+                                                                <input type="text" class="form-control font-monospace" id="livePublishableKey" 
+                                                                       placeholder="pk_live_..." autocomplete="off">
+                                                                <button class="btn btn-outline-secondary" type="button" onclick="toggleKeyVisibility('livePublishableKey')">
+                                                                    <i class="bi bi-eye-slash"></i>
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <div class="mb-3">
+                                                            <label for="liveSecretKey" class="form-label">
+                                                                <i class="bi bi-key"></i> Secret Key
+                                                            </label>
+                                                            <div class="input-group">
+                                                                <input type="password" class="form-control font-monospace" id="liveSecretKey" 
+                                                                       placeholder="sk_live_..." autocomplete="off">
+                                                                <button class="btn btn-outline-secondary" type="button" onclick="toggleKeyVisibility('liveSecretKey')">
+                                                                    <i class="bi bi-eye-slash"></i>
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <div class="mb-3">
+                                                            <label for="liveWebhookSecret" class="form-label">
+                                                                <i class="bi bi-shield-lock"></i> Webhook Secret
+                                                            </label>
+                                                            <div class="input-group">
+                                                                <input type="password" class="form-control font-monospace" id="liveWebhookSecret" 
+                                                                       placeholder="whsec_..." autocomplete="off">
+                                                                <button class="btn btn-outline-secondary" type="button" onclick="toggleKeyVisibility('liveWebhookSecret')">
+                                                                    <i class="bi bi-eye-slash"></i>
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <div class="alert alert-danger">
+                                                            <i class="bi bi-exclamation-triangle"></i>
+                                                            <strong>Live Mode:</strong> Real payment processing with actual charges
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
+                                            
+                                            <!-- TEST MODE Column -->
                                             <div class="col-md-6">
-                                                <div class="card bg-light">
+                                                <div class="card border-warning">
+                                                    <div class="card-header bg-warning text-dark">
+                                                        <h6 class="mb-0">
+                                                            <i class="bi bi-bug"></i> TEST MODE
+                                                            <span class="badge bg-light text-warning ms-2" id="testStatus">Not Configured</span>
+                                                        </h6>
+                                                    </div>
                                                     <div class="card-body">
-                                                        <h6 class="card-title">Live Mode</h6>
-                                                        <p class="card-text small">Use live keys for production</p>
-                                                        <ul class="small mb-0">
-                                                            <li>Keys start with _live_</li>
-                                                            <li>Real payment processing</li>
-                                                            <li>Actual charges</li>
-                                                        </ul>
+                                                        <div class="mb-3">
+                                                            <label for="testPublishableKey" class="form-label">
+                                                                <i class="bi bi-eye"></i> Publishable Key
+                                                            </label>
+                                                            <div class="input-group">
+                                                                <input type="text" class="form-control font-monospace" id="testPublishableKey" 
+                                                                       placeholder="pk_test_..." autocomplete="off">
+                                                                <button class="btn btn-outline-secondary" type="button" onclick="toggleKeyVisibility('testPublishableKey')">
+                                                                    <i class="bi bi-eye-slash"></i>
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <div class="mb-3">
+                                                            <label for="testSecretKey" class="form-label">
+                                                                <i class="bi bi-key"></i> Secret Key
+                                                            </label>
+                                                            <div class="input-group">
+                                                                <input type="password" class="form-control font-monospace" id="testSecretKey" 
+                                                                       placeholder="sk_test_..." autocomplete="off">
+                                                                <button class="btn btn-outline-secondary" type="button" onclick="toggleKeyVisibility('testSecretKey')">
+                                                                    <i class="bi bi-eye-slash"></i>
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <div class="mb-3">
+                                                            <label for="testWebhookSecret" class="form-label">
+                                                                <i class="bi bi-shield-lock"></i> Webhook Secret
+                                                            </label>
+                                                            <div class="input-group">
+                                                                <input type="password" class="form-control font-monospace" id="testWebhookSecret" 
+                                                                       placeholder="whsec_..." autocomplete="off">
+                                                                <button class="btn btn-outline-secondary" type="button" onclick="toggleKeyVisibility('testWebhookSecret')">
+                                                                    <i class="bi bi-eye-slash"></i>
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <div class="alert alert-warning">
+                                                            <i class="bi bi-info-circle"></i>
+                                                            <strong>Test Mode:</strong> Safe development with test card 4242 4242 4242 4242
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
                                         
-                                        <div class="d-flex justify-content-between align-items-center">
+                                        <div class="d-flex justify-content-between align-items-center mt-3">
                                             <button type="submit" class="btn btn-primary">
                                                 <i class="bi bi-save"></i> Save Stripe Configuration
                                             </button>
@@ -2019,6 +2081,7 @@ document.addEventListener('DOMContentLoaded', function() {
             loadBrandingConfig();
             loadSystemMessages();
             loadServiceSettings();
+            loadStripeConfig();
         }, 100);
     }
 });
@@ -6136,15 +6199,32 @@ async function loadStripeConfig() {
         const result = await response.json();
         
         if (result.success && result.config) {
-            // Set form values
-            document.getElementById('stripePublishableKey').value = result.config.publishable_key || '';
-            document.getElementById('stripeSecretKey').value = result.config.secret_key || '';
-            document.getElementById('stripeWebhookSecret').value = result.config.webhook_secret || '';
+            // Set current mode
+            const currentMode = result.config.mode || 'test';
+            document.querySelector(`input[name="stripeMode"][value="${currentMode}"]`).checked = true;
             
-            // Update key visibility status
-            updateStripeKeyStatus('stripePublishableKey', result.config.publishable_key);
-            updateStripeKeyStatus('stripeSecretKey', result.config.secret_key);
-            updateStripeKeyStatus('stripeWebhookSecret', result.config.webhook_secret);
+            // Set TEST mode values
+            document.getElementById('stripeTestPublishableKey').value = result.config.test.publishable_key || '';
+            document.getElementById('stripeTestSecretKey').value = result.config.test.secret_key || '';
+            document.getElementById('stripeTestWebhookSecret').value = result.config.test.webhook_secret || '';
+            
+            // Set LIVE mode values
+            document.getElementById('stripeLivePublishableKey').value = result.config.live.publishable_key || '';
+            document.getElementById('stripeLiveSecretKey').value = result.config.live.secret_key || '';
+            document.getElementById('stripeLiveWebhookSecret').value = result.config.live.webhook_secret || '';
+            
+            // Update key visibility status for test keys
+            updateStripeKeyStatus('stripeTestPublishableKey', result.config.test.publishable_key);
+            updateStripeKeyStatus('stripeTestSecretKey', result.config.test.secret_key);
+            updateStripeKeyStatus('stripeTestWebhookSecret', result.config.test.webhook_secret);
+            
+            // Update key visibility status for live keys
+            updateStripeKeyStatus('stripeLivePublishableKey', result.config.live.publishable_key);
+            updateStripeKeyStatus('stripeLiveSecretKey', result.config.live.secret_key);
+            updateStripeKeyStatus('stripeLiveWebhookSecret', result.config.live.webhook_secret);
+            
+            // Update mode indicator
+            updateModeIndicator(currentMode);
         }
     } catch (error) {
         console.error('Error loading Stripe config:', error);
@@ -6187,40 +6267,85 @@ function toggleKeyVisibility(fieldId) {
     }
 }
 
+function updateModeIndicator(mode) {
+    // Update any visual indicators for the current mode
+    const modeText = mode === 'live' ? 'LIVE' : 'TEST';
+    console.log(`Stripe mode updated to: ${modeText}`);
+    
+    // You can add visual feedback here if needed
+    showToast(`Stripe mode set to ${modeText}`, 'info');
+}
+
+// Add event listeners for mode changes
+document.addEventListener('DOMContentLoaded', function() {
+    // Listen for mode changes
+    document.querySelectorAll('input[name="stripeMode"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.checked) {
+                updateModeIndicator(this.value);
+            }
+        });
+    });
+});
+
 // Stripe configuration form submission
 document.getElementById('stripeConfigForm')?.addEventListener('submit', async function(e) {
     e.preventDefault();
     
-    const messageDiv = document.getElementById('stripeConfigMessage');
-    if (!messageDiv) {
-        // Create message div if it doesn't exist
-        const msgDiv = document.createElement('div');
-        msgDiv.id = 'stripeConfigMessage';
-        msgDiv.style.display = 'none';
-        this.parentElement.insertBefore(msgDiv, this);
+    // Get selected mode
+    const selectedMode = document.querySelector('input[name="stripeMode"]:checked').value;
+    
+    // Get test keys
+    const testKeys = {
+        publishable_key: document.getElementById('stripeTestPublishableKey').value.trim(),
+        secret_key: document.getElementById('stripeTestSecretKey').value.trim(),
+        webhook_secret: document.getElementById('stripeTestWebhookSecret').value.trim()
+    };
+    
+    // Get live keys
+    const liveKeys = {
+        publishable_key: document.getElementById('stripeLivePublishableKey').value.trim(),
+        secret_key: document.getElementById('stripeLiveSecretKey').value.trim(),
+        webhook_secret: document.getElementById('stripeLiveWebhookSecret').value.trim()
+    };
+    
+    // Validate test keys format
+    if (testKeys.publishable_key && !testKeys.publishable_key.startsWith('pk_test_')) {
+        showToast('Invalid test publishable key format. Must start with pk_test_', 'danger');
+        return;
+    }
+    
+    if (testKeys.secret_key && !testKeys.secret_key.startsWith('sk_test_')) {
+        showToast('Invalid test secret key format. Must start with sk_test_', 'danger');
+        return;
+    }
+    
+    if (testKeys.webhook_secret && !testKeys.webhook_secret.startsWith('whsec_')) {
+        showToast('Invalid test webhook secret format. Must start with whsec_', 'danger');
+        return;
+    }
+    
+    // Validate live keys format
+    if (liveKeys.publishable_key && !liveKeys.publishable_key.startsWith('pk_live_')) {
+        showToast('Invalid live publishable key format. Must start with pk_live_', 'danger');
+        return;
+    }
+    
+    if (liveKeys.secret_key && !liveKeys.secret_key.startsWith('sk_live_')) {
+        showToast('Invalid live secret key format. Must start with sk_live_', 'danger');
+        return;
+    }
+    
+    if (liveKeys.webhook_secret && !liveKeys.webhook_secret.startsWith('whsec_')) {
+        showToast('Invalid live webhook secret format. Must start with whsec_', 'danger');
+        return;
     }
     
     const data = {
-        publishable_key: document.getElementById('stripePublishableKey').value.trim(),
-        secret_key: document.getElementById('stripeSecretKey').value.trim(),
-        webhook_secret: document.getElementById('stripeWebhookSecret').value.trim()
+        mode: selectedMode,
+        test_keys: testKeys,
+        live_keys: liveKeys
     };
-    
-    // Validate keys format
-    if (data.publishable_key && !data.publishable_key.startsWith('pk_')) {
-        showToast('Invalid publishable key format. Must start with pk_test_ or pk_live_', 'danger');
-        return;
-    }
-    
-    if (data.secret_key && !data.secret_key.startsWith('sk_')) {
-        showToast('Invalid secret key format. Must start with sk_test_ or sk_live_', 'danger');
-        return;
-    }
-    
-    if (data.webhook_secret && !data.webhook_secret.startsWith('whsec_')) {
-        showToast('Invalid webhook secret format. Must start with whsec_', 'danger');
-        return;
-    }
     
     try {
         const response = await fetch('/admin/api/update_stripe_config', {
@@ -6236,10 +6361,18 @@ document.getElementById('stripeConfigForm')?.addEventListener('submit', async fu
         if (result.success) {
             showToast(result.message || 'Stripe configuration updated successfully', 'success');
             
-            // Update field status indicators
-            updateStripeKeyStatus('stripePublishableKey', data.publishable_key);
-            updateStripeKeyStatus('stripeSecretKey', data.secret_key);
-            updateStripeKeyStatus('stripeWebhookSecret', data.webhook_secret);
+            // Update field status indicators for test keys
+            updateStripeKeyStatus('stripeTestPublishableKey', testKeys.publishable_key);
+            updateStripeKeyStatus('stripeTestSecretKey', testKeys.secret_key);
+            updateStripeKeyStatus('stripeTestWebhookSecret', testKeys.webhook_secret);
+            
+            // Update field status indicators for live keys
+            updateStripeKeyStatus('stripeLivePublishableKey', liveKeys.publishable_key);
+            updateStripeKeyStatus('stripeLiveSecretKey', liveKeys.secret_key);
+            updateStripeKeyStatus('stripeLiveWebhookSecret', liveKeys.webhook_secret);
+            
+            // Update mode indicator
+            updateModeIndicator(selectedMode);
         } else {
             showToast('Error: ' + (result.error || 'Failed to update Stripe configuration'), 'danger');
         }

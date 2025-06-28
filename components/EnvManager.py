@@ -94,49 +94,117 @@ class EnvManager:
         try:
             env_vars = self.read_env_file()
             
+            # Determine current mode based on active keys
+            live_keys_set = bool(env_vars.get('STRIPE_LIVE_PUBLISHABLE_KEY', '').strip() and 
+                                env_vars.get('STRIPE_LIVE_SECRET_KEY', '').strip())
+            test_keys_set = bool(env_vars.get('STRIPE_TEST_PUBLISHABLE_KEY', '').strip() and 
+                                env_vars.get('STRIPE_TEST_SECRET_KEY', '').strip())
+            
+            # Current mode from env or default to test
+            current_mode = env_vars.get('STRIPE_MODE', 'test').lower()
+            
+            # If mode is set to live but no live keys, fallback to test
+            if current_mode == 'live' and not live_keys_set:
+                current_mode = 'test'
+            
             return {
-                'publishable_key': env_vars.get('STRIPE_PUBLISHABLE_KEY', ''),
-                'secret_key': env_vars.get('STRIPE_SECRET_KEY', ''),
-                'webhook_secret': env_vars.get('STRIPE_WEBHOOK_SECRET', ''),
-                'has_publishable_key': bool(env_vars.get('STRIPE_PUBLISHABLE_KEY', '').strip()),
-                'has_secret_key': bool(env_vars.get('STRIPE_SECRET_KEY', '').strip()),
-                'has_webhook_secret': bool(env_vars.get('STRIPE_WEBHOOK_SECRET', '').strip())
+                'mode': current_mode,
+                'test': {
+                    'publishable_key': env_vars.get('STRIPE_TEST_PUBLISHABLE_KEY', ''),
+                    'secret_key': env_vars.get('STRIPE_TEST_SECRET_KEY', ''),
+                    'webhook_secret': env_vars.get('STRIPE_TEST_WEBHOOK_SECRET', ''),
+                    'has_publishable_key': bool(env_vars.get('STRIPE_TEST_PUBLISHABLE_KEY', '').strip()),
+                    'has_secret_key': bool(env_vars.get('STRIPE_TEST_SECRET_KEY', '').strip()),
+                    'has_webhook_secret': bool(env_vars.get('STRIPE_TEST_WEBHOOK_SECRET', '').strip())
+                },
+                'live': {
+                    'publishable_key': env_vars.get('STRIPE_LIVE_PUBLISHABLE_KEY', ''),
+                    'secret_key': env_vars.get('STRIPE_LIVE_SECRET_KEY', ''),
+                    'webhook_secret': env_vars.get('STRIPE_LIVE_WEBHOOK_SECRET', ''),
+                    'has_publishable_key': bool(env_vars.get('STRIPE_LIVE_PUBLISHABLE_KEY', '').strip()),
+                    'has_secret_key': bool(env_vars.get('STRIPE_LIVE_SECRET_KEY', '').strip()),
+                    'has_webhook_secret': bool(env_vars.get('STRIPE_LIVE_WEBHOOK_SECRET', '').strip())
+                },
+                # Legacy keys (for backward compatibility)
+                'legacy': {
+                    'publishable_key': env_vars.get('STRIPE_PUBLISHABLE_KEY', ''),
+                    'secret_key': env_vars.get('STRIPE_SECRET_KEY', ''),
+                    'webhook_secret': env_vars.get('STRIPE_WEBHOOK_SECRET', ''),
+                    'has_publishable_key': bool(env_vars.get('STRIPE_PUBLISHABLE_KEY', '').strip()),
+                    'has_secret_key': bool(env_vars.get('STRIPE_SECRET_KEY', '').strip()),
+                    'has_webhook_secret': bool(env_vars.get('STRIPE_WEBHOOK_SECRET', '').strip())
+                }
             }
             
         except Exception as e:
             logger.error(f"Error getting Stripe config: {e}")
             return {
-                'publishable_key': '',
-                'secret_key': '',
-                'webhook_secret': '',
-                'has_publishable_key': False,
-                'has_secret_key': False,
-                'has_webhook_secret': False
+                'mode': 'test',
+                'test': {
+                    'publishable_key': '', 'secret_key': '', 'webhook_secret': '',
+                    'has_publishable_key': False, 'has_secret_key': False, 'has_webhook_secret': False
+                },
+                'live': {
+                    'publishable_key': '', 'secret_key': '', 'webhook_secret': '',
+                    'has_publishable_key': False, 'has_secret_key': False, 'has_webhook_secret': False
+                },
+                'legacy': {
+                    'publishable_key': '', 'secret_key': '', 'webhook_secret': '',
+                    'has_publishable_key': False, 'has_secret_key': False, 'has_webhook_secret': False
+                }
             }
     
-    def update_stripe_config(self, publishable_key=None, secret_key=None, webhook_secret=None):
+    def update_stripe_config(self, mode=None, test_keys=None, live_keys=None):
         """Update Stripe configuration in .env file."""
         try:
-            # Validate key formats
-            if publishable_key and not (publishable_key.startswith('pk_test_') or publishable_key.startswith('pk_live_')):
-                return {'error': 'Invalid publishable key format. Must start with pk_test_ or pk_live_'}
-            
-            if secret_key and not (secret_key.startswith('sk_test_') or secret_key.startswith('sk_live_')):
-                return {'error': 'Invalid secret key format. Must start with sk_test_ or sk_live_'}
-            
-            if webhook_secret and not webhook_secret.startswith('whsec_'):
-                return {'error': 'Invalid webhook secret format. Must start with whsec_'}
-            
             # Read current .env file
             env_vars = self.read_env_file()
             
-            # Update Stripe keys if provided
-            if publishable_key is not None:
-                env_vars['STRIPE_PUBLISHABLE_KEY'] = publishable_key
-            if secret_key is not None:
-                env_vars['STRIPE_SECRET_KEY'] = secret_key
-            if webhook_secret is not None:
-                env_vars['STRIPE_WEBHOOK_SECRET'] = webhook_secret
+            # Update mode if provided
+            if mode is not None:
+                if mode.lower() not in ['test', 'live']:
+                    return {'error': 'Invalid mode. Must be "test" or "live"'}
+                env_vars['STRIPE_MODE'] = mode.lower()
+            
+            # Update test keys if provided
+            if test_keys:
+                if test_keys.get('publishable_key'):
+                    key = test_keys['publishable_key'].strip()
+                    if key and not key.startswith('pk_test_'):
+                        return {'error': 'Test publishable key must start with pk_test_'}
+                    env_vars['STRIPE_TEST_PUBLISHABLE_KEY'] = key
+                
+                if test_keys.get('secret_key'):
+                    key = test_keys['secret_key'].strip()
+                    if key and not key.startswith('sk_test_'):
+                        return {'error': 'Test secret key must start with sk_test_'}
+                    env_vars['STRIPE_TEST_SECRET_KEY'] = key
+                
+                if test_keys.get('webhook_secret'):
+                    key = test_keys['webhook_secret'].strip()
+                    if key and not key.startswith('whsec_'):
+                        return {'error': 'Webhook secret must start with whsec_'}
+                    env_vars['STRIPE_TEST_WEBHOOK_SECRET'] = key
+            
+            # Update live keys if provided
+            if live_keys:
+                if live_keys.get('publishable_key'):
+                    key = live_keys['publishable_key'].strip()
+                    if key and not key.startswith('pk_live_'):
+                        return {'error': 'Live publishable key must start with pk_live_'}
+                    env_vars['STRIPE_LIVE_PUBLISHABLE_KEY'] = key
+                
+                if live_keys.get('secret_key'):
+                    key = live_keys['secret_key'].strip()
+                    if key and not key.startswith('sk_live_'):
+                        return {'error': 'Live secret key must start with sk_live_'}
+                    env_vars['STRIPE_LIVE_SECRET_KEY'] = key
+                
+                if live_keys.get('webhook_secret'):
+                    key = live_keys['webhook_secret'].strip()
+                    if key and not key.startswith('whsec_'):
+                        return {'error': 'Webhook secret must start with whsec_'}
+                    env_vars['STRIPE_LIVE_WEBHOOK_SECRET'] = key
             
             # Write updated .env file
             self._write_env_file(env_vars)
@@ -162,20 +230,49 @@ class EnvManager:
                 f.write("# Updated automatically\n\n")
                 
                 # Group Stripe variables together
-                stripe_vars = {
-                    'STRIPE_PUBLISHABLE_KEY': 'Stripe Publishable Key (Frontend)',
-                    'STRIPE_SECRET_KEY': 'Stripe Secret Key (Backend)',
-                    'STRIPE_WEBHOOK_SECRET': 'Stripe Webhook Secret'
-                }
-                
                 f.write("# Stripe Configuration\n")
-                for key, description in stripe_vars.items():
+                f.write(f"STRIPE_MODE={env_vars.get('STRIPE_MODE', 'test')}\n\n")
+                
+                f.write("# Stripe Test Keys\n")
+                test_vars = {
+                    'STRIPE_TEST_PUBLISHABLE_KEY': 'Stripe Test Publishable Key',
+                    'STRIPE_TEST_SECRET_KEY': 'Stripe Test Secret Key',
+                    'STRIPE_TEST_WEBHOOK_SECRET': 'Stripe Test Webhook Secret'
+                }
+                for key, description in test_vars.items():
                     value = env_vars.get(key, '')
                     f.write(f"# {description}\n")
                     f.write(f"{key}={value}\n\n")
                 
+                f.write("# Stripe Live Keys\n")
+                live_vars = {
+                    'STRIPE_LIVE_PUBLISHABLE_KEY': 'Stripe Live Publishable Key',
+                    'STRIPE_LIVE_SECRET_KEY': 'Stripe Live Secret Key',
+                    'STRIPE_LIVE_WEBHOOK_SECRET': 'Stripe Live Webhook Secret'
+                }
+                for key, description in live_vars.items():
+                    value = env_vars.get(key, '')
+                    f.write(f"# {description}\n")
+                    f.write(f"{key}={value}\n\n")
+                
+                # Legacy keys for backward compatibility
+                f.write("# Legacy Stripe Keys (for backward compatibility)\n")
+                legacy_vars = {
+                    'STRIPE_PUBLISHABLE_KEY': 'Legacy Stripe Publishable Key',
+                    'STRIPE_SECRET_KEY': 'Legacy Stripe Secret Key',
+                    'STRIPE_WEBHOOK_SECRET': 'Legacy Stripe Webhook Secret'
+                }
+                for key, description in legacy_vars.items():
+                    value = env_vars.get(key, '')
+                    if value:  # Only write legacy keys if they exist
+                        f.write(f"# {description}\n")
+                        f.write(f"{key}={value}\n\n")
+                
                 # Write other variables
                 f.write("# Other Configuration\n")
+                stripe_vars = set(['STRIPE_MODE', 'STRIPE_TEST_PUBLISHABLE_KEY', 'STRIPE_TEST_SECRET_KEY', 'STRIPE_TEST_WEBHOOK_SECRET',
+                                  'STRIPE_LIVE_PUBLISHABLE_KEY', 'STRIPE_LIVE_SECRET_KEY', 'STRIPE_LIVE_WEBHOOK_SECRET',
+                                  'STRIPE_PUBLISHABLE_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'])
                 for key, value in env_vars.items():
                     if key not in stripe_vars:
                         f.write(f"{key}={value}\n")
