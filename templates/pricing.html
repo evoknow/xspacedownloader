@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}Pricing - XSpace Downloader{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-lg-9 col-md-8 col-12">
+            <!-- Header -->
+            <div class="text-center mb-5">
+                <h1 class="display-4">
+                    <i class="bi bi-currency-dollar"></i> Credit Packages
+                </h1>
+                <p class="lead text-muted">
+                    Choose the perfect credit package for your needs. Credits never expire and can be used for all AI services.
+                </p>
+            </div>
+
+            <!-- Pricing Cards -->
+            <div class="row g-4">
+                {% for product in products %}
+                <div class="col-lg-6 col-md-6 col-12">
+                    <div class="card h-100 {% if product.recurring_credits == 'yes' %}border-primary{% endif %}">
+                        {% if product.recurring_credits == 'yes' %}
+                        <div class="card-header bg-primary text-white text-center">
+                            <h6 class="mb-0">
+                                <i class="bi bi-star-fill"></i> BEST VALUE
+                            </h6>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="card-body text-center">
+                            {% if product.image_url %}
+                            <div class="mb-3">
+                                <img src="{{ product.image_url }}" alt="{{ product.name }}" 
+                                     class="img-fluid rounded" style="max-height: 120px;">
+                            </div>
+                            {% endif %}
+                            
+                            <h4 class="card-title">{{ product.name }}</h4>
+                            
+                            <div class="mb-3">
+                                <h2 class="text-primary">
+                                    ${{ "%.2f"|format(product.price) }}
+                                    {% if product.recurring_credits == 'yes' %}
+                                    <small class="text-muted fs-6">/month</small>
+                                    {% endif %}
+                                </h2>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <span class="badge bg-success fs-6">
+                                    {{ product.credits }} Credits
+                                    {% if product.recurring_credits == 'yes' %}
+                                    per month
+                                    {% endif %}
+                                </span>
+                            </div>
+                            
+                            {% if product.description %}
+                            <p class="text-muted mb-4">{{ product.description }}</p>
+                            {% endif %}
+                            
+                            <!-- Features -->
+                            <ul class="list-unstyled mb-4">
+                                <li class="mb-2">
+                                    <i class="bi bi-check-circle text-success"></i>
+                                    Use for transcription & translation
+                                </li>
+                                <li class="mb-2">
+                                    <i class="bi bi-check-circle text-success"></i>
+                                    AI summaries & text-to-speech
+                                </li>
+                                <li class="mb-2">
+                                    <i class="bi bi-check-circle text-success"></i>
+                                    MP3 & MP4 processing
+                                </li>
+                                {% if product.recurring_credits == 'no' %}
+                                <li class="mb-2">
+                                    <i class="bi bi-check-circle text-success"></i>
+                                    Credits never expire
+                                </li>
+                                {% else %}
+                                <li class="mb-2">
+                                    <i class="bi bi-check-circle text-success"></i>
+                                    Credits refresh monthly
+                                </li>
+                                {% endif %}
+                            </ul>
+                        </div>
+                        
+                        <div class="card-footer bg-transparent">
+                            <div class="d-grid">
+                                <button class="btn {% if product.recurring_credits == 'yes' %}btn-primary{% else %}btn-outline-primary{% endif %} btn-lg" 
+                                        onclick="purchaseProduct('{{ product.id }}', '{{ product.sku }}')">
+                                    <i class="bi bi-cart-plus"></i> Purchase Now
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Information Section -->
+            <div class="row mt-5">
+                <div class="col-12">
+                    <div class="card bg-light">
+                        <div class="card-body">
+                            <h5 class="card-title">
+                                <i class="bi bi-info-circle"></i> How Credits Work
+                            </h5>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6>What can you do with credits?</h6>
+                                    <ul class="list-unstyled">
+                                        <li><i class="bi bi-dot"></i> Audio transcription using AI</li>
+                                        <li><i class="bi bi-dot"></i> Text translation to any language</li>
+                                        <li><i class="bi bi-dot"></i> AI-powered content summaries</li>
+                                        <li><i class="bi bi-dot"></i> Text-to-speech MP3 generation</li>
+                                        <li><i class="bi bi-dot"></i> Video processing and conversion</li>
+                                    </ul>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6>Pricing Examples</h6>
+                                    <ul class="list-unstyled">
+                                        <li><i class="bi bi-dot"></i> 1-hour transcription: ~5-10 credits</li>
+                                        <li><i class="bi bi-dot"></i> Text translation: ~2-5 credits</li>
+                                        <li><i class="bi bi-dot"></i> AI summary: ~3-8 credits</li>
+                                        <li><i class="bi bi-dot"></i> Text-to-speech: ~0.1 credits/100 chars</li>
+                                        <li><i class="bi bi-dot"></i> Language detection: ~2 credits</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FAQ Section -->
+            <div class="row mt-4">
+                <div class="col-12">
+                    <h5>
+                        <i class="bi bi-question-circle"></i> Frequently Asked Questions
+                    </h5>
+                    
+                    <div class="accordion" id="pricingFAQ">
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="faq1">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse1">
+                                    Do credits expire?
+                                </button>
+                            </h2>
+                            <div id="collapse1" class="accordion-collapse collapse" data-bs-parent="#pricingFAQ">
+                                <div class="accordion-body">
+                                    One-time credit purchases never expire. Monthly subscription credits refresh each month and unused credits from the previous month do not carry over.
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="faq2">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse2">
+                                    Can I cancel my subscription?
+                                </button>
+                            </h2>
+                            <div id="collapse2" class="accordion-collapse collapse" data-bs-parent="#pricingFAQ">
+                                <div class="accordion-body">
+                                    Yes, you can cancel your monthly subscription at any time. You'll continue to have access to your credits until the end of your current billing period.
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="faq3">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse3">
+                                    What payment methods do you accept?
+                                </button>
+                            </h2>
+                            <div id="collapse3" class="accordion-collapse collapse" data-bs-parent="#pricingFAQ">
+                                <div class="accordion-body">
+                                    We accept all major credit cards, PayPal, and other payment methods through our secure payment processor.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Right Column - Advertisement -->
+        <div class="col-lg-3 col-md-4 col-12">
+            {% if advertisement_html %}
+            <!-- Advertisement Section -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white py-2">
+                    <h6 class="mb-0"><i class="bi bi-star me-1"></i> For You</h6>
+                </div>
+                <div class="card-body p-2" style="background-color: {{ advertisement_bg }};">
+                    <div class="advertisement-container">
+                        {{ advertisement_html|safe }}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function purchaseProduct(productId, sku) {
+    // This will be implemented when payment processing is added
+    alert(`Purchase functionality for ${sku} will be implemented soon!\n\nProduct ID: ${productId}`);
+    
+    // For now, show a message about contacting support
+    const message = `To purchase ${sku}, please contact our support team.\n\nThis purchase system will be fully functional soon with secure payment processing.`;
+    
+    if (confirm(message + '\n\nWould you like to be redirected to our contact page?')) {
+        // You can redirect to a contact page or email link
+        window.location.href = 'mailto:support@xspacedownloader.com?subject=Credit Purchase Request - ' + sku;
+    }
+}
+
+// Show purchase success/error messages
+function showAlert(message, type) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.querySelector('.container').insertBefore(alertDiv, document.querySelector('.row'));
+    
+    // Auto dismiss after 5 seconds
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 5000);
+}
+</script>
+{% endblock %}

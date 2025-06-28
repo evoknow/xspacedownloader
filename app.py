@@ -1145,6 +1145,38 @@ def affiliate_program():
         flash('Error loading page. Please try again.', 'error')
         return redirect(url_for('index'))
 
+@app.route('/pricing')
+def pricing():
+    """Display pricing page with available credit packages."""
+    try:
+        # Import Product component
+        from components.Product import Product
+        
+        product = Product()
+        
+        # Get active products for display
+        products = product.get_active_products()
+        
+        # Load advertisement for all users (logged in or not)
+        advertisement_html = None
+        advertisement_bg = '#ffffff'
+        try:
+            ad = Ad.get_active_ad()
+            if ad and ad.copy:
+                advertisement_html = ad.copy
+                advertisement_bg = ad.background_color or '#ffffff'
+        except Exception as e:
+            logger.warning(f"Error loading advertisement: {e}")
+        
+        return render_template('pricing.html',
+                             products=products,
+                             advertisement_html=advertisement_html,
+                             advertisement_bg=advertisement_bg)
+    except Exception as e:
+        logger.error(f"Error loading pricing page: {e}", exc_info=True)
+        flash('Error loading pricing information. Please try again.', 'error')
+        return redirect(url_for('index'))
+
 @app.route('/', methods=['GET'])
 def index():
     """Home page with form to submit a space URL."""
@@ -10177,6 +10209,142 @@ def admin_update_affiliate_settings():
             
     except Exception as e:
         logger.error(f"Error updating affiliate settings: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+# Product Admin Routes
+@app.route('/admin/products')
+def admin_products():
+    """Admin page for managing products."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        flash('Admin access required.', 'error')
+        return redirect(url_for('index'))
+    
+    try:
+        # Import Product component here to avoid circular imports
+        from components.Product import Product
+        
+        product = Product()
+        
+        # Get all products for display
+        products = product.get_all_products()
+        
+        return render_template('admin_products.html', products=products)
+        
+    except Exception as e:
+        logger.error(f"Error loading product admin page: {e}", exc_info=True)
+        flash('Error loading product data.', 'error')
+        return redirect(url_for('admin'))
+
+@app.route('/admin/api/products', methods=['GET'])
+def admin_get_products():
+    """Get all products for admin."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        from components.Product import Product
+        
+        product = Product()
+        products = product.get_all_products()
+        
+        return jsonify({'success': True, 'products': products})
+        
+    except Exception as e:
+        logger.error(f"Error getting products: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/products', methods=['POST'])
+def admin_create_product():
+    """Create a new product."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['sku', 'name', 'price', 'credits']
+        for field in required_fields:
+            if field not in data or not data[field]:
+                return jsonify({'error': f'Missing required field: {field}'}), 400
+        
+        from components.Product import Product
+        
+        product = Product()
+        result = product.create_product(data)
+        
+        if 'error' in result:
+            return jsonify({'error': result['error']}), 400
+        else:
+            return jsonify({'success': True, 'message': 'Product created successfully', 'product_id': result['product_id']})
+            
+    except Exception as e:
+        logger.error(f"Error creating product: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/products/<product_id>', methods=['PUT'])
+def admin_update_product(product_id):
+    """Update an existing product."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        data = request.get_json()
+        
+        from components.Product import Product
+        
+        product = Product()
+        result = product.update_product(product_id, data)
+        
+        if 'error' in result:
+            return jsonify({'error': result['error']}), 400
+        else:
+            return jsonify({'success': True, 'message': 'Product updated successfully'})
+            
+    except Exception as e:
+        logger.error(f"Error updating product: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/products/<product_id>', methods=['DELETE'])
+def admin_delete_product(product_id):
+    """Delete a product."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        from components.Product import Product
+        
+        product = Product()
+        result = product.delete_product(product_id)
+        
+        if 'error' in result:
+            return jsonify({'error': result['error']}), 400
+        else:
+            return jsonify({'success': True, 'message': 'Product deleted successfully'})
+            
+    except Exception as e:
+        logger.error(f"Error deleting product: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/products/<product_id>/toggle-status', methods=['POST'])
+def admin_toggle_product_status(product_id):
+    """Toggle product active status."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        from components.Product import Product
+        
+        product = Product()
+        result = product.toggle_product_status(product_id)
+        
+        if 'error' in result:
+            return jsonify({'error': result['error']}), 400
+        else:
+            return jsonify({'success': True, 'message': f'Product status changed to {result["new_status"]}'})
+            
+    except Exception as e:
+        logger.error(f"Error toggling product status: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
