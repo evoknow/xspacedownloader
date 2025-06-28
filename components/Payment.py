@@ -206,7 +206,7 @@ class Payment:
             
             # Get transaction details
             cursor.execute("""
-                SELECT ct.*, p.credits, p.recurring_credits
+                SELECT ct.*, p.credits, p.recurring_credits, p.name
                 FROM credit_txn ct
                 JOIN products p ON ct.product_id = p.id
                 WHERE ct.id = %s
@@ -226,12 +226,29 @@ class Payment:
                 WHERE id = %s
             """, (session.get('payment_intent'), txn_id))
             
-            # Add credits to user account
-            cursor.execute("""
-                UPDATE users 
-                SET credits = credits + %s
-                WHERE id = %s
-            """, (txn['credits'], txn['user_id']))
+            # Check if this is a lifetime product (one-time payment with recurring credits)
+            is_lifetime_product = (txn['recurring_credits'] == 'no' and 
+                                 'lifetime' in txn['name'].lower() and 
+                                 txn['credits'] > 0)
+            
+            if is_lifetime_product:
+                # For lifetime products, set recurring_credits and reset date
+                cursor.execute("""
+                    UPDATE users 
+                    SET credits = credits + %s,
+                        recurring_credits = %s,
+                        last_credit_reset = NOW()
+                    WHERE id = %s
+                """, (txn['credits'], txn['credits'], txn['user_id']))
+                
+                logger.info(f"Lifetime product purchased: Set recurring_credits to {txn['credits']} for user {txn['user_id']}")
+            else:
+                # For regular products, just add credits
+                cursor.execute("""
+                    UPDATE users 
+                    SET credits = credits + %s
+                    WHERE id = %s
+                """, (txn['credits'], txn['user_id']))
             
             # Record transaction in main transactions table
             cursor.execute("""
