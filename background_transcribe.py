@@ -1057,6 +1057,14 @@ class TranscriptionWorker:
                                     transcription_duration, len(transcript_text)
                                 )
                             
+                            # Add language detection cost to transcription if it was performed
+                            language_detection_tokens = 0
+                            if job_data.get('detect_language', False):
+                                # Add estimated language detection cost (roughly 200 input tokens + 5 output tokens)
+                                language_detection_tokens = 205
+                                input_tokens += language_detection_tokens
+                                logger.info(f"Including language detection cost in transcription: ~{language_detection_tokens} tokens")
+                            
                             # Track cost using unified AICost component
                             success, message, cost = ai_cost.track_cost(
                                 space_id=space_id,
@@ -1071,7 +1079,10 @@ class TranscriptionWorker:
                             )
                             
                             if success:
-                                logger.info(f"TRANSCRIPTION COST: {message} - ${cost:.2f} for {input_tokens}+{output_tokens} tokens")
+                                cost_description = f"TRANSCRIPTION COST: {message} - ${cost:.2f} for {input_tokens}+{output_tokens} tokens"
+                                if language_detection_tokens > 0:
+                                    cost_description += f" (includes {language_detection_tokens} tokens for language detection)"
+                                logger.info(cost_description)
                             else:
                                 logger.warning(f"TRANSCRIPTION COST: {message}")
                         else:
@@ -1288,27 +1299,8 @@ Language code:"""
                                     if user_id and user_id > 0:
                                         ai_cost = AICost()
                                         
-                                        # Estimate tokens for language detection
-                                        input_tokens = ai_cost.estimate_tokens(prompt, is_input=True)
-                                        output_tokens = 5  # Just the language code
-                                        
-                                        # Track language detection cost as separate transaction
-                                        success, message, cost = ai_cost.track_cost(
-                                            space_id=space_id,
-                                            action='language_detection',
-                                            vendor='openai',
-                                            model=model,
-                                            input_tokens=input_tokens,
-                                            output_tokens=output_tokens,
-                                            user_id=user_id,
-                                            cookie_id=None,
-                                            deduct_credits=True
-                                        )
-                                        
-                                        if success:
-                                            logger.info(f"LANGUAGE DETECTION COST: {message} - ${cost:.2f} for {input_tokens}+{output_tokens} tokens")
-                                        else:
-                                            logger.warning(f"LANGUAGE DETECTION COST: {message}")
+                                        # Note: Language detection cost is now included in the main transcription cost tracking
+                                        logger.info(f"Language detection completed - cost will be included in transcription billing")
                                         
                                 except Exception as cost_err:
                                     logger.error(f"Error tracking language detection cost: {cost_err}")
