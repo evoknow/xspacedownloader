@@ -3,8 +3,8 @@
 
 import json
 import logging
+import mysql.connector
 from datetime import datetime
-from components.DatabaseManager import DatabaseManager
 
 logger = logging.getLogger('webapp')
 
@@ -13,12 +13,18 @@ class Product:
     
     def __init__(self):
         """Initialize Product component."""
-        self.db_manager = DatabaseManager()
+        # Load database configuration
+        with open('db_config.json', 'r') as f:
+            config = json.load(f)
+        
+        self.db_config = config["mysql"].copy()
+        if 'use_ssl' in self.db_config:
+            del self.db_config['use_ssl']
         
     def get_all_products(self):
         """Get all products from database."""
         try:
-            connection = self.db_manager.get_connection()
+            connection = mysql.connector.connect(**self.db_config)
             cursor = connection.cursor(dictionary=True)
             
             cursor.execute("""
@@ -51,7 +57,7 @@ class Product:
     def get_product_by_id(self, product_id):
         """Get a single product by ID."""
         try:
-            connection = self.db_manager.get_connection()
+            connection = mysql.connector.connect(**self.db_config)
             cursor = connection.cursor(dictionary=True)
             
             cursor.execute("""
@@ -84,7 +90,7 @@ class Product:
     def get_product_by_sku(self, sku):
         """Get a single product by SKU."""
         try:
-            connection = self.db_manager.get_connection()
+            connection = mysql.connector.connect(**self.db_config)
             cursor = connection.cursor(dictionary=True)
             
             cursor.execute("""
@@ -117,7 +123,7 @@ class Product:
     def get_active_products(self):
         """Get only active products."""
         try:
-            connection = self.db_manager.get_connection()
+            connection = mysql.connector.connect(**self.db_config)
             cursor = connection.cursor(dictionary=True)
             
             cursor.execute("""
@@ -151,7 +157,7 @@ class Product:
     def create_product(self, product_data):
         """Create a new product."""
         try:
-            connection = self.db_manager.get_connection()
+            connection = mysql.connector.connect(**self.db_config)
             cursor = connection.cursor()
             
             # Check if SKU already exists
@@ -195,7 +201,7 @@ class Product:
     def update_product(self, product_id, product_data):
         """Update an existing product."""
         try:
-            connection = self.db_manager.get_connection()
+            connection = mysql.connector.connect(**self.db_config)
             cursor = connection.cursor()
             
             # Check if product exists
@@ -250,7 +256,7 @@ class Product:
     def delete_product(self, product_id):
         """Delete a product."""
         try:
-            connection = self.db_manager.get_connection()
+            connection = mysql.connector.connect(**self.db_config)
             cursor = connection.cursor()
             
             # Check if product exists
@@ -278,7 +284,7 @@ class Product:
     def toggle_product_status(self, product_id):
         """Toggle product status between active and inactive."""
         try:
-            connection = self.db_manager.get_connection()
+            connection = mysql.connector.connect(**self.db_config)
             cursor = connection.cursor()
             
             # Get current status
