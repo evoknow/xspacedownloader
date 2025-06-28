@@ -3096,8 +3096,35 @@ class Space:
                 ai = AI()
                 ai_cost = AICost()
                 
-                # Prepare prompt for tag generation
-                prompt = f"""Analyze this transcript and extract up to {max_tags} **highly relevant** and **searchable** tags.
+                # Import regex module
+                import re
+                
+                # Define chunk size (approximately 2500 chars to leave room for prompt)
+                chunk_size = 2500
+                transcript_length = len(transcript_text)
+                
+                # Common words to filter out
+                common_words = {
+                    'going', 'because', 'think', 'about', 'would', 'doesn\'t', 'really', 
+                    'maybe', 'probably', 'something', 'could', 'should', 'might', 'actually', 
+                    'basically', 'thing', 'stuff', 'people', 'good', 'nice', 'very', 'thank', 
+                    'there', 'here', 'prompt', 'getting', 'saying', 'having', 'being', 
+                    'doing', 'making', 'taking', 'coming', 'looking', 'using', 'working',
+                    'trying', 'talking', 'thinking', 'feeling', 'knowing', 'seeing',
+                    'right', 'just', 'like', 'want', 'need', 'time', 'know', 'yeah',
+                    'okay', 'well', 'mean', 'said', 'says', 'tell', 'told', 'talk'
+                }
+                
+                all_tags = []
+                chunks_processed = 0
+                
+                # Process transcript in chunks
+                for i in range(0, transcript_length, chunk_size):
+                    chunk = transcript_text[i:i + chunk_size]
+                    chunks_processed += 1
+                    
+                    # Prepare prompt for tag generation
+                    prompt = f"""Analyze this transcript excerpt and extract up to {max_tags} **highly relevant** and **searchable** tags.
 
 STRICT GUIDELINES:
 1. DO NOT use **common or vague words**, including: going, because, think, about, would, doesn't, really, maybe, probably, something, could, should, might, actually, basically, thing, stuff, people, good, nice, very, thank, there, here, prompt.
@@ -3119,90 +3146,164 @@ FORMAT:
 - NO extra text, no bullet points, no numbers
 
 EXAMPLES:
-✅ Good tags: "Bangladesh", "OpenAI", "machine learning", "climate finance", "Elon Musk", "Dhaka", "data privacy", "nuclear submarine"
-❌ Bad tags: "thing", "nice", "about", "because", "there", "prompt", "2024"
+Good tags: "Bangladesh", "OpenAI", "machine learning", "climate finance", "Elon Musk", "Dhaka", "data privacy", "nuclear submarine"
+Bad tags: "thing", "nice", "about", "because", "there", "prompt", "2024"
 
-Transcript:
-{transcript_text[:3000]}
+Transcript excerpt (chunk {chunks_processed} of {((transcript_length - 1) // chunk_size) + 1}):
+{chunk}
 """
+                    
+                    # Log the prompt being sent
+                    tag_logger.info("="*80)
+                    tag_logger.info(f"AI TAG GENERATION REQUEST - Chunk {chunks_processed}")
+                    tag_logger.info("="*80)
+                    tag_logger.info(f"Max tags requested per chunk: {max_tags}")
+                    tag_logger.info(f"Chunk size: {len(chunk)} characters")
+                    tag_logger.info(f"Total transcript length: {transcript_length} characters")
+                    tag_logger.info(f"AI Provider: {ai.get_provider_name()}")
+                    tag_logger.info("-"*80)
+                    
+                    # Generate tags using AI
+                    result = ai.generate_text(prompt, max_tokens=100)
+                    
+                    # Track cost if we have a space_id (which we can get from self.id)
+                    if hasattr(self, 'id') and self.id:
+                        try:
+                            # Estimate tokens for cost tracking
+                            input_tokens = ai_cost.estimate_tokens(prompt, is_input=True)
+                            output_tokens = ai_cost.estimate_tokens(result.get('text', ''), is_input=False) if result.get('success') else 0
+                            
+                            # Get provider and model info
+                            provider = ai.get_provider_name().lower()
+                            model = getattr(ai.provider, 'model', 'unknown') if hasattr(ai, 'provider') else 'unknown'
+                            
+                            # Track cost (without deducting credits since this is called from background process)
+                            cost_success, cost_message, cost = ai_cost.track_cost(
+                                space_id=self.id,
+                                action='tag_generation',
+                                vendor=provider,
+                                model=model,
+                                input_tokens=input_tokens,
+                                output_tokens=output_tokens,
+                                user_id=getattr(self, 'user_id', None),
+                                deduct_credits=False  # Don't deduct for background tag generation
+                            )
+                            
+                            if not cost_success:
+                                tag_logger.warning(f"Cost tracking failed for tag generation: {cost_message}")
+                        except Exception as cost_err:
+                            tag_logger.warning(f"Error tracking cost for tag generation: {cost_err}")
+                    
+                    tag_logger.info(f"AI RESPONSE for chunk {chunks_processed}:")
+                    tag_logger.info("-"*80)
+                    tag_logger.info(f"Success: {result.get('success', False)}")
+                    if result.get('success'):
+                        tag_logger.info(f"Response: {result.get('text', '')}")
+                    else:
+                        tag_logger.error(f"AI Error: {result.get('error', 'Unknown error')}")
+                    tag_logger.info("-"*80)
+                    
+                    if result.get('success') and result.get('text'):
+                        # Parse tags from response
+                        tags_text = result.get('text', '').strip()
+                        chunk_tags = [tag.strip() for tag in tags_text.split(',') if tag.strip()]
+                        
+                        # Add to all_tags
+                        all_tags.extend(chunk_tags)
+                        tag_logger.info(f"Tags from chunk {chunks_processed}: {chunk_tags}")
                 
-                # Log the prompt being sent
+                # After processing all chunks, consolidate and filter tags
                 tag_logger.info("="*80)
-                tag_logger.info("AI TAG GENERATION REQUEST")
+                tag_logger.info("CONSOLIDATING TAGS FROM ALL CHUNKS")
                 tag_logger.info("="*80)
-                tag_logger.info(f"Max tags requested: {max_tags}")
-                tag_logger.info(f"Transcript length: {len(transcript_text)} characters")
-                tag_logger.info(f"AI Provider: {ai.get_provider_name()}")
-                tag_logger.info("-"*80)
-                tag_logger.info("PROMPT SENT TO AI:")
-                tag_logger.info("-"*80)
-                tag_logger.info(prompt)
-                tag_logger.info("-"*80)
+                tag_logger.info(f"Total tags collected: {len(all_tags)}")
+                tag_logger.info(f"Raw tags: {all_tags}")
                 
-                # Generate tags using AI
-                result = ai.generate_text(prompt, max_tokens=100)
+                # Count tag frequency and remove duplicates
+                from collections import Counter
+                tag_counts = Counter(all_tags)
                 
-                # Track cost if we have a space_id (which we can get from self.id)
-                if hasattr(self, 'id') and self.id:
-                    try:
-                        # Estimate tokens for cost tracking
-                        input_tokens = ai_cost.estimate_tokens(prompt, is_input=True)
-                        output_tokens = ai_cost.estimate_tokens(result.get('text', ''), is_input=False) if result.get('success') else 0
-                        
-                        # Get provider and model info
-                        provider = ai.get_provider_name().lower()
-                        model = getattr(ai.provider, 'model', 'unknown') if hasattr(ai, 'provider') else 'unknown'
-                        
-                        # Track cost (without deducting credits since this is called from background process)
-                        cost_success, cost_message, cost = ai_cost.track_cost(
-                            space_id=self.id,
-                            action='tag_generation',
-                            vendor=provider,
-                            model=model,
-                            input_tokens=input_tokens,
-                            output_tokens=output_tokens,
-                            user_id=getattr(self, 'user_id', None),
-                            deduct_credits=False  # Don't deduct for background tag generation
-                        )
-                        
-                        if not cost_success:
-                            tag_logger.warning(f"Cost tracking failed for tag generation: {cost_message}")
-                    except Exception as cost_err:
-                        tag_logger.warning(f"Error tracking cost for tag generation: {cost_err}")
+                # Filter and score tags
+                scored_tags = []
+                for tag, count in tag_counts.items():
+                    # Skip if tag is just a number
+                    if re.match(r'^\d+$', tag):
+                        tag_logger.info(f"Filtered out standalone number tag: {tag}")
+                        continue
+                    
+                    # Skip very short tags
+                    if len(tag) < 2:
+                        tag_logger.info(f"Filtered out too short tag: {tag}")
+                        continue
+                    
+                    # Skip common words
+                    if tag.lower() in common_words:
+                        tag_logger.info(f"Filtered out common word: {tag}")
+                        continue
+                    
+                    # Score based on frequency and quality
+                    score = count  # Base score is frequency
+                    
+                    # Bonus for proper nouns (capitalized)
+                    if tag[0].isupper():
+                        score += 2
+                    
+                    # Bonus for multi-word tags (likely more specific)
+                    if ' ' in tag:
+                        score += 3
+                    
+                    # Bonus for technical terms (contains numbers or special chars)
+                    if any(c.isdigit() for c in tag) and not tag.isdigit():
+                        score += 2
+                    
+                    scored_tags.append((tag, score))
                 
-                tag_logger.info("AI RESPONSE:")
-                tag_logger.info("-"*80)
-                tag_logger.info(f"Success: {result.get('success', False)}")
-                if result.get('success'):
-                    tag_logger.info(f"Response: {result.get('text', '')}")
+                # Sort by score and take top tags
+                scored_tags.sort(key=lambda x: x[1], reverse=True)
+                
+                # Use AI to further refine the top tags
+                if len(scored_tags) > max_tags:
+                    top_tags = [tag for tag, score in scored_tags[:max_tags * 2]]  # Get 2x candidates
+                    
+                    refine_prompt = f"""From these candidate tags, select the {max_tags} MOST relevant and high-quality tags for categorizing the transcript.
+
+SELECTION CRITERIA:
+1. Prefer specific over generic (e.g., "OpenAI" over "technology")
+2. Prefer proper nouns and named entities
+3. Prefer technical/domain-specific terms
+4. Avoid common words and phrases
+5. Ensure diversity - don't select multiple variants of the same concept
+
+Candidate tags: {', '.join(top_tags)}
+
+Return ONLY the selected tags as a comma-separated list, nothing else."""
+                    
+                    tag_logger.info("REFINING TAGS WITH AI")
+                    tag_logger.info(f"Candidates for refinement: {top_tags}")
+                    
+                    refine_result = ai.generate_text(refine_prompt, max_tokens=100)
+                    
+                    if refine_result.get('success') and refine_result.get('text'):
+                        refined_tags = [tag.strip() for tag in refine_result.get('text', '').split(',') if tag.strip()]
+                        tag_logger.info(f"AI refined tags: {refined_tags}")
+                        
+                        # Final filtering
+                        final_tags = []
+                        for tag in refined_tags:
+                            if tag and len(tag) >= 2 and tag.lower() not in common_words:
+                                final_tags.append(tag)
+                        
+                        final_tags = final_tags[:max_tags]
+                    else:
+                        # Fallback to top scored tags
+                        final_tags = [tag for tag, score in scored_tags[:max_tags]]
                 else:
-                    tag_logger.error(f"AI Error: {result.get('error', 'Unknown error')}")
-                tag_logger.info("-"*80)
+                    # Use all tags if we have fewer than max_tags
+                    final_tags = [tag for tag, score in scored_tags]
                 
-                if result.get('success') and result.get('text'):
-                    # Parse tags from response
-                    tags_text = result.get('text', '').strip()
-                    tags = [tag.strip() for tag in tags_text.split(',') if tag.strip()]
-                    
-                    # Filter out standalone numbers and ensure tags meet quality criteria
-                    import re
-                    filtered_tags = []
-                    for tag in tags:
-                        # Skip if tag is just a number
-                        if re.match(r'^\d+$', tag):
-                            tag_logger.info(f"Filtered out standalone number tag: {tag}")
-                            continue
-                        # Skip very short single character tags
-                        if len(tag) < 2:
-                            tag_logger.info(f"Filtered out too short tag: {tag}")
-                            continue
-                        filtered_tags.append(tag)
-                    
-                    # Limit to max_tags
-                    final_tags = filtered_tags[:max_tags]
-                    tag_logger.info(f"FINAL TAGS GENERATED: {final_tags}")
-                    tag_logger.info("="*80 + "\n")
-                    return final_tags
+                tag_logger.info(f"FINAL TAGS GENERATED: {final_tags}")
+                tag_logger.info("="*80 + "\n")
+                return final_tags
                     
             except Exception as ai_error:
                 tag_logger.error(f"AI tag generation failed: {ai_error}")
