@@ -7902,12 +7902,23 @@ def admin_stripe_config():
             return jsonify({
                 'success': True,
                 'config': {
-                    'has_publishable_key': config['has_publishable_key'],
-                    'has_secret_key': config['has_secret_key'],
-                    'has_webhook_secret': config['has_webhook_secret'],
-                    'publishable_key_preview': config['publishable_key'][:20] + '...' if config['publishable_key'] else '',
-                    'secret_key_preview': config['secret_key'][:20] + '...' if config['secret_key'] else '',
-                    'webhook_secret_preview': config['webhook_secret'][:20] + '...' if config['webhook_secret'] else '',
+                    'mode': config['mode'],
+                    'test': {
+                        'has_publishable_key': config['test']['has_publishable_key'],
+                        'has_secret_key': config['test']['has_secret_key'],
+                        'has_webhook_secret': config['test']['has_webhook_secret'],
+                        'publishable_key_preview': config['test']['publishable_key'][:20] + '...' if config['test']['publishable_key'] else '',
+                        'secret_key_preview': config['test']['secret_key'][:20] + '...' if config['test']['secret_key'] else '',
+                        'webhook_secret_preview': config['test']['webhook_secret'][:20] + '...' if config['test']['webhook_secret'] else ''
+                    },
+                    'live': {
+                        'has_publishable_key': config['live']['has_publishable_key'],
+                        'has_secret_key': config['live']['has_secret_key'],
+                        'has_webhook_secret': config['live']['has_webhook_secret'],
+                        'publishable_key_preview': config['live']['publishable_key'][:20] + '...' if config['live']['publishable_key'] else '',
+                        'secret_key_preview': config['live']['secret_key'][:20] + '...' if config['live']['secret_key'] else '',
+                        'webhook_secret_preview': config['live']['webhook_secret'][:20] + '...' if config['live']['webhook_secret'] else ''
+                    },
                     'env_file_path': env_manager.get_env_file_path()
                 }
             })
@@ -7916,19 +7927,19 @@ def admin_stripe_config():
             # Update Stripe configuration
             data = request.get_json()
             
-            publishable_key = data.get('publishable_key', '').strip()
-            secret_key = data.get('secret_key', '').strip()
-            webhook_secret = data.get('webhook_secret', '').strip()
+            mode = data.get('mode')
+            test_keys = data.get('test_keys')
+            live_keys = data.get('live_keys')
             
-            # Validate at least one key is provided
-            if not any([publishable_key, secret_key, webhook_secret]):
-                return jsonify({'error': 'At least one Stripe key must be provided'}), 400
+            # Validate at least one update is provided
+            if not any([mode, test_keys, live_keys]):
+                return jsonify({'error': 'At least one configuration update must be provided'}), 400
             
             # Update configuration
             result = env_manager.update_stripe_config(
-                publishable_key=publishable_key if publishable_key else None,
-                secret_key=secret_key if secret_key else None,
-                webhook_secret=webhook_secret if webhook_secret else None
+                mode=mode,
+                test_keys=test_keys,
+                live_keys=live_keys
             )
             
             if 'error' in result:
