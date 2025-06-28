@@ -7883,6 +7883,68 @@ def admin_update_system_message(message_id):
         logger.error(f"Error updating system message: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
+# Stripe Configuration Routes
+@app.route('/admin/api/stripe_config', methods=['GET', 'POST'])
+def admin_stripe_config():
+    """Get or update Stripe configuration (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        from components.EnvManager import EnvManager
+        env_manager = EnvManager()
+        
+        if request.method == 'GET':
+            # Get current Stripe configuration
+            config = env_manager.get_stripe_config()
+            
+            # Don't send actual keys in response for security
+            return jsonify({
+                'success': True,
+                'config': {
+                    'has_publishable_key': config['has_publishable_key'],
+                    'has_secret_key': config['has_secret_key'],
+                    'has_webhook_secret': config['has_webhook_secret'],
+                    'publishable_key_preview': config['publishable_key'][:20] + '...' if config['publishable_key'] else '',
+                    'secret_key_preview': config['secret_key'][:20] + '...' if config['secret_key'] else '',
+                    'webhook_secret_preview': config['webhook_secret'][:20] + '...' if config['webhook_secret'] else '',
+                    'env_file_path': env_manager.get_env_file_path()
+                }
+            })
+        
+        elif request.method == 'POST':
+            # Update Stripe configuration
+            data = request.get_json()
+            
+            publishable_key = data.get('publishable_key', '').strip()
+            secret_key = data.get('secret_key', '').strip()
+            webhook_secret = data.get('webhook_secret', '').strip()
+            
+            # Validate at least one key is provided
+            if not any([publishable_key, secret_key, webhook_secret]):
+                return jsonify({'error': 'At least one Stripe key must be provided'}), 400
+            
+            # Update configuration
+            result = env_manager.update_stripe_config(
+                publishable_key=publishable_key if publishable_key else None,
+                secret_key=secret_key if secret_key else None,
+                webhook_secret=webhook_secret if webhook_secret else None
+            )
+            
+            if 'error' in result:
+                return jsonify({'error': result['error']}), 400
+            
+            logger.info(f"Admin user {session['user_id']} updated Stripe configuration")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Stripe configuration updated successfully'
+            })
+        
+    except Exception as e:
+        logger.error(f"Error handling Stripe config: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/admin/api/queue/video')
 def admin_get_video_queue():
     """Get video generation queue status (admin only)."""
