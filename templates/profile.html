@@ -216,6 +216,84 @@
                     </div>
                     {% endif %}
 
+                    <!-- Purchase History -->
+                    {% if purchase_history %}
+                    <div class="mt-4">
+                        <h5>Purchase History</h5>
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>Product</th>
+                                                <th>Amount</th>
+                                                <th>Credits</th>
+                                                <th>Status</th>
+                                                <th>Reference</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for purchase in purchase_history %}
+                                            <tr>
+                                                <td>
+                                                    {% if purchase.paid_date %}
+                                                        {{ purchase.paid_date[:19]|replace('T', ' ') }}
+                                                    {% else %}
+                                                        {{ purchase.created_at[:19]|replace('T', ' ') }}
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    <strong>{{ purchase.product_name }}</strong>
+                                                    <br><small class="text-muted">{{ purchase.product_sku }}</small>
+                                                </td>
+                                                <td>
+                                                    <span class="text-success">
+                                                        ${{ "%.2f"|format(purchase.amount) }}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-primary">
+                                                        {{ purchase.credits_purchased }} credits
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    {% if purchase.payment_status == 'completed' %}
+                                                        <span class="badge bg-success">Completed</span>
+                                                    {% elif purchase.payment_status == 'pending' %}
+                                                        <span class="badge bg-warning">Pending</span>
+                                                    {% elif purchase.payment_status == 'failed' %}
+                                                        <span class="badge bg-danger">Failed</span>
+                                                    {% elif purchase.payment_status == 'refunded' %}
+                                                        <span class="badge bg-secondary">Refunded</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {% if purchase.stripe_payment_intent_id %}
+                                                        <small class="text-muted font-monospace">
+                                                            {{ purchase.stripe_payment_intent_id[:20] }}...
+                                                        </small>
+                                                    {% else %}
+                                                        <small class="text-muted">-</small>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                {% if purchase_history|length >= 10 %}
+                                <div class="text-center mt-3">
+                                    <small class="text-muted">Showing last 10 purchases</small>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
                     <!-- Transaction History -->
                     <div class="mt-4">
                         <h5>Usage History</h5>

@@ -1177,6 +1177,119 @@ def pricing():
         flash('Error loading pricing information. Please try again.', 'error')
         return redirect(url_for('index'))
 
+# Payment Routes
+@app.route('/payment/create-checkout-session', methods=['POST'])
+def create_checkout_session():
+    """Create Stripe checkout session for product purchase."""
+    try:
+        # Check if user is logged in
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'error': 'Please log in to purchase credits'}), 401
+        
+        data = request.get_json()
+        product_id = data.get('product_id')
+        
+        if not product_id:
+            return jsonify({'error': 'Product ID is required'}), 400
+        
+        # Import Payment component
+        from components.Payment import Payment
+        payment = Payment()
+        
+        # Create checkout session
+        success_url = request.url_root.rstrip('/') + '/payment/success'
+        cancel_url = request.url_root.rstrip('/') + '/payment/cancel'
+        
+        result = payment.create_checkout_session(
+            user_id=user_id,
+            product_id=product_id,
+            success_url=success_url,
+            cancel_url=cancel_url
+        )
+        
+        if 'error' in result:
+            return jsonify({'error': result['error']}), 400
+        
+        return jsonify({
+            'session_id': result['session_id'],
+            'session_url': result['session_url']
+        })
+        
+    except Exception as e:
+        logger.error(f"Error creating checkout session: {e}", exc_info=True)
+        return jsonify({'error': 'Payment system error'}), 500
+
+@app.route('/payment/success')
+def payment_success():
+    """Payment success page."""
+    try:
+        session_id = request.args.get('session_id')
+        if not session_id:
+            flash('Invalid payment session.', 'error')
+            return redirect(url_for('pricing'))
+        
+        # You can optionally retrieve session details from Stripe here
+        flash('Payment successful! Your credits have been added to your account.', 'success')
+        return redirect(url_for('profile'))
+        
+    except Exception as e:
+        logger.error(f"Error on payment success page: {e}", exc_info=True)
+        flash('Payment completed, but there was an error displaying the confirmation.', 'warning')
+        return redirect(url_for('profile'))
+
+@app.route('/payment/cancel')
+def payment_cancel():
+    """Payment cancellation page."""
+    flash('Payment was cancelled. You can try again anytime.', 'info')
+    return redirect(url_for('pricing'))
+
+@app.route('/payment/webhook', methods=['POST'])
+def stripe_webhook():
+    """Handle Stripe webhook events."""
+    try:
+        payload = request.get_data()
+        sig_header = request.headers.get('Stripe-Signature')
+        
+        if not sig_header:
+            logger.error("Missing Stripe signature header")
+            return '', 400
+        
+        # Import Payment component
+        from components.Payment import Payment
+        payment = Payment()
+        
+        result = payment.handle_webhook(payload, sig_header)
+        
+        if 'error' in result:
+            logger.error(f"Webhook error: {result['error']}")
+            return '', 400
+        
+        return '', 200
+        
+    except Exception as e:
+        logger.error(f"Error handling Stripe webhook: {e}", exc_info=True)
+        return '', 400
+
+@app.route('/api/stripe-config')
+def get_stripe_config():
+    """Get Stripe publishable key for frontend."""
+    try:
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'error': 'Authentication required'}), 401
+        
+        from components.Payment import Payment
+        payment = Payment()
+        
+        return jsonify({
+            'publishable_key': payment.get_stripe_publishable_key()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting Stripe config: {e}", exc_info=True)
+        return jsonify({'error': 'Configuration error'}), 500
+
 @app.route('/', methods=['GET'])
 def index():
     """Home page with form to submit a space URL."""
@@ -4718,6 +4831,20 @@ def profile():
         """, (user_id,))
         ai_transactions = cursor.fetchall()
         
+        # Get purchase history from credit_txn table
+        cursor.execute("""
+            SELECT ct.id, ct.product_id, ct.amount, ct.credits_purchased, 
+                   ct.payment_status, ct.stripe_payment_intent_id, 
+                   ct.paid_date, ct.created_at,
+                   p.name as product_name, p.sku as product_sku
+            FROM credit_txn ct
+            LEFT JOIN products p ON ct.product_id = p.id
+            WHERE ct.user_id = %s 
+            ORDER BY ct.created_at DESC 
+            LIMIT 100
+        """, (user_id,))
+        purchase_history = cursor.fetchall()
+        
         # Get affiliate statistics
         affiliate_stats = None
         try:
@@ -4732,6 +4859,7 @@ def profile():
                              user_info=user_info, 
                              compute_transactions=compute_transactions,
                              ai_transactions=ai_transactions,
+                             purchase_history=purchase_history,
                              affiliate_stats=affiliate_stats,
                              advertisement_html=advertisement_html,
                              advertisement_bg=advertisement_bg)
