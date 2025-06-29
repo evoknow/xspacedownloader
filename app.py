@@ -1201,7 +1201,7 @@ def tickets():
         if user_id:
             from components.User import User
             user_comp = User()
-            user_data = user_comp.get_user_by_id(user_id)
+            user_data = user_comp.get_user(user_id=user_id)
             is_staff = user_data and user_data.get('is_staff', False)
         
         # Get ticket ID from query params if provided
