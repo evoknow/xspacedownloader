@@ -6310,13 +6310,40 @@ function updateModeIndicator(mode) {
 
 // Add event listeners for mode changes
 document.addEventListener('DOMContentLoaded', function() {
-    // Listen for mode changes - update indicator without showing toast
+    // Listen for mode changes - save to server immediately
     document.querySelectorAll('input[name="stripeMode"]').forEach(radio => {
-        radio.addEventListener('change', function() {
+        radio.addEventListener('change', async function() {
             if (this.checked) {
-                // Just update the internal state, no toast notification
                 const modeText = this.value === 'live' ? 'LIVE' : 'TEST';
                 console.log(`Stripe mode changed to: ${modeText}`);
+                
+                try {
+                    const response = await fetch('/admin/api/stripe_config', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            mode: this.value
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        showToast(`Stripe mode updated to ${modeText}`, 'success');
+                        updateModeIndicator(this.value);
+                    } else {
+                        showToast('Error: ' + (result.error || 'Failed to update Stripe mode'), 'danger');
+                        // Revert the radio button
+                        loadStripeConfig();
+                    }
+                } catch (error) {
+                    console.error('Error updating Stripe mode:', error);
+                    showToast('Error updating Stripe mode: ' + error.message, 'danger');
+                    // Revert the radio button
+                    loadStripeConfig();
+                }
             }
         });
     });
