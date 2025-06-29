@@ -6215,33 +6215,26 @@ async function loadStripeConfig() {
             const currentMode = result.config.mode || 'test';
             document.querySelector(`input[name="stripeMode"][value="${currentMode}"]`).checked = true;
             
-            // Set TEST mode values - show preview or empty
-            const testPubKey = result.config.test.has_publishable_key ? result.config.test.publishable_key_preview : '';
-            const testSecKey = result.config.test.has_secret_key ? result.config.test.secret_key_preview : '';
-            const testWebKey = result.config.test.has_webhook_secret ? result.config.test.webhook_secret_preview : '';
+            // Don't populate input fields with truncated previews - leave them empty
+            // Users must enter complete keys manually to avoid saving truncated versions
             
-            document.getElementById('testPublishableKey').value = testPubKey;
-            document.getElementById('testSecretKey').value = testSecKey;
-            document.getElementById('testWebhookSecret').value = testWebKey;
+            // Clear all input fields to prevent accidental saving of truncated keys
+            document.getElementById('testPublishableKey').value = '';
+            document.getElementById('testSecretKey').value = '';
+            document.getElementById('testWebhookSecret').value = '';
+            document.getElementById('livePublishableKey').value = '';
+            document.getElementById('liveSecretKey').value = '';
+            document.getElementById('liveWebhookSecret').value = '';
             
-            // Set LIVE mode values - show preview or empty
-            const livePubKey = result.config.live.has_publishable_key ? result.config.live.publishable_key_preview : '';
-            const liveSecKey = result.config.live.has_secret_key ? result.config.live.secret_key_preview : '';
-            const liveWebKey = result.config.live.has_webhook_secret ? result.config.live.webhook_secret_preview : '';
-            
-            document.getElementById('livePublishableKey').value = livePubKey;
-            document.getElementById('liveSecretKey').value = liveSecKey;
-            document.getElementById('liveWebhookSecret').value = liveWebKey;
-            
-            // Update key visibility status for test keys
-            updateStripeKeyStatus('testPublishableKey', testPubKey);
-            updateStripeKeyStatus('testSecretKey', testSecKey);
-            updateStripeKeyStatus('testWebhookSecret', testWebKey);
+            // Update key visibility status based on whether keys exist (not their values)
+            updateStripeKeyStatus('testPublishableKey', result.config.test.has_publishable_key ? 'configured' : '');
+            updateStripeKeyStatus('testSecretKey', result.config.test.has_secret_key ? 'configured' : '');
+            updateStripeKeyStatus('testWebhookSecret', result.config.test.has_webhook_secret ? 'configured' : '');
             
             // Update key visibility status for live keys
-            updateStripeKeyStatus('livePublishableKey', livePubKey);
-            updateStripeKeyStatus('liveSecretKey', liveSecKey);
-            updateStripeKeyStatus('liveWebhookSecret', liveWebKey);
+            updateStripeKeyStatus('livePublishableKey', result.config.live.has_publishable_key ? 'configured' : '');
+            updateStripeKeyStatus('liveSecretKey', result.config.live.has_secret_key ? 'configured' : '');
+            updateStripeKeyStatus('liveWebhookSecret', result.config.live.has_webhook_secret ? 'configured' : '');
             
             // Update mode indicator
             updateModeIndicator(currentMode);
