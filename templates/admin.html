@@ -6203,25 +6203,33 @@ async function loadStripeConfig() {
             const currentMode = result.config.mode || 'test';
             document.querySelector(`input[name="stripeMode"][value="${currentMode}"]`).checked = true;
             
-            // Set TEST mode values
-            document.getElementById('testPublishableKey').value = result.config.test.publishable_key || '';
-            document.getElementById('testSecretKey').value = result.config.test.secret_key || '';
-            document.getElementById('testWebhookSecret').value = result.config.test.webhook_secret || '';
+            // Set TEST mode values - show preview or empty
+            const testPubKey = result.config.test.has_publishable_key ? result.config.test.publishable_key_preview : '';
+            const testSecKey = result.config.test.has_secret_key ? result.config.test.secret_key_preview : '';
+            const testWebKey = result.config.test.has_webhook_secret ? result.config.test.webhook_secret_preview : '';
             
-            // Set LIVE mode values
-            document.getElementById('livePublishableKey').value = result.config.live.publishable_key || '';
-            document.getElementById('liveSecretKey').value = result.config.live.secret_key || '';
-            document.getElementById('liveWebhookSecret').value = result.config.live.webhook_secret || '';
+            document.getElementById('testPublishableKey').value = testPubKey;
+            document.getElementById('testSecretKey').value = testSecKey;
+            document.getElementById('testWebhookSecret').value = testWebKey;
+            
+            // Set LIVE mode values - show preview or empty
+            const livePubKey = result.config.live.has_publishable_key ? result.config.live.publishable_key_preview : '';
+            const liveSecKey = result.config.live.has_secret_key ? result.config.live.secret_key_preview : '';
+            const liveWebKey = result.config.live.has_webhook_secret ? result.config.live.webhook_secret_preview : '';
+            
+            document.getElementById('livePublishableKey').value = livePubKey;
+            document.getElementById('liveSecretKey').value = liveSecKey;
+            document.getElementById('liveWebhookSecret').value = liveWebKey;
             
             // Update key visibility status for test keys
-            updateStripeKeyStatus('testPublishableKey', result.config.test.publishable_key);
-            updateStripeKeyStatus('testSecretKey', result.config.test.secret_key);
-            updateStripeKeyStatus('testWebhookSecret', result.config.test.webhook_secret);
+            updateStripeKeyStatus('testPublishableKey', testPubKey);
+            updateStripeKeyStatus('testSecretKey', testSecKey);
+            updateStripeKeyStatus('testWebhookSecret', testWebKey);
             
             // Update key visibility status for live keys
-            updateStripeKeyStatus('livePublishableKey', result.config.live.publishable_key);
-            updateStripeKeyStatus('liveSecretKey', result.config.live.secret_key);
-            updateStripeKeyStatus('liveWebhookSecret', result.config.live.webhook_secret);
+            updateStripeKeyStatus('livePublishableKey', livePubKey);
+            updateStripeKeyStatus('liveSecretKey', liveSecKey);
+            updateStripeKeyStatus('liveWebhookSecret', liveWebKey);
             
             // Update mode indicator
             updateModeIndicator(currentMode);
@@ -6348,7 +6356,7 @@ document.getElementById('stripeConfigForm')?.addEventListener('submit', async fu
     };
     
     try {
-        const response = await fetch('/admin/api/update_stripe_config', {
+        const response = await fetch('/admin/api/stripe_config', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
