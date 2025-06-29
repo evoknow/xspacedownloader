@@ -13,6 +13,8 @@ six>=1.14.0
 geoip2>=4.7.0
 # Email providers
 sendgrid>=6.9.7
+# Payment processing
+stripe>=7.0.0
 # AI providers
 openai>=0.27.0
 anthropic>=0.3.0
