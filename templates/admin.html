@@ -1588,7 +1588,7 @@
                                         </div>
                                     </div>
                                     
-                                    <form id="stripeConfigForm">
+                                    <form id="stripeConfigForm" autocomplete="off" data-1p-ignore data-lpignore="true">
                                         <div class="row">
                                             <!-- LIVE MODE Column -->
                                             <div class="col-md-6">
@@ -1606,7 +1606,9 @@
                                                             </label>
                                                             <div class="input-group">
                                                                 <input type="text" class="form-control font-monospace" id="livePublishableKey" 
-                                                                       placeholder="pk_live_..." autocomplete="off">
+                                                                       placeholder="pk_live_..." autocomplete="off" 
+                                                                       data-1p-ignore data-lpignore="true" data-form-type="other"
+                                                                       spellcheck="false" readonly onfocus="this.removeAttribute('readonly')">
                                                                 <button class="btn btn-outline-secondary" type="button" onclick="toggleKeyVisibility('livePublishableKey')">
                                                                     <i class="bi bi-eye-slash"></i>
                                                                 </button>
@@ -1619,7 +1621,9 @@
                                                             </label>
                                                             <div class="input-group">
                                                                 <input type="password" class="form-control font-monospace" id="liveSecretKey" 
-                                                                       placeholder="sk_live_..." autocomplete="off">
+                                                                       placeholder="sk_live_..." autocomplete="off"
+                                                                       data-1p-ignore data-lpignore="true" data-form-type="other"
+                                                                       spellcheck="false" readonly onfocus="this.removeAttribute('readonly')">
                                                                 <button class="btn btn-outline-secondary" type="button" onclick="toggleKeyVisibility('liveSecretKey')">
                                                                     <i class="bi bi-eye-slash"></i>
                                                                 </button>
@@ -1632,7 +1636,9 @@
                                                             </label>
                                                             <div class="input-group">
                                                                 <input type="password" class="form-control font-monospace" id="liveWebhookSecret" 
-                                                                       placeholder="whsec_..." autocomplete="off">
+                                                                       placeholder="whsec_..." autocomplete="off"
+                                                                       data-1p-ignore data-lpignore="true" data-form-type="other"
+                                                                       spellcheck="false" readonly onfocus="this.removeAttribute('readonly')">
                                                                 <button class="btn btn-outline-secondary" type="button" onclick="toggleKeyVisibility('liveWebhookSecret')">
                                                                     <i class="bi bi-eye-slash"></i>
                                                                 </button>
@@ -1663,7 +1669,9 @@
                                                             </label>
                                                             <div class="input-group">
                                                                 <input type="text" class="form-control font-monospace" id="testPublishableKey" 
-                                                                       placeholder="pk_test_..." autocomplete="off">
+                                                                       placeholder="pk_test_..." autocomplete="off"
+                                                                       data-1p-ignore data-lpignore="true" data-form-type="other"
+                                                                       spellcheck="false" readonly onfocus="this.removeAttribute('readonly')">
                                                                 <button class="btn btn-outline-secondary" type="button" onclick="toggleKeyVisibility('testPublishableKey')">
                                                                     <i class="bi bi-eye-slash"></i>
                                                                 </button>
@@ -1676,7 +1684,9 @@
                                                             </label>
                                                             <div class="input-group">
                                                                 <input type="password" class="form-control font-monospace" id="testSecretKey" 
-                                                                       placeholder="sk_test_..." autocomplete="off">
+                                                                       placeholder="sk_test_..." autocomplete="off"
+                                                                       data-1p-ignore data-lpignore="true" data-form-type="other"
+                                                                       spellcheck="false" readonly onfocus="this.removeAttribute('readonly')">
                                                                 <button class="btn btn-outline-secondary" type="button" onclick="toggleKeyVisibility('testSecretKey')">
                                                                     <i class="bi bi-eye-slash"></i>
                                                                 </button>
@@ -1689,7 +1699,9 @@
                                                             </label>
                                                             <div class="input-group">
                                                                 <input type="password" class="form-control font-monospace" id="testWebhookSecret" 
-                                                                       placeholder="whsec_..." autocomplete="off">
+                                                                       placeholder="whsec_..." autocomplete="off"
+                                                                       data-1p-ignore data-lpignore="true" data-form-type="other"
+                                                                       spellcheck="false" readonly onfocus="this.removeAttribute('readonly')">
                                                                 <button class="btn btn-outline-secondary" type="button" onclick="toggleKeyVisibility('testWebhookSecret')">
                                                                     <i class="bi bi-eye-slash"></i>
                                                                 </button>
