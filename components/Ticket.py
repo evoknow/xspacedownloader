@@ -37,19 +37,25 @@ class Ticket:
     def create_ticket(self, user_id: int, issue_title: str, issue_detail: str) -> Dict[str, Any]:
         """Create a new support ticket"""
         try:
-            # Check if user already has an open ticket
-            self.cursor.execute("""
-                SELECT COUNT(*) as count FROM tickets 
-                WHERE user_id = %s AND status = 0
-            """, (user_id,))
-            result = self.cursor.fetchone()
-            
-            # Check if user is staff (can create multiple tickets)
-            self.cursor.execute("SELECT is_staff FROM users WHERE id = %s", (user_id,))
+            # Check if user is staff or admin (can create multiple tickets)
+            self.cursor.execute("SELECT is_staff, is_admin FROM users WHERE id = %s", (user_id,))
             user = self.cursor.fetchone()
             
-            if result['count'] > 0 and not user['is_staff']:
-                return {"success": False, "error": "You already have an open ticket. Please wait for it to be resolved."}
+            if not user:
+                return {"success": False, "error": "User not found"}
+            
+            is_privileged = user['is_staff'] or user['is_admin']
+            
+            # If not privileged user, check if they already have an open ticket
+            if not is_privileged:
+                self.cursor.execute("""
+                    SELECT COUNT(*) as count FROM tickets 
+                    WHERE user_id = %s AND status = 0
+                """, (user_id,))
+                result = self.cursor.fetchone()
+                
+                if result['count'] > 0:
+                    return {"success": False, "error": "You already have an open ticket. Please add additional information to your existing ticket instead of creating a new one."}
             
             # Get AI priority and response
             ai_response = self.get_ai_priority_and_response(issue_title, issue_detail)
@@ -259,6 +265,52 @@ Respond in JSON format:
                     SET status = %s
                     WHERE id = %s
                 """, (update_data['status'], ticket_id))
+            
+            self.conn.commit()
+            return {"success": True}
+            
+        except Exception as e:
+            self.conn.rollback()
+            return {"success": False, "error": str(e)}
+
+    def add_user_update(self, ticket_id: int, user_id: int, additional_info: str) -> Dict[str, Any]:
+        """Add additional information to a ticket by the user"""
+        try:
+            # Check if user owns the ticket
+            self.cursor.execute("""
+                SELECT user_id, issue_detail FROM tickets WHERE id = %s
+            """, (ticket_id,))
+            ticket = self.cursor.fetchone()
+            
+            if not ticket:
+                return {"success": False, "error": "Ticket not found"}
+            
+            if ticket['user_id'] != user_id:
+                return {"success": False, "error": "Unauthorized"}
+            
+            # Get current issue detail
+            current_detail = json.loads(ticket['issue_detail'])
+            
+            # Add the new information with timestamp
+            now = datetime.datetime.now()
+            timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Create updates array if it doesn't exist
+            if 'updates' not in current_detail:
+                current_detail['updates'] = []
+            
+            # Add the new update
+            current_detail['updates'].append({
+                'timestamp': timestamp,
+                'content': additional_info
+            })
+            
+            # Update the ticket
+            self.cursor.execute("""
+                UPDATE tickets 
+                SET issue_detail = %s, last_updated_by_owner = %s
+                WHERE id = %s
+            """, (json.dumps(current_detail), now, ticket_id))
             
             self.conn.commit()
             return {"success": True}

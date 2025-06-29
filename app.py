@@ -1339,6 +1339,36 @@ def respond_to_ticket(ticket_id):
         logger.error(f"Error responding to ticket: {e}", exc_info=True)
         return jsonify({'success': False, 'error': 'Server error'}), 500
 
+@app.route('/tickets/<int:ticket_id>/add-info', methods=['POST'])
+def add_ticket_info(ticket_id):
+    """Add additional information to a ticket (ticket owner only)."""
+    try:
+        # Check if user is logged in
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'success': False, 'error': 'Please log in to add information'}), 401
+            
+        from components.Ticket import Ticket
+        
+        additional_info = request.form.get('additional_info', '').strip()
+        
+        if not additional_info:
+            return jsonify({'success': False, 'error': 'Additional information is required'}), 400
+        
+        with open('db_config.json', 'r') as f:
+            config = json.load(f)
+        db_config = config['mysql']
+        ticket = Ticket(db_config)
+        
+        result = ticket.add_user_update(ticket_id, user_id, additional_info)
+        ticket.close()
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error adding ticket info: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': 'Server error'}), 500
+
 # Payment Routes
 @app.route('/payment/create-checkout-session', methods=['POST'])
 def create_checkout_session():
