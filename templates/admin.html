@@ -6226,15 +6226,35 @@ async function loadStripeConfig() {
             document.getElementById('liveSecretKey').value = '';
             document.getElementById('liveWebhookSecret').value = '';
             
-            // Update key visibility status based on whether keys exist (not their values)
-            updateStripeKeyStatus('testPublishableKey', result.config.test.has_publishable_key ? 'configured' : '');
-            updateStripeKeyStatus('testSecretKey', result.config.test.has_secret_key ? 'configured' : '');
-            updateStripeKeyStatus('testWebhookSecret', result.config.test.has_webhook_secret ? 'configured' : '');
+            // Update key visibility status based on whether keys exist
+            updateStripeKeyStatus('testPublishableKey', result.config.test.has_publishable_key);
+            updateStripeKeyStatus('testSecretKey', result.config.test.has_secret_key);
+            updateStripeKeyStatus('testWebhookSecret', result.config.test.has_webhook_secret);
             
             // Update key visibility status for live keys
-            updateStripeKeyStatus('livePublishableKey', result.config.live.has_publishable_key ? 'configured' : '');
-            updateStripeKeyStatus('liveSecretKey', result.config.live.has_secret_key ? 'configured' : '');
-            updateStripeKeyStatus('liveWebhookSecret', result.config.live.has_webhook_secret ? 'configured' : '');
+            updateStripeKeyStatus('livePublishableKey', result.config.live.has_publishable_key);
+            updateStripeKeyStatus('liveSecretKey', result.config.live.has_secret_key);
+            updateStripeKeyStatus('liveWebhookSecret', result.config.live.has_webhook_secret);
+            
+            // Add placeholder text to indicate keys are configured but hidden for security
+            if (result.config.test.has_publishable_key) {
+                document.getElementById('testPublishableKey').placeholder = 'Key configured - enter new key to update';
+            }
+            if (result.config.test.has_secret_key) {
+                document.getElementById('testSecretKey').placeholder = 'Key configured - enter new key to update';
+            }
+            if (result.config.test.has_webhook_secret) {
+                document.getElementById('testWebhookSecret').placeholder = 'Key configured - enter new key to update';
+            }
+            if (result.config.live.has_publishable_key) {
+                document.getElementById('livePublishableKey').placeholder = 'Key configured - enter new key to update';
+            }
+            if (result.config.live.has_secret_key) {
+                document.getElementById('liveSecretKey').placeholder = 'Key configured - enter new key to update';
+            }
+            if (result.config.live.has_webhook_secret) {
+                document.getElementById('liveWebhookSecret').placeholder = 'Key configured - enter new key to update';
+            }
             
             // Update mode indicator
             updateModeIndicator(currentMode);
@@ -6322,6 +6342,15 @@ document.getElementById('stripeConfigForm')?.addEventListener('submit', async fu
         secret_key: document.getElementById('liveSecretKey').value.trim(),
         webhook_secret: document.getElementById('liveWebhookSecret').value.trim()
     };
+    
+    // Check if at least one key is provided
+    const hasTestKeys = testKeys.publishable_key || testKeys.secret_key || testKeys.webhook_secret;
+    const hasLiveKeys = liveKeys.publishable_key || liveKeys.secret_key || liveKeys.webhook_secret;
+    
+    if (!hasTestKeys && !hasLiveKeys) {
+        showToast('Please provide at least one Stripe API key to update the configuration', 'warning');
+        return;
+    }
     
     // Validate test keys format
     if (testKeys.publishable_key && !testKeys.publishable_key.startsWith('pk_test_')) {
