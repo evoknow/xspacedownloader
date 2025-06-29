@@ -1244,13 +1244,16 @@ def tickets():
         return redirect(url_for('index'))
 
 @app.route('/tickets/create', methods=['POST'])
-@login_required
 def create_ticket():
     """Create a new support ticket."""
     try:
+        # Check if user is logged in
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'success': False, 'error': 'Please log in to create a ticket'}), 401
+            
         from components.Ticket import Ticket
         
-        user_id = session.get('user_id')
         issue_title = request.form.get('issue_title', '').strip()
         issue_detail = request.form.get('issue_detail', '').strip()
         
@@ -1280,13 +1283,16 @@ def create_ticket():
         return jsonify({'success': False, 'error': 'Server error'}), 500
 
 @app.route('/tickets/<int:ticket_id>/update', methods=['POST'])
-@login_required
 def update_ticket(ticket_id):
     """Update a ticket."""
     try:
+        # Check if user is logged in
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'success': False, 'error': 'Please log in to update a ticket'}), 401
+            
         from components.Ticket import Ticket
         
-        user_id = session.get('user_id')
         update_data = request.get_json()
         
         with open('db_config.json', 'r') as f:
@@ -1304,13 +1310,16 @@ def update_ticket(ticket_id):
         return jsonify({'success': False, 'error': 'Server error'}), 500
 
 @app.route('/tickets/<int:ticket_id>/respond', methods=['POST'])
-@login_required
 def respond_to_ticket(ticket_id):
     """Add a response to a ticket (staff only)."""
     try:
+        # Check if user is logged in
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'success': False, 'error': 'Please log in to respond to a ticket'}), 401
+            
         from components.Ticket import Ticket
         
-        user_id = session.get('user_id')
         response_text = request.form.get('response', '').strip()
         
         if not response_text:
