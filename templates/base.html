@@ -388,6 +388,9 @@
                     <a href="{{ url_for('pricing') }}" class="nav-link">
                         <i class="bi bi-credit-card"></i> Pricing
                     </a>
+                    <a href="{{ url_for('tickets') }}" class="nav-link">
+                        <i class="bi bi-headset"></i> Support
+                    </a>
                     {% if session.get('user_id') %}
                         <a href="{{ url_for('profile') }}" class="nav-link">
                             <i class="bi bi-person-circle"></i> Profile

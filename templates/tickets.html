@@ -1,0 +1,474 @@
+{% extends "base.html" %}
+
+{% block title %}Support Tickets - XSpace Downloader{% endblock %}
+
+{% block head %}
+<link href="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.css" rel="stylesheet">
+<style>
+    .ticket-list-item {
+        border-left: 4px solid transparent;
+        transition: all 0.2s ease;
+    }
+    
+    .ticket-list-item.priority-0 {
+        border-left-color: #6c757d;
+    }
+    
+    .ticket-list-item.priority-1 {
+        border-left-color: #ffc107;
+    }
+    
+    .ticket-list-item.priority-2 {
+        border-left-color: #fd7e14;
+    }
+    
+    .ticket-list-item.priority-3 {
+        border-left-color: #dc3545;
+    }
+    
+    .ticket-list-item:hover {
+        transform: translateX(5px);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .priority-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    .status-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    .response-item {
+        border-left: 3px solid #0d6efd;
+        padding-left: 1rem;
+        margin-bottom: 1rem;
+    }
+    
+    .staff-response {
+        background-color: rgba(13, 110, 253, 0.1);
+        padding: 1rem;
+        border-radius: 0.25rem;
+        margin-bottom: 1rem;
+    }
+    
+    .ai-response {
+        background-color: rgba(108, 117, 125, 0.1);
+        padding: 1rem;
+        border-radius: 0.25rem;
+        margin-bottom: 1rem;
+    }
+    
+    .previous-response-item {
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    
+    .previous-response-item:hover {
+        background-color: rgba(0,0,0,0.05);
+    }
+    
+    /* Dark mode styles */
+    html[data-bs-theme="dark"] .staff-response {
+        background-color: rgba(13, 110, 253, 0.2);
+    }
+    
+    html[data-bs-theme="dark"] .ai-response {
+        background-color: rgba(108, 117, 125, 0.2);
+    }
+    
+    html[data-bs-theme="dark"] .previous-response-item:hover {
+        background-color: rgba(255,255,255,0.05);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="main-container">
+    <h1 class="mb-4">
+        <i class="bi bi-headset"></i> Support Tickets
+    </h1>
+    
+    {% if not logged_in %}
+        <!-- Not logged in message -->
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <i class="bi bi-person-x-fill" style="font-size: 3rem; color: var(--bs-secondary);"></i>
+                <h3 class="mt-3">Please Login to Create Support Tickets</h3>
+                <p class="text-muted">You need to be logged in to create and manage support tickets.</p>
+                <a href="{{ url_for('index') }}" class="btn btn-primary">
+                    <i class="bi bi-box-arrow-in-right"></i> Go to Login
+                </a>
+            </div>
+        </div>
+    {% elif single_ticket %}
+        <!-- Single ticket view -->
+        <div class="mb-3">
+            <a href="{{ url_for('tickets') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Tickets
+            </a>
+        </div>
+        
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">{{ single_ticket.issue_title }}</h4>
+                <div>
+                    <span class="badge priority-badge bg-{{ 'secondary' if single_ticket.priority == 0 else 'warning' if single_ticket.priority == 1 else 'orange' if single_ticket.priority == 2 else 'danger' }}">
+                        {{ single_ticket.priority_text }}
+                    </span>
+                    <span class="badge status-badge bg-{{ 'primary' if single_ticket.status == 0 else 'info' if single_ticket.status == 1 else 'success' if single_ticket.status == 2 else 'secondary' }}">
+                        {{ single_ticket.status_text }}
+                    </span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <small class="text-muted">
+                        Opened by: {{ single_ticket.display_name or single_ticket.user_email }} | 
+                        Date: {{ single_ticket.opened_at }}
+                    </small>
+                </div>
+                
+                <div class="mb-4">
+                    <h5>Issue Details:</h5>
+                    <div class="border rounded p-3">
+                        {{ single_ticket.issue_detail.detail|safe }}
+                    </div>
+                </div>
+                
+                {% if single_ticket.response %}
+                    <h5>Responses:</h5>
+                    {% for response_item in single_ticket.response %}
+                        {% for timestamp, text in response_item.items() %}
+                            <div class="response-item {{ 'ai-response' if loop.first and loop.index0 == 0 else 'staff-response' }}">
+                                <small class="text-muted d-block mb-2">
+                                    {{ timestamp }} 
+                                    {% if loop.first and loop.index0 == 0 %}
+                                        <span class="badge bg-secondary">AI Response</span>
+                                    {% else %}
+                                        <span class="badge bg-primary">Staff Response</span>
+                                    {% endif %}
+                                </small>
+                                <div>{{ text|safe }}</div>
+                            </div>
+                        {% endfor %}
+                    {% endfor %}
+                {% endif %}
+                
+                {% if is_staff and single_ticket.status < 2 %}
+                    <hr>
+                    <h5>Add Response:</h5>
+                    <form id="responseForm" data-ticket-id="{{ single_ticket.id }}">
+                        <div class="mb-3">
+                            <textarea id="responseText" name="response" class="form-control"></textarea>
+                        </div>
+                        
+                        {% if previous_responses %}
+                            <div class="mb-3">
+                                <label class="form-label">Use Previous Response:</label>
+                                <div class="list-group" style="max-height: 200px; overflow-y: auto;">
+                                    {% for prev_resp in previous_responses[:10] %}
+                                        <div class="list-group-item list-group-item-action previous-response-item" 
+                                             data-response="{{ prev_resp.text }}">
+                                            {{ prev_resp.text[:100] }}{% if prev_resp.text|length > 100 %}...{% endif %}
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        {% endif %}
+                        
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-send"></i> Send Response
+                        </button>
+                        <button type="button" class="btn btn-success ms-2" id="closeTicketBtn">
+                            <i class="bi bi-check-circle"></i> Close Ticket
+                        </button>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+    {% else %}
+        <!-- Ticket list view -->
+        {% if not is_staff or (is_staff and not request.args.get('all')) %}
+            <div class="mb-4">
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createTicketModal">
+                    <i class="bi bi-plus-circle"></i> Create a Ticket
+                </button>
+                {% if is_staff %}
+                    <a href="{{ url_for('tickets', all=1) }}" class="btn btn-outline-secondary ms-2">
+                        <i class="bi bi-globe"></i> View All Tickets
+                    </a>
+                {% endif %}
+            </div>
+        {% else %}
+            <div class="mb-4">
+                <a href="{{ url_for('tickets') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-person"></i> View My Tickets
+                </a>
+            </div>
+        {% endif %}
+        
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-0">
+                    {% if is_staff and request.args.get('all') %}
+                        All Tickets
+                    {% else %}
+                        My Tickets
+                    {% endif %}
+                </h4>
+            </div>
+            <div class="card-body">
+                {% if tickets %}
+                    <div class="list-group">
+                        {% for ticket in tickets %}
+                            <a href="{{ url_for('tickets', id=ticket.id) }}" 
+                               class="list-group-item list-group-item-action ticket-list-item priority-{{ ticket.priority }}">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <h6 class="mb-1">{{ ticket.issue_title }}</h6>
+                                        <small class="text-muted">
+                                            {{ ticket.opened_at }} 
+                                            {% if is_staff and request.args.get('all') %}
+                                                | By: {{ ticket.display_name or ticket.user_email }}
+                                            {% endif %}
+                                        </small>
+                                    </div>
+                                    <div class="text-end">
+                                        <span class="badge priority-badge bg-{{ 'secondary' if ticket.priority == 0 else 'warning' if ticket.priority == 1 else 'orange' if ticket.priority == 2 else 'danger' }}">
+                                            {{ ticket.priority_text }}
+                                        </span>
+                                        <span class="badge status-badge bg-{{ 'primary' if ticket.status == 0 else 'info' if ticket.status == 1 else 'success' if ticket.status == 2 else 'secondary' }}">
+                                            {{ ticket.status_text }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </a>
+                        {% endfor %}
+                    </div>
+                    
+                    {% if total_pages > 1 %}
+                        <nav class="mt-4">
+                            <ul class="pagination justify-content-center">
+                                {% for page_num in range(1, total_pages + 1) %}
+                                    <li class="page-item {{ 'active' if page_num == current_page else '' }}">
+                                        <a class="page-link" href="{{ url_for('tickets', page=page_num, all=request.args.get('all')) }}">
+                                            {{ page_num }}
+                                        </a>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        </nav>
+                    {% endif %}
+                {% else %}
+                    <p class="text-muted text-center py-4">No tickets found.</p>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Create Ticket Modal -->
+<div class="modal fade" id="createTicketModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create Support Ticket</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="createTicketForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="issueTitle" class="form-label">Issue Title</label>
+                        <input type="text" class="form-control" id="issueTitle" name="issue_title" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="issueDetail" class="form-label">Issue Details</label>
+                        <textarea id="issueDetail" name="issue_detail" class="form-control"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-send"></i> Submit Issue
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- AI Response Modal -->
+<div class="modal fade" id="aiResponseModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Ticket Created Successfully</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-success">
+                    <i class="bi bi-check-circle"></i> Your ticket has been created successfully.
+                </div>
+                <div id="aiResponseContent"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" onclick="location.reload()">
+                    View My Tickets
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.js"></script>
+<script>
+$(document).ready(function() {
+    // Initialize Summernote editors
+    $('#issueDetail').summernote({
+        placeholder: 'Please describe your issue in detail...',
+        height: 200,
+        toolbar: [
+            ['style', ['style']],
+            ['font', ['bold', 'underline', 'clear']],
+            ['color', ['color']],
+            ['para', ['ul', 'ol', 'paragraph']],
+            ['table', ['table']],
+            ['insert', ['link', 'picture']],
+            ['view', ['codeview', 'help']]
+        ]
+    });
+    
+    {% if is_staff and single_ticket %}
+    $('#responseText').summernote({
+        placeholder: 'Enter your response...',
+        height: 200,
+        toolbar: [
+            ['style', ['style']],
+            ['font', ['bold', 'underline', 'clear']],
+            ['color', ['color']],
+            ['para', ['ul', 'ol', 'paragraph']],
+            ['table', ['table']],
+            ['insert', ['link', 'picture', 'video']],
+            ['view', ['codeview', 'help']]
+        ]
+    });
+    {% endif %}
+    
+    // Create ticket form submission
+    $('#createTicketForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData();
+        formData.append('issue_title', $('#issueTitle').val());
+        formData.append('issue_detail', $('#issueDetail').summernote('code'));
+        
+        $.ajax({
+            url: '{{ url_for("create_ticket") }}',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                $('#createTicketModal').modal('hide');
+                
+                // Show AI response
+                let priorityBadge = 'secondary';
+                if (response.priority === 1) priorityBadge = 'warning';
+                else if (response.priority === 2) priorityBadge = 'orange';
+                else if (response.priority === 3) priorityBadge = 'danger';
+                
+                let aiResponseHtml = `
+                    <div class="mb-3">
+                        <strong>Priority:</strong> 
+                        <span class="badge bg-${priorityBadge}">
+                            ${response.priority === 0 ? 'Normal' : response.priority === 1 ? 'Medium' : response.priority === 2 ? 'High' : 'Critical'}
+                        </span>
+                    </div>
+                `;
+                
+                if (response.ai_response) {
+                    aiResponseHtml += `
+                        <div class="ai-response">
+                            <h6>AI Response:</h6>
+                            <p>${response.ai_response}</p>
+                        </div>
+                    `;
+                }
+                
+                $('#aiResponseContent').html(aiResponseHtml);
+                $('#aiResponseModal').modal('show');
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON?.error || 'Failed to create ticket';
+                alert('Error: ' + error);
+            }
+        });
+    });
+    
+    // Previous response selection
+    $('.previous-response-item').on('click', function() {
+        const response = $(this).data('response');
+        $('#responseText').summernote('code', response);
+    });
+    
+    // Response form submission
+    $('#responseForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const ticketId = $(this).data('ticket-id');
+        const formData = new FormData();
+        formData.append('response', $('#responseText').summernote('code'));
+        
+        $.ajax({
+            url: `/tickets/${ticketId}/respond`,
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                if (response.success) {
+                    location.reload();
+                } else {
+                    alert('Error: ' + response.error);
+                }
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON?.error || 'Failed to add response';
+                alert('Error: ' + error);
+            }
+        });
+    });
+    
+    // Close ticket button
+    $('#closeTicketBtn').on('click', function() {
+        if (confirm('Are you sure you want to close this ticket?')) {
+            const ticketId = $('#responseForm').data('ticket-id');
+            
+            $.ajax({
+                url: `/tickets/${ticketId}/update`,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ status: 2 }),
+                success: function(response) {
+                    if (response.success) {
+                        location.href = '{{ url_for("tickets") }}';
+                    } else {
+                        alert('Error: ' + response.error);
+                    }
+                },
+                error: function(xhr) {
+                    const error = xhr.responseJSON?.error || 'Failed to close ticket';
+                    alert('Error: ' + error);
+                }
+            });
+        }
+    });
+});
+</script>
+{% endblock %}

@@ -1177,6 +1177,159 @@ def pricing():
         flash('Error loading pricing information. Please try again.', 'error')
         return redirect(url_for('index'))
 
+# Ticket/Support Routes
+@app.route('/tickets')
+def tickets():
+    """Display support tickets page."""
+    try:
+        # Import Ticket component
+        from components.Ticket import Ticket
+        
+        # Check if user is logged in
+        user_id = session.get('user_id')
+        if not user_id:
+            return render_template('tickets.html', logged_in=False)
+        
+        # Get DB config
+        with open('db_config.json', 'r') as f:
+            config = json.load(f)
+        db_config = config['mysql']
+        ticket = Ticket(db_config)
+        
+        # Check if user is staff
+        is_staff = False
+        if user_id:
+            from components.User import User
+            user_comp = User()
+            user_data = user_comp.get_user_by_id(user_id)
+            is_staff = user_data and user_data.get('is_staff', False)
+        
+        # Get ticket ID from query params if provided
+        ticket_id = request.args.get('id', type=int)
+        
+        # If specific ticket requested
+        if ticket_id:
+            ticket_data = ticket.get_ticket(ticket_id, user_id)
+            if ticket_data['success'] and ticket_data['ticket']:
+                ticket.close()
+                return render_template('tickets.html', 
+                                     logged_in=True,
+                                     single_ticket=ticket_data['ticket'],
+                                     is_staff=is_staff)
+            else:
+                flash('Ticket not found or access denied.', 'error')
+                return redirect(url_for('tickets'))
+        
+        # Get user's tickets
+        page = request.args.get('page', 1, type=int)
+        tickets_data = ticket.get_user_tickets(user_id, is_staff, page)
+        
+        # Get previous responses for staff
+        previous_responses = []
+        if is_staff:
+            previous_responses = ticket.get_previous_responses()
+        
+        ticket.close()
+        
+        return render_template('tickets.html',
+                             logged_in=True,
+                             tickets=tickets_data.get('tickets', []),
+                             total_pages=tickets_data.get('total_pages', 1),
+                             current_page=page,
+                             is_staff=is_staff,
+                             previous_responses=previous_responses)
+    except Exception as e:
+        logger.error(f"Error loading tickets page: {e}", exc_info=True)
+        flash('Error loading support tickets. Please try again.', 'error')
+        return redirect(url_for('index'))
+
+@app.route('/tickets/create', methods=['POST'])
+@login_required
+def create_ticket():
+    """Create a new support ticket."""
+    try:
+        from components.Ticket import Ticket
+        
+        user_id = session.get('user_id')
+        issue_title = request.form.get('issue_title', '').strip()
+        issue_detail = request.form.get('issue_detail', '').strip()
+        
+        if not issue_title or not issue_detail:
+            return jsonify({'success': False, 'error': 'Title and details are required'}), 400
+        
+        with open('db_config.json', 'r') as f:
+            config = json.load(f)
+        db_config = config['mysql']
+        ticket = Ticket(db_config)
+        
+        result = ticket.create_ticket(user_id, issue_title, issue_detail)
+        ticket.close()
+        
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'ticket_id': result['ticket_id'],
+                'priority': result['priority'],
+                'ai_response': result.get('ai_response', '')
+            })
+        else:
+            return jsonify({'success': False, 'error': result.get('error', 'Failed to create ticket')}), 400
+            
+    except Exception as e:
+        logger.error(f"Error creating ticket: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': 'Server error'}), 500
+
+@app.route('/tickets/<int:ticket_id>/update', methods=['POST'])
+@login_required
+def update_ticket(ticket_id):
+    """Update a ticket."""
+    try:
+        from components.Ticket import Ticket
+        
+        user_id = session.get('user_id')
+        update_data = request.get_json()
+        
+        with open('db_config.json', 'r') as f:
+            config = json.load(f)
+        db_config = config['mysql']
+        ticket = Ticket(db_config)
+        
+        result = ticket.update_ticket(ticket_id, user_id, update_data)
+        ticket.close()
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error updating ticket: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': 'Server error'}), 500
+
+@app.route('/tickets/<int:ticket_id>/respond', methods=['POST'])
+@login_required
+def respond_to_ticket(ticket_id):
+    """Add a response to a ticket (staff only)."""
+    try:
+        from components.Ticket import Ticket
+        
+        user_id = session.get('user_id')
+        response_text = request.form.get('response', '').strip()
+        
+        if not response_text:
+            return jsonify({'success': False, 'error': 'Response text is required'}), 400
+        
+        with open('db_config.json', 'r') as f:
+            config = json.load(f)
+        db_config = config['mysql']
+        ticket = Ticket(db_config)
+        
+        result = ticket.add_response(ticket_id, user_id, response_text)
+        ticket.close()
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error responding to ticket: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': 'Server error'}), 500
+
 # Payment Routes
 @app.route('/payment/create-checkout-session', methods=['POST'])
 def create_checkout_session():

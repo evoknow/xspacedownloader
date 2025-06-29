@@ -320,3 +320,34 @@ ON DUPLICATE KEY UPDATE
     `start_date` = VALUES(`start_date`),
     `end_date` = VALUES(`end_date`),
     `status` = VALUES(`status`);
+
+-- Table structure for table `tickets`
+DROP TABLE IF EXISTS `tickets`;
+CREATE TABLE `tickets` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL COMMENT 'Ticket creator',
+  `issue_title` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Issue title',
+  `issue_detail` json NOT NULL COMMENT 'Issue details including images/PDFs',
+  `priority` tinyint NOT NULL DEFAULT '0' COMMENT '0-normal, 1-medium, 2-high, 3-critical',
+  `opened_at` datetime NOT NULL COMMENT 'When ticket was opened',
+  `last_updated_by_owner` datetime DEFAULT NULL COMMENT 'Last update by ticket owner',
+  `responded_by_staff_id` int DEFAULT NULL COMMENT 'Staff user ID who responded',
+  `response_date` datetime DEFAULT NULL COMMENT 'When staff responded',
+  `response` json DEFAULT NULL COMMENT 'Array of timestamp:response pairs',
+  `last_updated_by_staff` datetime DEFAULT NULL COMMENT 'Last update by staff',
+  `status` tinyint NOT NULL DEFAULT '0' COMMENT '0-open, 1-responded, 2-closed, -1-deleted by owner, -9-deleted by staff, -6-archived',
+  PRIMARY KEY (`id`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_status` (`status`),
+  KEY `idx_priority` (`priority`),
+  KEY `idx_staff_id` (`responded_by_staff_id`),
+  KEY `idx_opened_at` (`opened_at`),
+  CONSTRAINT `tickets_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `tickets_staff_fk` FOREIGN KEY (`responded_by_staff_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Support ticket system';
+
+-- Update users table to add is_staff column if it doesn't exist
+ALTER TABLE `users` ADD COLUMN `is_staff` tinyint(1) DEFAULT '0' COMMENT 'Whether user is support staff' AFTER `is_admin`;
+
+-- Add display_name column if it doesn't exist  
+ALTER TABLE `users` ADD COLUMN `display_name` varchar(100) DEFAULT NULL COMMENT 'Display name for user' AFTER `email`;
