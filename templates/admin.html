@@ -6204,24 +6204,24 @@ async function loadStripeConfig() {
             document.querySelector(`input[name="stripeMode"][value="${currentMode}"]`).checked = true;
             
             // Set TEST mode values
-            document.getElementById('stripeTestPublishableKey').value = result.config.test.publishable_key || '';
-            document.getElementById('stripeTestSecretKey').value = result.config.test.secret_key || '';
-            document.getElementById('stripeTestWebhookSecret').value = result.config.test.webhook_secret || '';
+            document.getElementById('testPublishableKey').value = result.config.test.publishable_key || '';
+            document.getElementById('testSecretKey').value = result.config.test.secret_key || '';
+            document.getElementById('testWebhookSecret').value = result.config.test.webhook_secret || '';
             
             // Set LIVE mode values
-            document.getElementById('stripeLivePublishableKey').value = result.config.live.publishable_key || '';
-            document.getElementById('stripeLiveSecretKey').value = result.config.live.secret_key || '';
-            document.getElementById('stripeLiveWebhookSecret').value = result.config.live.webhook_secret || '';
+            document.getElementById('livePublishableKey').value = result.config.live.publishable_key || '';
+            document.getElementById('liveSecretKey').value = result.config.live.secret_key || '';
+            document.getElementById('liveWebhookSecret').value = result.config.live.webhook_secret || '';
             
             // Update key visibility status for test keys
-            updateStripeKeyStatus('stripeTestPublishableKey', result.config.test.publishable_key);
-            updateStripeKeyStatus('stripeTestSecretKey', result.config.test.secret_key);
-            updateStripeKeyStatus('stripeTestWebhookSecret', result.config.test.webhook_secret);
+            updateStripeKeyStatus('testPublishableKey', result.config.test.publishable_key);
+            updateStripeKeyStatus('testSecretKey', result.config.test.secret_key);
+            updateStripeKeyStatus('testWebhookSecret', result.config.test.webhook_secret);
             
             // Update key visibility status for live keys
-            updateStripeKeyStatus('stripeLivePublishableKey', result.config.live.publishable_key);
-            updateStripeKeyStatus('stripeLiveSecretKey', result.config.live.secret_key);
-            updateStripeKeyStatus('stripeLiveWebhookSecret', result.config.live.webhook_secret);
+            updateStripeKeyStatus('livePublishableKey', result.config.live.publishable_key);
+            updateStripeKeyStatus('liveSecretKey', result.config.live.secret_key);
+            updateStripeKeyStatus('liveWebhookSecret', result.config.live.webhook_secret);
             
             // Update mode indicator
             updateModeIndicator(currentMode);
@@ -6297,16 +6297,16 @@ document.getElementById('stripeConfigForm')?.addEventListener('submit', async fu
     
     // Get test keys
     const testKeys = {
-        publishable_key: document.getElementById('stripeTestPublishableKey').value.trim(),
-        secret_key: document.getElementById('stripeTestSecretKey').value.trim(),
-        webhook_secret: document.getElementById('stripeTestWebhookSecret').value.trim()
+        publishable_key: document.getElementById('testPublishableKey').value.trim(),
+        secret_key: document.getElementById('testSecretKey').value.trim(),
+        webhook_secret: document.getElementById('testWebhookSecret').value.trim()
     };
     
     // Get live keys
     const liveKeys = {
-        publishable_key: document.getElementById('stripeLivePublishableKey').value.trim(),
-        secret_key: document.getElementById('stripeLiveSecretKey').value.trim(),
-        webhook_secret: document.getElementById('stripeLiveWebhookSecret').value.trim()
+        publishable_key: document.getElementById('livePublishableKey').value.trim(),
+        secret_key: document.getElementById('liveSecretKey').value.trim(),
+        webhook_secret: document.getElementById('liveWebhookSecret').value.trim()
     };
     
     // Validate test keys format
@@ -6362,14 +6362,14 @@ document.getElementById('stripeConfigForm')?.addEventListener('submit', async fu
             showToast(result.message || 'Stripe configuration updated successfully', 'success');
             
             // Update field status indicators for test keys
-            updateStripeKeyStatus('stripeTestPublishableKey', testKeys.publishable_key);
-            updateStripeKeyStatus('stripeTestSecretKey', testKeys.secret_key);
-            updateStripeKeyStatus('stripeTestWebhookSecret', testKeys.webhook_secret);
+            updateStripeKeyStatus('testPublishableKey', testKeys.publishable_key);
+            updateStripeKeyStatus('testSecretKey', testKeys.secret_key);
+            updateStripeKeyStatus('testWebhookSecret', testKeys.webhook_secret);
             
             // Update field status indicators for live keys
-            updateStripeKeyStatus('stripeLivePublishableKey', liveKeys.publishable_key);
-            updateStripeKeyStatus('stripeLiveSecretKey', liveKeys.secret_key);
-            updateStripeKeyStatus('stripeLiveWebhookSecret', liveKeys.webhook_secret);
+            updateStripeKeyStatus('livePublishableKey', liveKeys.publishable_key);
+            updateStripeKeyStatus('liveSecretKey', liveKeys.secret_key);
+            updateStripeKeyStatus('liveWebhookSecret', liveKeys.webhook_secret);
             
             // Update mode indicator
             updateModeIndicator(selectedMode);
