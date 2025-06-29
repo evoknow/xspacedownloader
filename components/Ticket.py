@@ -17,7 +17,11 @@ class Ticket:
     def connect(self):
         """Establish database connection"""
         try:
-            self.conn = mysql.connector.connect(**self.db_config)
+            # Remove unsupported parameters
+            clean_config = self.db_config.copy()
+            clean_config.pop('use_ssl', None)  # Remove use_ssl if present
+            
+            self.conn = mysql.connector.connect(**clean_config)
             self.cursor = self.conn.cursor(dictionary=True)
         except mysql.connector.Error as e:
             print(f"Database connection error: {e}")
