@@ -4200,6 +4200,7 @@ function clearAllCaches() {
 }
 
 function showToast(message, type = 'info') {
+    console.log('showToast called with:', message, type);
     // Simple toast notification
     const toast = document.createElement('div');
     toast.className = `alert alert-${type === 'error' ? 'danger' : type} position-fixed`;
@@ -4209,6 +4210,7 @@ function showToast(message, type = 'info') {
         <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
     `;
     document.body.appendChild(toast);
+    console.log('Toast added to body');
     
     // Auto-remove after 3 seconds
     setTimeout(() => {
@@ -6365,8 +6367,10 @@ document.getElementById('stripeConfigForm')?.addEventListener('submit', async fu
         });
         
         const result = await response.json();
+        console.log('Stripe config response:', result);
         
         if (result.success) {
+            console.log('Showing success toast:', result.message);
             showToast(result.message || 'Stripe configuration updated successfully', 'success');
             
             // Update field status indicators for test keys
