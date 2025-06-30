@@ -5743,7 +5743,7 @@ def admin_template_preview():
             'spaces': [],  # Empty list for space-related templates
             'messages': ['This is a preview of the template'],
             'config': app.config,
-            'now': datetime.now()
+            'now': datetime.datetime.now()
         }
         
         return render_template(template_name, **preview_data)
