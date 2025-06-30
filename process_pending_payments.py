@@ -27,7 +27,7 @@ def main():
     try:
         # Get all pending transactions
         cursor.execute("""
-            SELECT ct.*, p.credits, p.name, u.email, u.username
+            SELECT ct.*, p.credits, p.name, u.email, u.id as user_email
             FROM credit_txn ct
             JOIN products p ON ct.product_id = p.id
             JOIN users u ON ct.user_id = u.id
@@ -58,7 +58,7 @@ def main():
         
         for txn in pending_txns:
             try:
-                logger.info(f"\nProcessing transaction {txn['id']} for user {txn['username']} ({txn['user_id']})")
+                logger.info(f"\nProcessing transaction {txn['id']} for user {txn['email']} ({txn['user_id']})")
                 logger.info(f"  Product: {txn['name']} - {txn['credits']} credits for ${txn['amount']}")
                 
                 # Try to verify with Stripe if we have a session ID
