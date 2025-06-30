@@ -1570,9 +1570,6 @@
                                     
                                     <!-- Mode Toggle -->
                                     <div class="mb-4">
-                                        <label class="form-label fw-bold">
-                                            <i class="bi bi-toggle-on"></i> Active Mode
-                                        </label>
                                         <div class="btn-group w-100" role="group">
                                             <input type="radio" class="btn-check" name="stripeMode" id="liveMode" value="live">
                                             <label class="btn btn-outline-danger" for="liveMode">
@@ -6284,6 +6281,51 @@ function updateStripeKeyStatus(fieldId, value) {
             statusIcon.className = 'bi bi-x-circle text-danger';
         }
     }
+}
+
+function updateModeIndicator(mode) {
+    // Get current configuration via API to update status badges
+    fetch('/admin/api/stripe_config')
+        .then(response => response.json())
+        .then(result => {
+            if (result.success && result.config) {
+                // Update live status badge
+                const liveStatus = document.getElementById('liveStatus');
+                const liveIsConfigured = result.config.live.has_publishable_key && 
+                                       result.config.live.has_secret_key && 
+                                       result.config.live.has_webhook_secret;
+                
+                if (liveIsConfigured) {
+                    liveStatus.textContent = 'Configured';
+                    liveStatus.className = 'badge bg-success ms-2';
+                } else {
+                    liveStatus.textContent = 'Not Configured';
+                    liveStatus.className = 'badge bg-light text-danger ms-2';
+                }
+                
+                // Update test status badge
+                const testStatus = document.getElementById('testStatus');
+                const testIsConfigured = result.config.test.has_publishable_key && 
+                                        result.config.test.has_secret_key && 
+                                        result.config.test.has_webhook_secret;
+                
+                if (testIsConfigured) {
+                    testStatus.textContent = 'Configured';
+                    testStatus.className = 'badge bg-success ms-2';
+                } else {
+                    testStatus.textContent = 'Not Configured';
+                    testStatus.className = 'badge bg-light text-warning ms-2';
+                }
+                
+                // Update mode display
+                const currentMode = result.config.mode || 'test';
+                const modeText = currentMode === 'live' ? 'LIVE' : 'TEST';
+                console.log(`Stripe mode indicator updated: ${modeText} mode`);
+            }
+        })
+        .catch(error => {
+            console.error('Error updating mode indicator:', error);
+        });
 }
 
 function toggleKeyVisibility(fieldId) {
