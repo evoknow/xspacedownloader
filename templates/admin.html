@@ -77,6 +77,12 @@
     content: "\f120"; /* bi-arrow-down */
 }
 
+/* Template Editor debugging - force visibility */
+#templates {
+    display: block !important;
+    opacity: 1 !important;
+}
+
 /* Space ID link styling */
 .text-decoration-none code {
     color: inherit;
@@ -2228,6 +2234,20 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('templates-tab').addEventListener('shown.bs.tab', function() {
         console.log('Templates tab shown event fired');
         loadTemplateList();
+    });
+    
+    // Also add click event listener as backup
+    document.getElementById('templates-tab').addEventListener('click', function() {
+        console.log('Templates tab clicked');
+        // Force show the tab content after a short delay
+        setTimeout(() => {
+            const tabContent = document.getElementById('templates');
+            if (tabContent && !tabContent.classList.contains('show')) {
+                console.log('Manually showing templates tab content');
+                tabContent.classList.add('show', 'active');
+                loadTemplateList();
+            }
+        }, 100);
     });
 });
 
