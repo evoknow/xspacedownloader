@@ -5709,6 +5709,17 @@ def admin_dashboard():
         flash('An error occurred loading the admin dashboard.', 'error')
         return redirect(url_for('index'))
 
+# Template editor shortcut route
+@app.route('/templates')
+def templates_redirect():
+    """Redirect /templates to admin templates editor."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        flash('Admin access required.', 'error')
+        return redirect(url_for('index'))
+    
+    # Redirect to admin dashboard with templates tab active
+    return redirect(url_for('admin_dashboard') + '#templates')
+
 # Dedicated admin pages
 @app.route('/admin/logs')
 def admin_logs():
@@ -8091,6 +8102,121 @@ def admin_update_system_message(message_id):
             
     except Exception as e:
         logger.error(f"Error updating system message: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+# Template Management Routes
+@app.route('/admin/api/templates', methods=['GET'])
+def admin_list_templates():
+    """List all templates available for editing (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        from components.Template import Template
+        template_manager = Template()
+        
+        templates = template_manager.list_templates()
+        info = template_manager.get_template_info()
+        
+        return jsonify({
+            'templates': templates,
+            'info': info
+        })
+    except Exception as e:
+        logger.error(f"Error listing templates: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/templates/<template_name>', methods=['GET', 'PUT'])
+def admin_template_operations(template_name):
+    """Get or update a specific template (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        from components.Template import Template
+        template_manager = Template()
+        
+        if request.method == 'GET':
+            # Get template content and backups
+            template_data = template_manager.get_template_content(template_name)
+            return jsonify(template_data)
+        
+        elif request.method == 'PUT':
+            # Update template content
+            data = request.get_json()
+            content = data.get('content')
+            
+            if not content:
+                return jsonify({'error': 'No content provided'}), 400
+            
+            # First validate the template
+            validation = template_manager.validate_template(content)
+            if not validation['valid']:
+                return jsonify({
+                    'error': 'Template validation failed',
+                    'validation': validation
+                }), 400
+            
+            # Save the template
+            result = template_manager.save_template(template_name, content)
+            return jsonify(result)
+            
+    except FileNotFoundError as e:
+        return jsonify({'error': str(e)}), 404
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f"Error in template operation: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/templates/<template_name>/validate', methods=['POST'])
+def admin_validate_template(template_name):
+    """Validate template syntax without saving (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        from components.Template import Template
+        template_manager = Template()
+        
+        data = request.get_json()
+        content = data.get('content')
+        
+        if not content:
+            return jsonify({'error': 'No content provided'}), 400
+        
+        validation = template_manager.validate_template(content)
+        return jsonify(validation)
+        
+    except Exception as e:
+        logger.error(f"Error validating template: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/templates/<template_name>/restore', methods=['POST'])
+def admin_restore_template(template_name):
+    """Restore a template from backup (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        from components.Template import Template
+        template_manager = Template()
+        
+        data = request.get_json()
+        backup_filename = data.get('backup_filename')
+        
+        if not backup_filename:
+            return jsonify({'error': 'No backup filename provided'}), 400
+        
+        result = template_manager.restore_backup(template_name, backup_filename)
+        return jsonify(result)
+        
+    except FileNotFoundError as e:
+        return jsonify({'error': str(e)}), 404
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f"Error restoring template: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 # Stripe Configuration Routes

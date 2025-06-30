@@ -272,6 +272,11 @@
             </button>
         </li>
         <li class="nav-item" role="presentation">
+            <button class="nav-link" id="templates-tab" data-bs-toggle="tab" data-bs-target="#templates" type="button" role="tab">
+                <i class="bi bi-code-square"></i> Templates
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
             <a class="nav-link" href="/admin/logs">
                 <i class="bi bi-file-text"></i> Logs
             </a>
@@ -1796,6 +1801,82 @@
             </div>
         </div>
         
+        <!-- Templates Tab -->
+        <div class="tab-pane fade" id="templates" role="tabpanel">
+            <div class="card mt-3">
+                <div class="card-header bg-primary text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="mb-0"><i class="bi bi-code-square"></i> Template Editor</h5>
+                            <small>Edit HTML templates with validation and backup</small>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-light" onclick="loadTemplateList()">
+                            <i class="bi bi-arrow-clockwise"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <!-- Template List -->
+                        <div class="col-md-3">
+                            <h6 class="mb-3">Templates</h6>
+                            <div id="templateList" class="list-group">
+                                <div class="text-center p-3">
+                                    <div class="spinner-border spinner-border-sm" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="templateInfo" class="mt-3 small text-muted"></div>
+                        </div>
+                        
+                        <!-- Template Editor -->
+                        <div class="col-md-9">
+                            <div id="templateEditorContainer" style="display: none;">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 id="templateName" class="mb-0"></h6>
+                                    <div>
+                                        <button type="button" class="btn btn-sm btn-secondary me-2" onclick="validateTemplate()">
+                                            <i class="bi bi-check-circle"></i> Validate
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-success me-2" onclick="saveTemplate()">
+                                            <i class="bi bi-save"></i> Save
+                                        </button>
+                                        <div class="btn-group" role="group">
+                                            <button type="button" class="btn btn-sm btn-warning dropdown-toggle" data-bs-toggle="dropdown">
+                                                <i class="bi bi-clock-history"></i> Backups
+                                            </button>
+                                            <ul class="dropdown-menu" id="backupList">
+                                                <li><span class="dropdown-item-text">No backups available</span></li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Validation Messages -->
+                                <div id="validationMessages"></div>
+                                
+                                <!-- Code Editor -->
+                                <div class="border rounded" style="height: 500px;">
+                                    <textarea id="templateEditor" class="form-control font-monospace" 
+                                              style="height: 100%; resize: none; font-size: 13px;"
+                                              placeholder="Select a template to edit..."></textarea>
+                                </div>
+                                
+                                <!-- Template Variables -->
+                                <div id="templateVariables" class="mt-3"></div>
+                            </div>
+                            
+                            <div id="templateEditorPlaceholder" class="text-center text-muted py-5">
+                                <i class="bi bi-file-code fs-1"></i>
+                                <p class="mt-2">Select a template to edit</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <!-- Help Tab -->
         <div class="tab-pane fade" id="help" role="tabpanel">
             <div class="card mt-3">
@@ -2116,6 +2197,20 @@ document.addEventListener('DOMContentLoaded', function() {
             loadAdminSystemMessages();
             loadServiceSettings();
             loadStripeConfig();
+        }, 100);
+    }
+    
+    // Check if templates tab should be active
+    if (document.getElementById('templates-tab').classList.contains('active') || 
+        window.location.hash === '#templates') {
+        // If hash is #templates, activate the tab
+        if (window.location.hash === '#templates') {
+            const templatesTab = new bootstrap.Tab(document.getElementById('templates-tab'));
+            templatesTab.show();
+        }
+        // Load templates content
+        setTimeout(() => {
+            loadTemplateList();
         }, 100);
     }
 });
@@ -2906,6 +3001,11 @@ document.getElementById('settings-tab').addEventListener('shown.bs.tab', functio
     loadAdminSystemMessages();
     loadServiceSettings();
     loadStripeConfig();
+});
+
+// Load template list when templates tab is shown
+document.getElementById('templates-tab').addEventListener('shown.bs.tab', function() {
+    loadTemplateList();
 });
 
 // Transcription Configuration
@@ -6976,6 +7076,282 @@ function initializeTabContent(tabId) {
     } catch (error) {
         console.error(`Error initializing ${tabId} tab:`, error);
     }
+}
+
+// Template Editor Functions
+let currentTemplate = null;
+let templateEditor = null;
+
+async function loadTemplateList() {
+    try {
+        const response = await fetch('/admin/api/templates');
+        if (!response.ok) throw new Error('Failed to load templates');
+        
+        const data = await response.json();
+        const listContainer = document.getElementById('templateList');
+        const infoContainer = document.getElementById('templateInfo');
+        
+        // Render template list
+        let html = '';
+        data.templates.forEach(template => {
+            const isActive = currentTemplate === template.name ? 'active' : '';
+            html += `
+                <button type="button" class="list-group-item list-group-item-action ${isActive}"
+                        onclick="loadTemplate('${template.name}')">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <i class="bi bi-file-code"></i> ${template.name}
+                        </div>
+                        <small class="text-muted">${template.backup_count} backups</small>
+                    </div>
+                    <small class="text-muted">Modified: ${new Date(template.modified).toLocaleString()}</small>
+                </button>
+            `;
+        });
+        
+        listContainer.innerHTML = html || '<div class="text-muted p-3">No templates found</div>';
+        
+        // Update info
+        const formatSize = (bytes) => {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+        };
+        
+        infoContainer.innerHTML = `
+            <strong>Template Info:</strong><br>
+            Templates: ${data.info.template_count}<br>
+            Total Size: ${formatSize(data.info.total_size)}<br>
+            Backups: ${data.info.total_backups} (${formatSize(data.info.backup_size)})
+        `;
+        
+    } catch (error) {
+        console.error('Error loading templates:', error);
+        document.getElementById('templateList').innerHTML = `
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle"></i> Error loading templates: ${error.message}
+            </div>
+        `;
+    }
+}
+
+async function loadTemplate(templateName) {
+    try {
+        currentTemplate = templateName;
+        
+        // Update active state in list
+        document.querySelectorAll('#templateList .list-group-item').forEach(item => {
+            item.classList.remove('active');
+        });
+        event.target.closest('.list-group-item').classList.add('active');
+        
+        // Load template content
+        const response = await fetch(`/admin/api/templates/${encodeURIComponent(templateName)}`);
+        if (!response.ok) throw new Error('Failed to load template');
+        
+        const data = await response.json();
+        
+        // Show editor
+        document.getElementById('templateEditorContainer').style.display = 'block';
+        document.getElementById('templateEditorPlaceholder').style.display = 'none';
+        
+        // Set template name
+        document.getElementById('templateName').textContent = templateName;
+        
+        // Set content
+        if (!templateEditor) {
+            templateEditor = document.getElementById('templateEditor');
+        }
+        templateEditor.value = data.content;
+        
+        // Update backup list
+        const backupList = document.getElementById('backupList');
+        if (data.backups && data.backups.length > 0) {
+            let backupHtml = '';
+            data.backups.forEach(backup => {
+                const backupDate = new Date(backup.timestamp).toLocaleString();
+                backupHtml += `
+                    <li>
+                        <a class="dropdown-item" href="#" 
+                           onclick="restoreBackup('${templateName}', '${backup.filename}'); return false;">
+                            <i class="bi bi-clock-history"></i> ${backupDate}
+                            <small class="text-muted d-block">${backup.filename}</small>
+                        </a>
+                    </li>
+                `;
+            });
+            backupList.innerHTML = backupHtml;
+        } else {
+            backupList.innerHTML = '<li><span class="dropdown-item-text">No backups available</span></li>';
+        }
+        
+        // Clear validation messages
+        document.getElementById('validationMessages').innerHTML = '';
+        document.getElementById('templateVariables').innerHTML = '';
+        
+    } catch (error) {
+        console.error('Error loading template:', error);
+        alert(`Error loading template: ${error.message}`);
+    }
+}
+
+async function validateTemplate() {
+    if (!currentTemplate || !templateEditor) return;
+    
+    try {
+        const content = templateEditor.value;
+        
+        const response = await fetch(`/admin/api/templates/${encodeURIComponent(currentTemplate)}/validate`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ content })
+        });
+        
+        if (!response.ok) throw new Error('Failed to validate template');
+        
+        const validation = await response.json();
+        
+        // Show validation results
+        const messagesDiv = document.getElementById('validationMessages');
+        let html = '';
+        
+        if (validation.valid) {
+            html += '<div class="alert alert-success"><i class="bi bi-check-circle"></i> Template syntax is valid!</div>';
+        }
+        
+        if (validation.errors && validation.errors.length > 0) {
+            html += '<div class="alert alert-danger">';
+            html += '<h6><i class="bi bi-exclamation-triangle"></i> Validation Errors:</h6>';
+            html += '<ul class="mb-0">';
+            validation.errors.forEach(error => {
+                html += `<li>${escapeHtml(error)}</li>`;
+            });
+            html += '</ul></div>';
+        }
+        
+        if (validation.warnings && validation.warnings.length > 0) {
+            html += '<div class="alert alert-warning">';
+            html += '<h6><i class="bi bi-exclamation-circle"></i> Warnings:</h6>';
+            html += '<ul class="mb-0">';
+            validation.warnings.forEach(warning => {
+                html += `<li>${escapeHtml(warning)}</li>`;
+            });
+            html += '</ul></div>';
+        }
+        
+        messagesDiv.innerHTML = html;
+        
+        // Show variables used
+        if (validation.variables && validation.variables.length > 0) {
+            const varsDiv = document.getElementById('templateVariables');
+            varsDiv.innerHTML = `
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="card-title"><i class="bi bi-braces"></i> Template Variables</h6>
+                        <div class="d-flex flex-wrap gap-2">
+                            ${validation.variables.map(v => `<span class="badge bg-secondary">${v}</span>`).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+    } catch (error) {
+        console.error('Error validating template:', error);
+        alert(`Error validating template: ${error.message}`);
+    }
+}
+
+async function saveTemplate() {
+    if (!currentTemplate || !templateEditor) return;
+    
+    // First validate
+    await validateTemplate();
+    
+    // Check if there are errors
+    const errorAlerts = document.querySelectorAll('#validationMessages .alert-danger');
+    if (errorAlerts.length > 0) {
+        if (!confirm('There are validation errors. Are you sure you want to save anyway?')) {
+            return;
+        }
+    }
+    
+    try {
+        const content = templateEditor.value;
+        
+        const response = await fetch(`/admin/api/templates/${encodeURIComponent(currentTemplate)}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ content })
+        });
+        
+        const result = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(result.error || 'Failed to save template');
+        }
+        
+        // Show success message
+        const messagesDiv = document.getElementById('validationMessages');
+        messagesDiv.innerHTML = `
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="bi bi-check-circle"></i> ${result.message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        ` + messagesDiv.innerHTML;
+        
+        // Reload template list to update backup count
+        loadTemplateList();
+        
+        // Reload current template to refresh backup list
+        setTimeout(() => loadTemplate(currentTemplate), 500);
+        
+    } catch (error) {
+        console.error('Error saving template:', error);
+        alert(`Error saving template: ${error.message}`);
+    }
+}
+
+async function restoreBackup(templateName, backupFilename) {
+    if (!confirm(`Are you sure you want to restore this backup?\n\nThis will replace the current template with the backup from:\n${backupFilename}`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/admin/api/templates/${encodeURIComponent(templateName)}/restore`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ backup_filename: backupFilename })
+        });
+        
+        const result = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(result.error || 'Failed to restore backup');
+        }
+        
+        // Show success message
+        alert(result.message);
+        
+        // Reload template
+        loadTemplate(templateName);
+        
+    } catch (error) {
+        console.error('Error restoring backup:', error);
+        alert(`Error restoring backup: ${error.message}`);
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // Tab event listeners
