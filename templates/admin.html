@@ -1743,7 +1743,7 @@
                                     <div class="d-flex justify-content-between align-items-center mb-3">
                                         <span></span>
                                         <div>
-                                            <button type="button" class="btn btn-secondary btn-sm me-2" onclick="loadSystemMessages()">
+                                            <button type="button" class="btn btn-secondary btn-sm me-2" onclick="loadAdminSystemMessages()">
                                                 <i class="bi bi-arrow-clockwise"></i> Refresh
                                             </button>
                                             <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addSystemMessageModal">
@@ -2088,7 +2088,7 @@ document.addEventListener('DOMContentLoaded', function() {
             loadTrackingConfig();
             loadTranscriptionConfig();
             loadBrandingConfig();
-            loadSystemMessages();
+            loadAdminSystemMessages();
             loadServiceSettings();
             loadStripeConfig();
         }, 100);
@@ -2878,7 +2878,7 @@ document.getElementById('settings-tab').addEventListener('shown.bs.tab', functio
     loadTrackingConfig();
     loadTranscriptionConfig();
     loadBrandingConfig();
-    loadSystemMessages();
+    loadAdminSystemMessages();
     loadServiceSettings();
     loadStripeConfig();
 });
@@ -5527,7 +5527,7 @@ document.getElementById('serviceSettingsForm').addEventListener('submit', async 
 });
 
 // System Messages Functions
-async function loadSystemMessages() {
+async function loadAdminSystemMessages() {
     console.log('Loading system messages...');
     console.log('Function called at:', new Date().toISOString());
     
@@ -5538,9 +5538,6 @@ async function loadSystemMessages() {
         console.error('systemMessagesTable element not found!');
         return;
     }
-    
-    // Show immediate feedback that function is running
-    tableDiv.innerHTML = '<div class="alert alert-info">Function started - fetching data...</div>';
     
     try {
         console.log('Fetching from /admin/api/system_messages...');
@@ -5554,9 +5551,6 @@ async function loadSystemMessages() {
         const result = await response.json();
         console.log('System messages response:', result);
         console.log('Number of messages:', result.messages ? result.messages.length : 0);
-        
-        // Show response received
-        tableDiv.innerHTML = `<div class="alert alert-success">API responded with ${result.messages ? result.messages.length : 0} messages</div>`;
         
         if (result.messages && result.messages.length > 0) {
             let tableHTML = `
@@ -5702,7 +5696,7 @@ async function saveSystemMessage() {
             document.getElementById('addSystemMessageForm').reset();
             
             // Reload messages
-            loadSystemMessages();
+            loadAdminSystemMessages();
             
             // Show success message using showToast if available
             if (typeof showToast === 'function') {
@@ -5757,7 +5751,7 @@ async function deleteSystemMessage(messageId) {
         const result = await response.json();
         
         if (result.success) {
-            loadSystemMessages();
+            loadAdminSystemMessages();
         } else {
             alert('Error: ' + result.error);
         }
@@ -5788,7 +5782,7 @@ async function toggleSystemMessage(messageId, newStatus) {
         const result = await response.json();
         
         if (result.success) {
-            loadSystemMessages();  // Refresh the list
+            loadAdminSystemMessages();  // Refresh the list
         } else {
             alert('Error: ' + result.error);
         }
