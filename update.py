@@ -185,6 +185,7 @@ class UpdateManager:
         excludes = [
             '--exclude=venv/',
             '--exclude=.git/',
+            '--exclude=.env',  # Preserve production .env file
             '--exclude=*.pyc',
             '--exclude=__pycache__/',
             '--exclude=.pytest_cache/',
@@ -209,6 +210,7 @@ class UpdateManager:
         result = self.run_command(rsync_cmd, quiet=True)
         if result and not self.dry_run:
             print("  ✓ Code sync completed")
+        print("  ↳ Production .env file preserved (not overwritten)")
         
         # Set ownership
         print(f"• Setting ownership to {self.nginx_user}:{self.nginx_user}")
@@ -232,8 +234,24 @@ class UpdateManager:
                 str(logs_dir)
             ], quiet=True)
         
-        # Set secure permissions on .env file
+        # Handle .env file - create if missing, set permissions if exists
         env_file = self.production_dir / '.env'
+        if not env_file.exists():
+            print("• Creating basic .env file (configure Stripe keys via admin panel)")
+            if not self.dry_run:
+                # Create a basic .env file with essential variables
+                with open(env_file, 'w') as f:
+                    f.write("# XSpace Downloader Production Environment Configuration\n")
+                    f.write("# Configure Stripe keys via the admin panel\n\n")
+                    f.write("# Essential API Keys\n")
+                    f.write("OPENAI_API_KEY=\n")
+                    f.write("X_API_KEY=\n")
+                    f.write("X_API_KEY_SECRET=\n")
+                    f.write("SENDGRID_API_KEY=\n")
+                    f.write("PRODUCTION_DIR=/var/www/production/xspacedownload.com/website/htdocs\n\n")
+                    f.write("# Stripe Configuration (configure via admin panel)\n")
+                    f.write("STRIPE_MODE=test\n")
+        
         if env_file.exists():
             self.run_command(['chmod', '640', str(env_file)], quiet=True)
             print("• Set .env file permissions to 640")
