@@ -77,10 +77,18 @@
     content: "\f120"; /* bi-arrow-down */
 }
 
-/* Template Editor debugging - force visibility */
-#templates {
+/* Template Editor styling */
+#templates.show {
     display: block !important;
-    opacity: 1 !important;
+}
+
+#templateList .list-group-item {
+    cursor: pointer;
+}
+
+#templateEditor {
+    font-family: 'Courier New', monospace;
+    line-height: 1.4;
 }
 
 /* Space ID link styling */
@@ -1808,7 +1816,7 @@
         </div>
         
         <!-- Templates Tab -->
-        <div class="tab-pane fade" id="templates" role="tabpanel">
+        <div class="tab-pane fade show active" id="templates" role="tabpanel">
             <div class="card mt-3">
                 <div class="card-header bg-primary text-white">
                     <div class="d-flex justify-content-between align-items-center">
@@ -2236,19 +2244,11 @@ document.addEventListener('DOMContentLoaded', function() {
         loadTemplateList();
     });
     
-    // Also add click event listener as backup
-    document.getElementById('templates-tab').addEventListener('click', function() {
-        console.log('Templates tab clicked');
-        // Force show the tab content after a short delay
-        setTimeout(() => {
-            const tabContent = document.getElementById('templates');
-            if (tabContent && !tabContent.classList.contains('show')) {
-                console.log('Manually showing templates tab content');
-                tabContent.classList.add('show', 'active');
-                loadTemplateList();
-            }
-        }, 100);
-    });
+    // Load templates on page load for testing
+    setTimeout(() => {
+        console.log('Loading templates on page load for testing');
+        loadTemplateList();
+    }, 1000);
 });
 
 // User Management Functions
