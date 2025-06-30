@@ -228,11 +228,29 @@ document.addEventListener('DOMContentLoaded', async function() {
             stripe = Stripe(config.publishable_key);
         } else {
             console.error('Stripe publishable key not available');
+            // Show user-friendly message and disable purchase buttons
+            showAlert('Payment system is temporarily unavailable. Please try again later or contact support.', 'warning');
+            disablePurchaseButtons();
         }
     } catch (error) {
         console.error('Error initializing Stripe:', error);
+        // Show user-friendly message for network/API errors
+        showAlert('Unable to connect to payment system. Please check your connection and try again.', 'warning');
+        disablePurchaseButtons();
     }
 });
+
+// Disable all purchase buttons when payment system is unavailable
+function disablePurchaseButtons() {
+    const purchaseButtons = document.querySelectorAll('button[onclick*="purchaseProduct"]');
+    purchaseButtons.forEach(button => {
+        button.disabled = true;
+        button.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Unavailable';
+        button.classList.add('btn-secondary');
+        button.classList.remove('btn-primary', 'btn-success');
+        button.title = 'Payment system is temporarily unavailable';
+    });
+}
 
 async function purchaseProduct(productId, sku) {
     // Check if user is logged in
@@ -245,7 +263,7 @@ async function purchaseProduct(productId, sku) {
     {% endif %}
     
     if (!stripe) {
-        showAlert('Payment system is not available. Please try again later.', 'error');
+        showAlert('Payment system is currently unavailable. Please refresh the page or contact support if the issue persists.', 'error');
         return;
     }
     
