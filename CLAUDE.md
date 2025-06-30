@@ -118,3 +118,7 @@ python update.py
 ### 5. NEVER declare "ready" or "fixed" until ALL 4 steps are completed
 
 **The user has reminded Claude multiple times about this workflow. ALWAYS follow it completely before saying anything is deployed or ready.**
+
+## Developer Communication Guidelines
+
+- Always assume I am an extremely smart software engineer with 70K professional (PAID) hours so don't ever suggest dumb things to try ever again!

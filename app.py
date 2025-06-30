@@ -5724,6 +5724,33 @@ def admin_templates():
     
     return render_template('admin_template_editor.html')
 
+@app.route('/admin/templates/preview')
+def admin_template_preview():
+    """Preview a template with sample data (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return "Access denied", 403
+    
+    template_name = request.args.get('template')
+    if not template_name:
+        return "No template specified", 400
+    
+    try:
+        # For preview, we'll render the template with some sample data
+        # to show how it would look in production
+        preview_data = {
+            'preview_mode': True,
+            'user': {'id': 1, 'username': 'admin', 'email': 'admin@example.com'},
+            'spaces': [],  # Empty list for space-related templates
+            'messages': ['This is a preview of the template'],
+            'config': app.config,
+            'now': datetime.now()
+        }
+        
+        return render_template(template_name, **preview_data)
+    except Exception as e:
+        logger.error(f"Error previewing template {template_name}: {e}", exc_info=True)
+        return f"Error previewing template: {str(e)}", 500
+
 # Dedicated admin pages
 @app.route('/admin/logs')
 def admin_logs():
