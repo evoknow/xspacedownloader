@@ -157,8 +157,31 @@ class EnvManager:
     def update_stripe_config(self, mode=None, test_keys=None, live_keys=None):
         """Update Stripe configuration in .env file."""
         try:
-            # Read current .env file
+            # Read current .env file - this should have ALL variables
             env_vars = self.read_env_file()
+            
+            # Critical safety check - ensure we have non-Stripe variables
+            critical_keys = ['OPENAI_API_KEY', 'X_API_KEY', 'X_API_KEY_SECRET', 'SENDGRID_API_KEY']
+            missing_critical = [key for key in critical_keys if key not in env_vars or not env_vars[key]]
+            if missing_critical:
+                logger.error(f"CRITICAL: Missing essential API keys in current env: {missing_critical}")
+                # Try to read from backup
+                backup_files = sorted([f for f in os.listdir(os.path.dirname(self.active_env_path)) 
+                                     if f.startswith('.env.backup') or f == '.env.emergency_backup'], reverse=True)
+                if backup_files:
+                    backup_path = os.path.join(os.path.dirname(self.active_env_path), backup_files[0])
+                    logger.info(f"Reading from backup file: {backup_path}")
+                    with open(backup_path, 'r') as f:
+                        backup_content = f.read()
+                    # Parse backup for missing keys
+                    for line in backup_content.split('\n'):
+                        line = line.strip()
+                        if line and not line.startswith('#') and '=' in line:
+                            key, value = line.split('=', 1)
+                            key = key.strip()
+                            if key in missing_critical and key not in env_vars:
+                                env_vars[key] = value.strip()
+                                logger.info(f"Recovered {key} from backup")
             
             # Update mode if provided
             if mode is not None:
@@ -217,17 +240,51 @@ class EnvManager:
             return {'error': str(e)}
     
     def _write_env_file(self, env_vars):
-        """Write environment variables to .env file."""
+        """Write environment variables to .env file - preserving ALL existing variables."""
         try:
-            # Create backup
+            # Create backup with timestamp
             if os.path.exists(self.active_env_path):
-                backup_path = f"{self.active_env_path}.backup"
+                import time
+                backup_path = f"{self.active_env_path}.backup.{int(time.time())}"
                 shutil.copy2(self.active_env_path, backup_path)
+                logger.info(f"Created backup at: {backup_path}")
+            
+            # Define all Stripe-related keys
+            stripe_vars = {
+                'STRIPE_MODE', 
+                'STRIPE_TEST_PUBLISHABLE_KEY', 
+                'STRIPE_TEST_SECRET_KEY', 
+                'STRIPE_TEST_WEBHOOK_SECRET',
+                'STRIPE_LIVE_PUBLISHABLE_KEY', 
+                'STRIPE_LIVE_SECRET_KEY', 
+                'STRIPE_LIVE_WEBHOOK_SECRET',
+                'STRIPE_PUBLISHABLE_KEY', 
+                'STRIPE_SECRET_KEY', 
+                'STRIPE_WEBHOOK_SECRET'
+            }
+            
+            # Important: Ensure we have ALL variables, not just Stripe ones
+            if not any(key for key in env_vars if key not in stripe_vars):
+                logger.error("CRITICAL: Attempting to write .env with only Stripe variables!")
+                raise ValueError("Cannot write .env file with only Stripe variables - would lose other API keys")
             
             # Write new .env file
             with open(self.active_env_path, 'w') as f:
                 f.write("# XSpace Downloader Environment Configuration\n")
-                f.write("# Updated automatically\n\n")
+                f.write("# Updated automatically - DO NOT EDIT MANUALLY\n\n")
+                
+                # Write critical API keys first (if they exist)
+                critical_keys = ['OPENAI_API_KEY', 'X_API_KEY', 'X_API_KEY_SECRET', 'SENDGRID_API_KEY', 'PRODUCTION_DIR']
+                critical_written = False
+                for key in critical_keys:
+                    if key in env_vars and env_vars[key]:
+                        if not critical_written:
+                            f.write("# Critical API Keys\n")
+                            critical_written = True
+                        f.write(f"{key}={env_vars[key]}\n")
+                
+                if critical_written:
+                    f.write("\n")
                 
                 # Group Stripe variables together
                 f.write("# Stripe Configuration\n")
@@ -241,8 +298,11 @@ class EnvManager:
                 }
                 for key, description in test_vars.items():
                     value = env_vars.get(key, '')
-                    f.write(f"# {description}\n")
-                    f.write(f"{key}={value}\n\n")
+                    if value:  # Only write if not empty
+                        f.write(f"# {description}\n")
+                        f.write(f"{key}={value}\n")
+                if any(env_vars.get(key) for key in test_vars):
+                    f.write("\n")
                 
                 f.write("# Stripe Live Keys\n")
                 live_vars = {
@@ -252,11 +312,14 @@ class EnvManager:
                 }
                 for key, description in live_vars.items():
                     value = env_vars.get(key, '')
-                    f.write(f"# {description}\n")
-                    f.write(f"{key}={value}\n\n")
+                    if value:  # Only write if not empty
+                        f.write(f"# {description}\n")
+                        f.write(f"{key}={value}\n")
+                if any(env_vars.get(key) for key in live_vars):
+                    f.write("\n")
                 
                 # Legacy keys for backward compatibility
-                f.write("# Legacy Stripe Keys (for backward compatibility)\n")
+                legacy_written = False
                 legacy_vars = {
                     'STRIPE_PUBLISHABLE_KEY': 'Legacy Stripe Publishable Key',
                     'STRIPE_SECRET_KEY': 'Legacy Stripe Secret Key',
@@ -265,23 +328,39 @@ class EnvManager:
                 for key, description in legacy_vars.items():
                     value = env_vars.get(key, '')
                     if value:  # Only write legacy keys if they exist
+                        if not legacy_written:
+                            f.write("# Legacy Stripe Keys (for backward compatibility)\n")
+                            legacy_written = True
                         f.write(f"# {description}\n")
-                        f.write(f"{key}={value}\n\n")
+                        f.write(f"{key}={value}\n")
+                if legacy_written:
+                    f.write("\n")
                 
-                # Write other variables
-                f.write("# Other Configuration\n")
-                stripe_vars = set(['STRIPE_MODE', 'STRIPE_TEST_PUBLISHABLE_KEY', 'STRIPE_TEST_SECRET_KEY', 'STRIPE_TEST_WEBHOOK_SECRET',
-                                  'STRIPE_LIVE_PUBLISHABLE_KEY', 'STRIPE_LIVE_SECRET_KEY', 'STRIPE_LIVE_WEBHOOK_SECRET',
-                                  'STRIPE_PUBLISHABLE_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'])
-                for key, value in env_vars.items():
-                    if key not in stripe_vars:
+                # Write any other variables that aren't Stripe or critical
+                other_vars = []
+                all_handled = stripe_vars.union(set(critical_keys))
+                for key, value in sorted(env_vars.items()):
+                    if key not in all_handled and value:
+                        other_vars.append((key, value))
+                
+                if other_vars:
+                    f.write("# Other Configuration\n")
+                    for key, value in other_vars:
                         f.write(f"{key}={value}\n")
             
             # Set proper permissions
             os.chmod(self.active_env_path, 0o640)
+            logger.info("Successfully wrote .env file with all variables preserved")
             
         except Exception as e:
             logger.error(f"Error writing .env file: {e}")
+            # Try to restore from backup
+            backup_files = sorted([f for f in os.listdir(os.path.dirname(self.active_env_path)) 
+                                 if f.startswith('.env.backup.')], reverse=True)
+            if backup_files:
+                latest_backup = os.path.join(os.path.dirname(self.active_env_path), backup_files[0])
+                logger.info(f"Attempting to restore from backup: {latest_backup}")
+                shutil.copy2(latest_backup, self.active_env_path)
             raise
     
     def get_env_file_path(self):
