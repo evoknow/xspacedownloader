@@ -2213,6 +2213,21 @@ document.addEventListener('DOMContentLoaded', function() {
             loadTemplateList();
         }, 100);
     }
+    
+    // Load tracking config when settings tab is shown
+    document.getElementById('settings-tab').addEventListener('shown.bs.tab', function() {
+        loadTrackingConfig();
+        loadTranscriptionConfig();
+        loadBrandingConfig();
+        loadAdminSystemMessages();
+        loadServiceSettings();
+        loadStripeConfig();
+    });
+
+    // Load template list when templates tab is shown
+    document.getElementById('templates-tab').addEventListener('shown.bs.tab', function() {
+        loadTemplateList();
+    });
 });
 
 // User Management Functions
@@ -2993,20 +3008,6 @@ document.getElementById('trackingConfigForm').addEventListener('submit', async f
     }
 });
 
-// Load tracking config when settings tab is shown
-document.getElementById('settings-tab').addEventListener('shown.bs.tab', function() {
-    loadTrackingConfig();
-    loadTranscriptionConfig();
-    loadBrandingConfig();
-    loadAdminSystemMessages();
-    loadServiceSettings();
-    loadStripeConfig();
-});
-
-// Load template list when templates tab is shown
-document.getElementById('templates-tab').addEventListener('shown.bs.tab', function() {
-    loadTemplateList();
-});
 
 // Transcription Configuration
 document.querySelectorAll('input[name="transcriptionProvider"]').forEach(radio => {
