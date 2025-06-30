@@ -2226,6 +2226,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Load template list when templates tab is shown
     document.getElementById('templates-tab').addEventListener('shown.bs.tab', function() {
+        console.log('Templates tab shown event fired');
         loadTemplateList();
     });
 });
@@ -7084,13 +7085,31 @@ let currentTemplate = null;
 let templateEditor = null;
 
 async function loadTemplateList() {
+    console.log('loadTemplateList() called');
     try {
+        console.log('Fetching templates...');
         const response = await fetch('/admin/api/templates');
         if (!response.ok) throw new Error('Failed to load templates');
         
         const data = await response.json();
+        console.log('Templates data received:', data);
+        
         const listContainer = document.getElementById('templateList');
         const infoContainer = document.getElementById('templateInfo');
+        
+        console.log('DOM elements:', {
+            listContainer: listContainer,
+            infoContainer: infoContainer
+        });
+        
+        if (!listContainer) {
+            console.error('templateList element not found!');
+            return;
+        }
+        if (!infoContainer) {
+            console.error('templateInfo element not found!');
+            return;
+        }
         
         // Render template list
         let html = '';
@@ -7111,6 +7130,7 @@ async function loadTemplateList() {
         });
         
         listContainer.innerHTML = html || '<div class="text-muted p-3">No templates found</div>';
+        console.log('Template list HTML updated');
         
         // Update info
         const formatSize = (bytes) => {
