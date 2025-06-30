@@ -6342,13 +6342,6 @@ function toggleKeyVisibility(fieldId) {
     }
 }
 
-function updateModeIndicator(mode) {
-    // Update any visual indicators for the current mode
-    const modeText = mode === 'live' ? 'LIVE' : 'TEST';
-    console.log(`Stripe mode updated to: ${modeText}`);
-    
-    // Visual feedback is now only shown when configuration is saved, not on mode change
-}
 
 // Add event listeners for mode changes
 document.addEventListener('DOMContentLoaded', function() {
