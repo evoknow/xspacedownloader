@@ -5540,8 +5540,8 @@ async function loadSystemMessages() {
     }
     
     try {
-        console.log('Fetching from /api/system_messages...');
-        const response = await fetch('/api/system_messages');
+        console.log('Fetching from /admin/api/system_messages...');
+        const response = await fetch('/admin/api/system_messages');
         console.log('Response status:', response.status);
         
         if (!response.ok) {
@@ -5668,7 +5668,7 @@ async function saveSystemMessage() {
     }
     
     try {
-        const response = await fetch('/api/system_messages', {
+        const response = await fetch('/admin/api/system_messages', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -5744,7 +5744,7 @@ async function deleteSystemMessage(messageId) {
     }
     
     try {
-        const response = await fetch(`/api/system_messages/${messageId}`, {
+        const response = await fetch(`/admin/api/system_messages/${messageId}`, {
             method: 'DELETE'
         });
         
@@ -5769,7 +5769,7 @@ async function toggleSystemMessage(messageId, newStatus) {
     }
     
     try {
-        const response = await fetch(`/api/system_messages/${messageId}`, {
+        const response = await fetch(`/admin/api/system_messages/${messageId}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
