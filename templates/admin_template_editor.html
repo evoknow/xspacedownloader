@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Template Editor - XSpace Downloader Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+    <style>
+        .navbar-brand {
+            font-weight: bold;
+        }
+        
+        #templateEditor {
+            font-family: 'Courier New', monospace;
+            line-height: 1.4;
+            border: 1px solid #ddd;
+            border-radius: 0.375rem;
+        }
+        
+        #templateSelect {
+            min-width: 200px;
+        }
+        
+        .template-actions {
+            gap: 0.5rem;
+        }
+        
+        #templateInfo {
+            background: #f8f9fa;
+            padding: 8px;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+        }
+        
+        .editor-container {
+            height: 70vh;
+            min-height: 500px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/admin">
+                <i class="bi bi-gear-fill"></i> XSpace Admin
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/admin">
+                    <i class="bi bi-arrow-left"></i> Back to Admin Dashboard
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h4 class="mb-0"><i class="bi bi-code-square"></i> Template Editor</h4>
+                                <small>Edit HTML templates with validation and backup</small>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-light" onclick="loadTemplateList()">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <!-- Template Selection and Actions -->
+                        <div class="row mb-4">
+                            <div class="col-md-4">
+                                <label for="templateSelect" class="form-label fw-bold">Select Template:</label>
+                                <select id="templateSelect" class="form-select" onchange="loadSelectedTemplate()">
+                                    <option value="">Choose a template...</option>
+                                </select>
+                                <div id="templateInfo" class="mt-2 small text-muted">
+                                    Loading templates...
+                                </div>
+                            </div>
+                            <div class="col-md-8">
+                                <div id="templateEditorActions" style="display: none;">
+                                    <label class="form-label fw-bold">Actions:</label>
+                                    <div class="d-flex template-actions flex-wrap">
+                                        <button type="button" class="btn btn-sm btn-secondary" onclick="validateTemplate()">
+                                            <i class="bi bi-check-circle"></i> Validate
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-info" onclick="previewTemplate()">
+                                            <i class="bi bi-eye"></i> Preview
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-warning" onclick="clearTemplateCache()">
+                                            <i class="bi bi-arrow-clockwise"></i> Clear Cache
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-success" onclick="saveTemplate()">
+                                            <i class="bi bi-save"></i> Save
+                                        </button>
+                                        <div class="btn-group" role="group">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                                                <i class="bi bi-clock-history"></i> Backups
+                                            </button>
+                                            <ul class="dropdown-menu" id="backupList">
+                                                <li><span class="dropdown-item-text">No backups available</span></li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Template Editor -->
+                        <div id="templateEditorContainer" style="display: none;">
+                            <!-- Validation Messages -->
+                            <div id="validationMessages" class="mb-3"></div>
+                            
+                            <!-- Code Editor -->
+                            <div class="border rounded mb-3 editor-container">
+                                <textarea id="templateEditor" class="form-control font-monospace" 
+                                          style="height: 100%; resize: none; font-size: 14px; border: none;"
+                                          placeholder="Select a template to edit..."></textarea>
+                            </div>
+                            
+                            <!-- Template Variables -->
+                            <div id="templateVariables"></div>
+                        </div>
+                        
+                        <div id="templateEditorPlaceholder" class="text-center text-muted py-5">
+                            <i class="bi bi-file-code fs-1"></i>
+                            <p class="mt-3 fs-5">Welcome to the Template Editor</p>
+                            <p class="text-muted">Select a template from the dropdown above to start editing</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Template Editor Functions
+        let currentTemplate = null;
+        let templateEditor = null;
+
+        async function loadTemplateList() {
+            try {
+                const response = await fetch('/admin/api/templates');
+                if (!response.ok) throw new Error('Failed to load templates');
+                
+                const data = await response.json();
+                const selectContainer = document.getElementById('templateSelect');
+                const infoContainer = document.getElementById('templateInfo');
+                
+                if (!selectContainer || !infoContainer) {
+                    console.error('Template elements not found!');
+                    return;
+                }
+                
+                // Populate dropdown
+                let options = '<option value="">Choose a template...</option>';
+                data.templates.forEach(template => {
+                    const selected = currentTemplate === template.name ? 'selected' : '';
+                    options += `
+                        <option value="${template.name}" ${selected}>
+                            ${template.name} (${template.backup_count} backups)
+                        </option>
+                    `;
+                });
+                
+                selectContainer.innerHTML = options;
+                
+                // Update info
+                const formatSize = (bytes) => {
+                    if (bytes < 1024) return bytes + ' B';
+                    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+                    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+                };
+                
+                infoContainer.innerHTML = `
+                    <strong>${data.info.template_count}</strong> templates, 
+                    <strong>${formatSize(data.info.total_size)}</strong> total, 
+                    <strong>${data.info.total_backups}</strong> backups (${formatSize(data.info.backup_size)})
+                `;
+                
+            } catch (error) {
+                console.error('Error loading templates:', error);
+                const infoContainer = document.getElementById('templateInfo');
+                if (infoContainer) {
+                    infoContainer.innerHTML = `<span class="text-danger">Error loading templates: ${error.message}</span>`;
+                }
+            }
+        }
+
+        function loadSelectedTemplate() {
+            const select = document.getElementById('templateSelect');
+            const templateName = select.value;
+            
+            if (templateName) {
+                loadTemplate(templateName);
+            } else {
+                // Hide editor when no template selected
+                document.getElementById('templateEditorContainer').style.display = 'none';
+                document.getElementById('templateEditorActions').style.display = 'none';
+                document.getElementById('templateEditorPlaceholder').style.display = 'block';
+                currentTemplate = null;
+            }
+        }
+
+        async function loadTemplate(templateName) {
+            try {
+                currentTemplate = templateName;
+                
+                // Update dropdown selection
+                const select = document.getElementById('templateSelect');
+                if (select.value !== templateName) {
+                    select.value = templateName;
+                }
+                
+                // Load template content
+                const response = await fetch(`/admin/api/templates/${encodeURIComponent(templateName)}`);
+                if (!response.ok) throw new Error('Failed to load template');
+                
+                const data = await response.json();
+                
+                // Show editor and actions
+                document.getElementById('templateEditorContainer').style.display = 'block';
+                document.getElementById('templateEditorActions').style.display = 'block';
+                document.getElementById('templateEditorPlaceholder').style.display = 'none';
+                
+                // Set content
+                if (!templateEditor) {
+                    templateEditor = document.getElementById('templateEditor');
+                }
+                templateEditor.value = data.content;
+                
+                // Update backup list
+                const backupList = document.getElementById('backupList');
+                if (data.backups && data.backups.length > 0) {
+                    let backupHtml = '';
+                    data.backups.forEach(backup => {
+                        const backupDate = new Date(backup.timestamp).toLocaleString();
+                        backupHtml += `
+                            <li>
+                                <a class="dropdown-item" href="#" 
+                                   onclick="restoreBackup('${templateName}', '${backup.filename}'); return false;">
+                                    <i class="bi bi-clock-history"></i> ${backupDate}
+                                    <small class="text-muted d-block">${backup.filename}</small>
+                                </a>
+                            </li>
+                        `;
+                    });
+                    backupList.innerHTML = backupHtml;
+                } else {
+                    backupList.innerHTML = '<li><span class="dropdown-item-text">No backups available</span></li>';
+                }
+                
+                // Clear validation messages
+                document.getElementById('validationMessages').innerHTML = '';
+                document.getElementById('templateVariables').innerHTML = '';
+                
+            } catch (error) {
+                console.error('Error loading template:', error);
+                alert(`Error loading template: ${error.message}`);
+            }
+        }
+
+        async function validateTemplate() {
+            if (!currentTemplate || !templateEditor) return;
+            
+            try {
+                const content = templateEditor.value;
+                
+                const response = await fetch(`/admin/api/templates/${encodeURIComponent(currentTemplate)}/validate`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ content })
+                });
+                
+                if (!response.ok) throw new Error('Failed to validate template');
+                
+                const validation = await response.json();
+                
+                // Show validation results
+                const messagesDiv = document.getElementById('validationMessages');
+                let html = '';
+                
+                if (validation.valid) {
+                    html += '<div class="alert alert-success"><i class="bi bi-check-circle"></i> Template syntax is valid!</div>';
+                }
+                
+                if (validation.errors && validation.errors.length > 0) {
+                    html += '<div class="alert alert-danger">';
+                    html += '<h6><i class="bi bi-exclamation-triangle"></i> Validation Errors:</h6>';
+                    html += '<ul class="mb-0">';
+                    validation.errors.forEach(error => {
+                        html += `<li>${escapeHtml(error)}</li>`;
+                    });
+                    html += '</ul></div>';
+                }
+                
+                if (validation.warnings && validation.warnings.length > 0) {
+                    html += '<div class="alert alert-warning">';
+                    html += '<h6><i class="bi bi-exclamation-circle"></i> Warnings:</h6>';
+                    html += '<ul class="mb-0">';
+                    validation.warnings.forEach(warning => {
+                        html += `<li>${escapeHtml(warning)}</li>`;
+                    });
+                    html += '</ul></div>';
+                }
+                
+                messagesDiv.innerHTML = html;
+                
+                // Show variables used
+                if (validation.variables && validation.variables.length > 0) {
+                    const varsDiv = document.getElementById('templateVariables');
+                    varsDiv.innerHTML = `
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-title"><i class="bi bi-braces"></i> Template Variables</h6>
+                                <div class="d-flex flex-wrap gap-2">
+                                    ${validation.variables.map(v => `<span class="badge bg-secondary">${v}</span>`).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+            } catch (error) {
+                console.error('Error validating template:', error);
+                alert(`Error validating template: ${error.message}`);
+            }
+        }
+
+        async function saveTemplate() {
+            if (!currentTemplate || !templateEditor) return;
+            
+            // First validate
+            await validateTemplate();
+            
+            // Check if there are errors
+            const errorAlerts = document.querySelectorAll('#validationMessages .alert-danger');
+            if (errorAlerts.length > 0) {
+                if (!confirm('There are validation errors. Are you sure you want to save anyway?')) {
+                    return;
+                }
+            }
+            
+            try {
+                const content = templateEditor.value;
+                
+                const response = await fetch(`/admin/api/templates/${encodeURIComponent(currentTemplate)}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ content })
+                });
+                
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.error || 'Failed to save template');
+                }
+                
+                // Show success message
+                const messagesDiv = document.getElementById('validationMessages');
+                messagesDiv.innerHTML = `
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="bi bi-check-circle"></i> ${result.message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                ` + messagesDiv.innerHTML;
+                
+                // Reload template list to update backup count
+                loadTemplateList();
+                
+                // Reload current template to refresh backup list
+                setTimeout(() => loadTemplate(currentTemplate), 500);
+                
+            } catch (error) {
+                console.error('Error saving template:', error);
+                alert(`Error saving template: ${error.message}`);
+            }
+        }
+
+        async function restoreBackup(templateName, backupFilename) {
+            if (!confirm(`Are you sure you want to restore this backup?\n\nThis will replace the current template with the backup from:\n${backupFilename}`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/admin/api/templates/${encodeURIComponent(templateName)}/restore`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ backup_filename: backupFilename })
+                });
+                
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.error || 'Failed to restore backup');
+                }
+                
+                // Show success message
+                alert(result.message);
+                
+                // Reload template
+                loadTemplate(templateName);
+                
+            } catch (error) {
+                console.error('Error restoring backup:', error);
+                alert(`Error restoring backup: ${error.message}`);
+            }
+        }
+
+        async function previewTemplate() {
+            if (!currentTemplate) {
+                alert('Please select a template first.');
+                return;
+            }
+            
+            try {
+                // Open preview in a new window/tab
+                const previewUrl = `/?preview_template=${encodeURIComponent(currentTemplate)}`;
+                window.open(previewUrl, '_blank');
+            } catch (error) {
+                console.error('Error opening preview:', error);
+                alert(`Error opening preview: ${error.message}`);
+            }
+        }
+
+        async function clearTemplateCache() {
+            if (!confirm('Are you sure you want to clear the template cache?\n\nThis will clear all cached templates across the site.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/admin/api/templates/cache/clear', {
+                    method: 'POST'
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to clear cache');
+                }
+                
+                const result = await response.json();
+                alert(result.message || 'Template cache cleared successfully');
+                
+            } catch (error) {
+                console.error('Error clearing cache:', error);
+                alert(`Error clearing cache: ${error.message}`);
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Load templates on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadTemplateList();
+        });
+    </script>
+</body>
+</html>

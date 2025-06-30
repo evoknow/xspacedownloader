@@ -5709,16 +5709,20 @@ def admin_dashboard():
         flash('An error occurred loading the admin dashboard.', 'error')
         return redirect(url_for('index'))
 
-# Template editor shortcut route
+# Template editor routes
 @app.route('/templates')
 def templates_redirect():
     """Redirect /templates to admin templates editor."""
+    return redirect('/admin/templates')
+
+@app.route('/admin/templates')
+def admin_templates():
+    """Admin template editor page."""
     if not session.get('user_id') or not session.get('is_admin'):
         flash('Admin access required.', 'error')
         return redirect(url_for('index'))
     
-    # Redirect to admin dashboard with templates tab active
-    return redirect(url_for('admin_dashboard') + '#templates')
+    return render_template('admin_template_editor.html')
 
 # Dedicated admin pages
 @app.route('/admin/logs')
