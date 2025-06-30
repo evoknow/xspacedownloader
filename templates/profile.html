@@ -239,9 +239,9 @@
                                             <tr>
                                                 <td>
                                                     {% if purchase.paid_date %}
-                                                        {{ purchase.paid_date[:19]|replace('T', ' ') }}
+                                                        {{ purchase.paid_date.strftime('%Y-%m-%d %H:%M:%S') if purchase.paid_date else 'N/A' }}
                                                     {% else %}
-                                                        {{ purchase.created_at[:19]|replace('T', ' ') }}
+                                                        {{ purchase.created_at.strftime('%Y-%m-%d %H:%M:%S') if purchase.created_at else 'N/A' }}
                                                     {% endif %}
                                                 </td>
                                                 <td>
