@@ -292,7 +292,7 @@
             </button>
         </li>
         <li class="nav-item" role="presentation">
-            <button class="nav-link" id="templates-tab" data-bs-toggle="tab" data-bs-target="#templates" type="button" role="tab">
+            <button class="nav-link" id="templates-tab" data-bs-toggle="tab" data-bs-target="#templates" type="button" role="tab" onclick="setTimeout(loadTemplateList, 100)">
                 <i class="bi bi-code-square"></i> Templates
             </button>
         </li>
@@ -7116,8 +7116,20 @@ async function loadTemplateList() {
         const selectContainer = document.getElementById('templateSelect');
         const infoContainer = document.getElementById('templateInfo');
         
+        console.log('Looking for elements:', {
+            templateSelect: selectContainer,
+            templateInfo: infoContainer,
+            templatesTab: document.getElementById('templates')
+        });
+        
         if (!selectContainer || !infoContainer) {
             console.error('Template elements not found!');
+            // Try to force show the templates tab
+            const templatesTab = document.getElementById('templates');
+            if (templatesTab) {
+                templatesTab.classList.add('show', 'active');
+                console.log('Forced templates tab to show');
+            }
             return;
         }
         
@@ -7133,7 +7145,7 @@ async function loadTemplateList() {
         });
         
         selectContainer.innerHTML = options;
-        console.log('Template dropdown updated');
+        console.log('Template dropdown updated with', data.templates.length, 'templates');
         
         // Update info
         const formatSize = (bytes) => {
@@ -7147,6 +7159,8 @@ async function loadTemplateList() {
             <strong>${formatSize(data.info.total_size)}</strong> total, 
             <strong>${data.info.total_backups}</strong> backups (${formatSize(data.info.backup_size)})
         `;
+        
+        console.log('Template info updated');
         
     } catch (error) {
         console.error('Error loading templates:', error);
