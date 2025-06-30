@@ -270,16 +270,8 @@ class Payment:
                     WHERE id = %s
                 """, (txn['credits'], txn['user_id']))
             
-            # Record transaction in main transactions table
-            cursor.execute("""
-                INSERT INTO transactions 
-                (user_id, type, change_amount, description, date_time)
-                VALUES (%s, 'credit_purchase', %s, %s, NOW())
-            """, (
-                txn['user_id'],
-                txn['credits'],
-                f"Credit purchase: {txn['credits']} credits for ${txn['amount']}"
-            ))
+            # Credit transaction is already recorded in credit_txn table
+            # No need to duplicate in transactions table which is for AI usage tracking
             
             connection.commit()
             
@@ -370,16 +362,8 @@ class Payment:
                     WHERE id = %s
                 """, (txn['credits'], txn['user_id']))
                 
-                # Record transaction
-                cursor.execute("""
-                    INSERT INTO transactions 
-                    (user_id, type, change_amount, description, date_time)
-                    VALUES (%s, 'recurring_credits', %s, %s, NOW())
-                """, (
-                    txn['user_id'],
-                    txn['credits'],
-                    f"Monthly credit renewal: {txn['credits']} credits"
-                ))
+                # Recurring credit renewal logged in user account changes
+                # No need to use transactions table which is for AI usage tracking
                 
                 connection.commit()
                 
@@ -512,16 +496,8 @@ class Payment:
                     WHERE id = %s
                 """, (txn['credits'], txn['user_id']))
             
-            # Record transaction in main transactions table
-            cursor.execute("""
-                INSERT INTO transactions 
-                (user_id, type, change_amount, description, date_time)
-                VALUES (%s, 'credit_purchase', %s, %s, NOW())
-            """, (
-                txn['user_id'],
-                txn['credits'],
-                f"Credit purchase: {txn['credits']} credits for ${txn['amount']}"
-            ))
+            # Credit transaction is already recorded in credit_txn table
+            # No need to duplicate in transactions table which is for AI usage tracking
             
             connection.commit()
             cursor.close()
