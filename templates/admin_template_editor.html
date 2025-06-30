@@ -162,13 +162,22 @@
         let templateEditor = null;
 
         async function loadTemplateList() {
+            console.log('Loading template list...');
             try {
                 const response = await fetch('/admin/api/templates');
+                console.log('Response status:', response.status);
                 if (!response.ok) throw new Error('Failed to load templates');
                 
                 const data = await response.json();
+                console.log('Templates data:', data);
+                
                 const selectContainer = document.getElementById('templateSelect');
                 const infoContainer = document.getElementById('templateInfo');
+                
+                console.log('Elements found:', {
+                    selectContainer: !!selectContainer,
+                    infoContainer: !!infoContainer
+                });
                 
                 if (!selectContainer || !infoContainer) {
                     console.error('Template elements not found!');
@@ -187,6 +196,7 @@
                 });
                 
                 selectContainer.innerHTML = options;
+                console.log('Dropdown populated with', data.templates.length, 'templates');
                 
                 // Update info
                 const formatSize = (bytes) => {
@@ -200,6 +210,8 @@
                     <strong>${formatSize(data.info.total_size)}</strong> total, 
                     <strong>${data.info.total_backups}</strong> backups (${formatSize(data.info.backup_size)})
                 `;
+                
+                console.log('Template info updated');
                 
             } catch (error) {
                 console.error('Error loading templates:', error);
