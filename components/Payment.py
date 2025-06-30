@@ -77,16 +77,36 @@ class Payment:
             
             # Create credit transaction record
             connection = mysql.connector.connect(**self.db_config)
-            cursor = connection.cursor()
+            cursor = connection.cursor(dictionary=True)
             
+            # Check for recent pending transactions to prevent duplicates
             cursor.execute("""
-                INSERT INTO credit_txn 
-                (user_id, product_id, amount, credits_purchased, payment_status)
-                VALUES (%s, %s, %s, %s, 'pending')
-            """, (user_id, product_id, product['price'], product['credits']))
+                SELECT id, created_at 
+                FROM credit_txn 
+                WHERE user_id = %s 
+                AND product_id = %s 
+                AND payment_status = 'pending'
+                AND created_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE)
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (user_id, product_id))
             
-            txn_id = cursor.lastrowid
-            connection.commit()
+            recent_pending = cursor.fetchone()
+            
+            if recent_pending:
+                # Reuse the existing pending transaction
+                txn_id = recent_pending['id']
+                logger.info(f"Reusing existing pending transaction {txn_id} for user {user_id}, product {product_id}")
+            else:
+                # Create new transaction
+                cursor.execute("""
+                    INSERT INTO credit_txn 
+                    (user_id, product_id, amount, credits_purchased, payment_status)
+                    VALUES (%s, %s, %s, %s, 'pending')
+                """, (user_id, product_id, product['price'], product['credits']))
+                
+                txn_id = cursor.lastrowid
+                connection.commit()
             
             # Create Stripe checkout session
             line_items = [{
