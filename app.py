@@ -1414,15 +1414,33 @@ def create_checkout_session():
 
 @app.route('/payment/success')
 def payment_success():
-    """Payment success page."""
+    """Payment success page - immediately apply credits."""
     try:
         session_id = request.args.get('session_id')
         if not session_id:
             flash('Invalid payment session.', 'error')
             return redirect(url_for('pricing'))
         
-        # You can optionally retrieve session details from Stripe here
-        flash('Payment successful! Your credits have been added to your account.', 'success')
+        # Import Payment component
+        from components.Payment import Payment
+        payment = Payment()
+        
+        # Process the successful payment immediately
+        result = payment.process_successful_payment(session_id)
+        
+        if result.get('success'):
+            flash(f'Payment successful! {result.get("credits", 0)} credits have been added to your account.', 'success')
+            
+            # Send email receipt
+            if result.get('user_email'):
+                payment.send_receipt_email(result)
+        else:
+            error_msg = result.get('error', 'Payment processing error')
+            if 'already processed' in error_msg.lower():
+                flash('Payment already processed. Please check your credit balance.', 'info')
+            else:
+                flash(f'Payment received but there was an error applying credits: {error_msg}', 'warning')
+        
         return redirect(url_for('profile'))
         
     except Exception as e:

@@ -262,10 +262,27 @@ class Payment:
             ))
             
             connection.commit()
+            
+            # Get user email for receipt
+            cursor.execute("SELECT email FROM users WHERE id = %s", (txn['user_id'],))
+            user = cursor.fetchone()
+            
             cursor.close()
             connection.close()
             
             logger.info(f"Payment completed for transaction {txn_id}: {txn['credits']} credits added to user {txn['user_id']}")
+            
+            # Send email receipt
+            if user and user['email']:
+                self.send_receipt_email({
+                    'success': True,
+                    'credits': txn['credits'],
+                    'amount': float(txn['amount']),
+                    'product_name': txn['name'],
+                    'user_email': user['email'],
+                    'transaction_id': txn_id,
+                    'paid_date': datetime.now()
+                })
             
         except Exception as e:
             logger.error(f"Error handling successful payment: {e}")
@@ -395,3 +412,160 @@ class Payment:
     def get_stripe_publishable_key(self):
         """Get Stripe publishable key for frontend."""
         return self.stripe_publishable_key
+    
+    def process_successful_payment(self, session_id):
+        """Process a successful payment immediately when user returns from Stripe."""
+        try:
+            # Retrieve the checkout session from Stripe
+            session = stripe.checkout.Session.retrieve(session_id)
+            
+            if session.payment_status != 'paid':
+                return {'error': 'Payment not completed'}
+            
+            # Get transaction ID from session metadata
+            txn_id = session.metadata.get('txn_id')
+            if not txn_id:
+                logger.error(f"No transaction ID found in session {session_id} metadata")
+                return {'error': 'Transaction ID not found'}
+            
+            connection = mysql.connector.connect(**self.db_config)
+            cursor = connection.cursor(dictionary=True)
+            
+            # Check if already processed
+            cursor.execute("""
+                SELECT payment_status FROM credit_txn WHERE id = %s
+            """, (txn_id,))
+            txn_status = cursor.fetchone()
+            
+            if txn_status and txn_status['payment_status'] == 'completed':
+                cursor.close()
+                connection.close()
+                return {'error': 'Payment already processed'}
+            
+            # Get transaction details
+            cursor.execute("""
+                SELECT ct.*, p.credits, p.recurring_credits, p.name, u.email
+                FROM credit_txn ct
+                JOIN products p ON ct.product_id = p.id
+                JOIN users u ON ct.user_id = u.id
+                WHERE ct.id = %s
+            """, (txn_id,))
+            
+            txn = cursor.fetchone()
+            if not txn:
+                cursor.close()
+                connection.close()
+                logger.error(f"Transaction {txn_id} not found")
+                return {'error': 'Transaction not found'}
+            
+            # Update transaction status
+            cursor.execute("""
+                UPDATE credit_txn 
+                SET payment_status = 'completed',
+                    paid_date = NOW(),
+                    stripe_session_id = %s,
+                    stripe_payment_intent_id = %s
+                WHERE id = %s
+            """, (session.id, session.payment_intent, txn_id))
+            
+            # Check if this is a lifetime product
+            is_lifetime_product = (txn['recurring_credits'] == 'no' and 
+                                 'lifetime' in txn['name'].lower() and 
+                                 txn['credits'] > 0)
+            
+            if is_lifetime_product:
+                # For lifetime products, set recurring_credits and reset date
+                cursor.execute("""
+                    UPDATE users 
+                    SET credits = credits + %s,
+                        recurring_credits = %s,
+                        last_credit_reset = NOW()
+                    WHERE id = %s
+                """, (txn['credits'], txn['credits'], txn['user_id']))
+                
+                logger.info(f"Lifetime product purchased: Set recurring_credits to {txn['credits']} for user {txn['user_id']}")
+            else:
+                # For regular products, just add credits
+                cursor.execute("""
+                    UPDATE users 
+                    SET credits = credits + %s
+                    WHERE id = %s
+                """, (txn['credits'], txn['user_id']))
+            
+            # Record transaction in main transactions table
+            cursor.execute("""
+                INSERT INTO transactions 
+                (user_id, type, change_amount, description, date_time)
+                VALUES (%s, 'credit_purchase', %s, %s, NOW())
+            """, (
+                txn['user_id'],
+                txn['credits'],
+                f"Credit purchase: {txn['credits']} credits for ${txn['amount']}"
+            ))
+            
+            connection.commit()
+            cursor.close()
+            connection.close()
+            
+            logger.info(f"Payment processed immediately for transaction {txn_id}: {txn['credits']} credits added to user {txn['user_id']}")
+            
+            return {
+                'success': True,
+                'credits': txn['credits'],
+                'amount': float(txn['amount']),
+                'product_name': txn['name'],
+                'user_email': txn['email'],
+                'transaction_id': txn_id,
+                'paid_date': datetime.now()
+            }
+            
+        except stripe.error.StripeError as e:
+            logger.error(f"Stripe error processing payment: {e}")
+            return {'error': f'Payment verification error: {str(e)}'}
+        except Exception as e:
+            logger.error(f"Error processing successful payment: {e}")
+            return {'error': 'Payment processing error'}
+    
+    def send_receipt_email(self, payment_data):
+        """Send email receipt for successful payment."""
+        try:
+            from components.NotificationHelper import NotificationHelper
+            notification = NotificationHelper()
+            
+            # Format the receipt email
+            subject = f"Receipt for your XSpace Downloader purchase"
+            
+            body = f"""
+Thank you for your purchase!
+
+Order Details:
+--------------
+Product: {payment_data['product_name']}
+Credits: {payment_data['credits']}
+Amount: ${payment_data['amount']:.2f}
+Transaction ID: {payment_data['transaction_id']}
+Date: {payment_data['paid_date'].strftime('%B %d, %Y at %I:%M %p')}
+
+Your credits have been added to your account and are available for immediate use.
+
+You can view your credit balance and transaction history at:
+https://xspacedownload.com/profile
+
+Thank you for using XSpace Downloader!
+
+Best regards,
+XSpace Downloader Team
+"""
+            
+            # Send the email
+            notification.send_email(
+                to_email=payment_data['user_email'],
+                subject=subject,
+                body=body
+            )
+            
+            logger.info(f"Receipt email sent to {payment_data['user_email']} for transaction {payment_data['transaction_id']}")
+            
+        except Exception as e:
+            logger.error(f"Error sending receipt email: {e}")
+            # Don't fail the payment process if email fails
