@@ -8219,6 +8219,28 @@ def admin_restore_template(template_name):
         logger.error(f"Error restoring template: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
+@app.route('/admin/api/templates/cache/clear', methods=['POST'])
+def admin_clear_template_cache():
+    """Clear template cache (admin only)."""
+    if not session.get('user_id') or not session.get('is_admin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        from components.Template import Template
+        template_manager = Template()
+        
+        # Clear the template cache
+        template_manager._clear_template_cache()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Template cache cleared successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error clearing template cache: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
 # Stripe Configuration Routes
 @app.route('/admin/api/stripe_config', methods=['GET', 'POST'])
 def admin_stripe_config():

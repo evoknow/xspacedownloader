@@ -82,27 +82,19 @@
     display: block !important;
 }
 
-#templates {
-    background: #f0f0f0 !important;
-    border: 5px solid red !important;
-    min-height: 500px !important;
-}
-
-#templateList {
-    background: yellow !important;
-    border: 2px solid blue !important;
-    min-height: 200px !important;
-}
-
-#templateList .list-group-item {
-    cursor: pointer;
-    background: lightgreen !important;
-    border: 1px solid purple !important;
-}
-
 #templateEditor {
     font-family: 'Courier New', monospace;
     line-height: 1.4;
+    border: 1px solid #ddd;
+    border-radius: 0.375rem;
+}
+
+#templateSelect {
+    min-width: 200px;
+}
+
+.template-actions {
+    gap: 0.5rem;
 }
 
 /* Space ID link styling */
@@ -1830,7 +1822,7 @@
         </div>
         
         <!-- Templates Tab -->
-        <div class="tab-pane fade show active" id="templates" role="tabpanel">
+        <div class="tab-pane fade" id="templates" role="tabpanel">
             <div class="card mt-3">
                 <div class="card-header bg-primary text-white">
                     <div class="d-flex justify-content-between align-items-center">
@@ -1844,62 +1836,63 @@
                     </div>
                 </div>
                 <div class="card-body">
-                    <div class="row">
-                        <!-- Template List -->
-                        <div class="col-md-3">
-                            <h6 class="mb-3">Templates</h6>
-                            <div id="templateList" class="list-group">
-                                <div class="text-center p-3">
-                                    <div class="spinner-border spinner-border-sm" role="status">
-                                        <span class="visually-hidden">Loading...</span>
+                    <!-- Template Selection and Actions -->
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <label for="templateSelect" class="form-label">Select Template:</label>
+                            <select id="templateSelect" class="form-select" onchange="loadSelectedTemplate()">
+                                <option value="">Choose a template...</option>
+                            </select>
+                            <div id="templateInfo" class="mt-2 small text-muted"></div>
+                        </div>
+                        <div class="col-md-8">
+                            <div id="templateEditorActions" style="display: none;">
+                                <label class="form-label">Actions:</label>
+                                <div class="d-flex template-actions flex-wrap">
+                                    <button type="button" class="btn btn-sm btn-secondary" onclick="validateTemplate()">
+                                        <i class="bi bi-check-circle"></i> Validate
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-info" onclick="previewTemplate()">
+                                        <i class="bi bi-eye"></i> Preview
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-warning" onclick="clearTemplateCache()">
+                                        <i class="bi bi-arrow-clockwise"></i> Clear Cache
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-success" onclick="saveTemplate()">
+                                        <i class="bi bi-save"></i> Save
+                                    </button>
+                                    <div class="btn-group" role="group">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                                            <i class="bi bi-clock-history"></i> Backups
+                                        </button>
+                                        <ul class="dropdown-menu" id="backupList">
+                                            <li><span class="dropdown-item-text">No backups available</span></li>
+                                        </ul>
                                     </div>
                                 </div>
                             </div>
-                            <div id="templateInfo" class="mt-3 small text-muted"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Template Editor -->
+                    <div id="templateEditorContainer" style="display: none;">
+                        <!-- Validation Messages -->
+                        <div id="validationMessages" class="mb-3"></div>
+                        
+                        <!-- Code Editor -->
+                        <div class="border rounded mb-3" style="height: 600px;">
+                            <textarea id="templateEditor" class="form-control font-monospace" 
+                                      style="height: 100%; resize: none; font-size: 14px; border: none;"
+                                      placeholder="Select a template to edit..."></textarea>
                         </div>
                         
-                        <!-- Template Editor -->
-                        <div class="col-md-9">
-                            <div id="templateEditorContainer" style="display: none;">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h6 id="templateName" class="mb-0"></h6>
-                                    <div>
-                                        <button type="button" class="btn btn-sm btn-secondary me-2" onclick="validateTemplate()">
-                                            <i class="bi bi-check-circle"></i> Validate
-                                        </button>
-                                        <button type="button" class="btn btn-sm btn-success me-2" onclick="saveTemplate()">
-                                            <i class="bi bi-save"></i> Save
-                                        </button>
-                                        <div class="btn-group" role="group">
-                                            <button type="button" class="btn btn-sm btn-warning dropdown-toggle" data-bs-toggle="dropdown">
-                                                <i class="bi bi-clock-history"></i> Backups
-                                            </button>
-                                            <ul class="dropdown-menu" id="backupList">
-                                                <li><span class="dropdown-item-text">No backups available</span></li>
-                                            </ul>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <!-- Validation Messages -->
-                                <div id="validationMessages"></div>
-                                
-                                <!-- Code Editor -->
-                                <div class="border rounded" style="height: 500px;">
-                                    <textarea id="templateEditor" class="form-control font-monospace" 
-                                              style="height: 100%; resize: none; font-size: 13px;"
-                                              placeholder="Select a template to edit..."></textarea>
-                                </div>
-                                
-                                <!-- Template Variables -->
-                                <div id="templateVariables" class="mt-3"></div>
-                            </div>
-                            
-                            <div id="templateEditorPlaceholder" class="text-center text-muted py-5">
-                                <i class="bi bi-file-code fs-1"></i>
-                                <p class="mt-2">Select a template to edit</p>
-                            </div>
-                        </div>
+                        <!-- Template Variables -->
+                        <div id="templateVariables"></div>
+                    </div>
+                    
+                    <div id="templateEditorPlaceholder" class="text-center text-muted py-5">
+                        <i class="bi bi-file-code fs-1"></i>
+                        <p class="mt-2">Select a template from the dropdown above to start editing</p>
                     </div>
                 </div>
             </div>
@@ -2254,15 +2247,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Load template list when templates tab is shown
     document.getElementById('templates-tab').addEventListener('shown.bs.tab', function() {
-        console.log('Templates tab shown event fired');
         loadTemplateList();
     });
-    
-    // Load templates on page load for testing
-    setTimeout(() => {
-        console.log('Loading templates on page load for testing');
-        loadTemplateList();
-    }, 1000);
 });
 
 // User Management Functions
@@ -7121,53 +7107,33 @@ let templateEditor = null;
 async function loadTemplateList() {
     console.log('loadTemplateList() called');
     try {
-        console.log('Fetching templates...');
         const response = await fetch('/admin/api/templates');
         if (!response.ok) throw new Error('Failed to load templates');
         
         const data = await response.json();
         console.log('Templates data received:', data);
         
-        const listContainer = document.getElementById('templateList');
+        const selectContainer = document.getElementById('templateSelect');
         const infoContainer = document.getElementById('templateInfo');
         
-        console.log('DOM elements:', {
-            listContainer: listContainer,
-            infoContainer: infoContainer
-        });
-        
-        if (!listContainer) {
-            console.error('templateList element not found!');
-            return;
-        }
-        if (!infoContainer) {
-            console.error('templateInfo element not found!');
+        if (!selectContainer || !infoContainer) {
+            console.error('Template elements not found!');
             return;
         }
         
-        // Render template list
-        let html = '';
+        // Populate dropdown
+        let options = '<option value="">Choose a template...</option>';
         data.templates.forEach(template => {
-            const isActive = currentTemplate === template.name ? 'active' : '';
-            html += `
-                <button type="button" class="list-group-item list-group-item-action ${isActive}"
-                        onclick="loadTemplate('${template.name}')">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <i class="bi bi-file-code"></i> ${template.name}
-                        </div>
-                        <small class="text-muted">${template.backup_count} backups</small>
-                    </div>
-                    <small class="text-muted">Modified: ${new Date(template.modified).toLocaleString()}</small>
-                </button>
+            const selected = currentTemplate === template.name ? 'selected' : '';
+            options += `
+                <option value="${template.name}" ${selected}>
+                    ${template.name} (${template.backup_count} backups)
+                </option>
             `;
         });
         
-        listContainer.innerHTML = html || '<div class="text-muted p-3">No templates found</div>';
-        console.log('Template list HTML updated');
-        console.log('Generated HTML length:', html.length);
-        console.log('First few templates HTML:', html.substring(0, 500));
-        console.log('listContainer after update:', listContainer.innerHTML.substring(0, 500));
+        selectContainer.innerHTML = options;
+        console.log('Template dropdown updated');
         
         // Update info
         const formatSize = (bytes) => {
@@ -7177,19 +7143,32 @@ async function loadTemplateList() {
         };
         
         infoContainer.innerHTML = `
-            <strong>Template Info:</strong><br>
-            Templates: ${data.info.template_count}<br>
-            Total Size: ${formatSize(data.info.total_size)}<br>
-            Backups: ${data.info.total_backups} (${formatSize(data.info.backup_size)})
+            <strong>${data.info.template_count}</strong> templates, 
+            <strong>${formatSize(data.info.total_size)}</strong> total, 
+            <strong>${data.info.total_backups}</strong> backups (${formatSize(data.info.backup_size)})
         `;
         
     } catch (error) {
         console.error('Error loading templates:', error);
-        document.getElementById('templateList').innerHTML = `
-            <div class="alert alert-danger">
-                <i class="bi bi-exclamation-triangle"></i> Error loading templates: ${error.message}
-            </div>
-        `;
+        const infoContainer = document.getElementById('templateInfo');
+        if (infoContainer) {
+            infoContainer.innerHTML = `<span class="text-danger">Error loading templates: ${error.message}</span>`;
+        }
+    }
+}
+
+function loadSelectedTemplate() {
+    const select = document.getElementById('templateSelect');
+    const templateName = select.value;
+    
+    if (templateName) {
+        loadTemplate(templateName);
+    } else {
+        // Hide editor when no template selected
+        document.getElementById('templateEditorContainer').style.display = 'none';
+        document.getElementById('templateEditorActions').style.display = 'none';
+        document.getElementById('templateEditorPlaceholder').style.display = 'block';
+        currentTemplate = null;
     }
 }
 
@@ -7197,11 +7176,11 @@ async function loadTemplate(templateName) {
     try {
         currentTemplate = templateName;
         
-        // Update active state in list
-        document.querySelectorAll('#templateList .list-group-item').forEach(item => {
-            item.classList.remove('active');
-        });
-        event.target.closest('.list-group-item').classList.add('active');
+        // Update dropdown selection
+        const select = document.getElementById('templateSelect');
+        if (select.value !== templateName) {
+            select.value = templateName;
+        }
         
         // Load template content
         const response = await fetch(`/admin/api/templates/${encodeURIComponent(templateName)}`);
@@ -7209,12 +7188,10 @@ async function loadTemplate(templateName) {
         
         const data = await response.json();
         
-        // Show editor
+        // Show editor and actions
         document.getElementById('templateEditorContainer').style.display = 'block';
+        document.getElementById('templateEditorActions').style.display = 'block';
         document.getElementById('templateEditorPlaceholder').style.display = 'none';
-        
-        // Set template name
-        document.getElementById('templateName').textContent = templateName;
         
         // Set content
         if (!templateEditor) {
@@ -7403,6 +7380,45 @@ async function restoreBackup(templateName, backupFilename) {
     } catch (error) {
         console.error('Error restoring backup:', error);
         alert(`Error restoring backup: ${error.message}`);
+    }
+}
+
+async function previewTemplate() {
+    if (!currentTemplate) {
+        alert('Please select a template first.');
+        return;
+    }
+    
+    try {
+        // Open preview in a new window/tab
+        const previewUrl = `/?preview_template=${encodeURIComponent(currentTemplate)}`;
+        window.open(previewUrl, '_blank');
+    } catch (error) {
+        console.error('Error opening preview:', error);
+        alert(`Error opening preview: ${error.message}`);
+    }
+}
+
+async function clearTemplateCache() {
+    if (!confirm('Are you sure you want to clear the template cache?\n\nThis will clear all cached templates across the site.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/admin/api/templates/cache/clear', {
+            method: 'POST'
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to clear cache');
+        }
+        
+        const result = await response.json();
+        alert(result.message || 'Template cache cleared successfully');
+        
+    } catch (error) {
+        console.error('Error clearing cache:', error);
+        alert(`Error clearing cache: ${error.message}`);
     }
 }
 
