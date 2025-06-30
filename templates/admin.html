@@ -82,8 +82,22 @@
     display: block !important;
 }
 
+#templates {
+    background: #f0f0f0 !important;
+    border: 5px solid red !important;
+    min-height: 500px !important;
+}
+
+#templateList {
+    background: yellow !important;
+    border: 2px solid blue !important;
+    min-height: 200px !important;
+}
+
 #templateList .list-group-item {
     cursor: pointer;
+    background: lightgreen !important;
+    border: 1px solid purple !important;
 }
 
 #templateEditor {
@@ -7151,6 +7165,9 @@ async function loadTemplateList() {
         
         listContainer.innerHTML = html || '<div class="text-muted p-3">No templates found</div>';
         console.log('Template list HTML updated');
+        console.log('Generated HTML length:', html.length);
+        console.log('First few templates HTML:', html.substring(0, 500));
+        console.log('listContainer after update:', listContainer.innerHTML.substring(0, 500));
         
         // Update info
         const formatSize = (bytes) => {
