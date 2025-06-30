@@ -77,7 +77,15 @@
     content: "\f120"; /* bi-arrow-down */
 }
 
-/* Template Editor styling */
+/* Template Editor styling - force visibility */
+#templates {
+    display: block !important;
+    opacity: 1 !important;
+    z-index: 999 !important;
+    position: relative !important;
+    background: white !important;
+}
+
 #templates.show {
     display: block !important;
 }
@@ -91,10 +99,19 @@
 
 #templateSelect {
     min-width: 200px;
+    background: white !important;
+    border: 2px solid #007bff !important;
 }
 
 .template-actions {
     gap: 0.5rem;
+}
+
+#templateInfo {
+    background: #f8f9fa !important;
+    padding: 10px !important;
+    border: 1px solid #dee2e6 !important;
+    border-radius: 0.375rem !important;
 }
 
 /* Space ID link styling */
