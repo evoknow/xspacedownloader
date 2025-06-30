@@ -2,7 +2,7 @@
 
 {% block title %}Template Editor - XSpace Downloader Admin{% endblock %}
 
-{% block extra_head %}
+{% block head %}
 <style>
     #templateEditor {
         font-family: 'Courier New', monospace;
@@ -155,8 +155,10 @@
 </div>
 {% endblock %}
 
-{% block extra_js %}
+{% block scripts %}
 <script>
+        console.log('Template Editor script loaded');
+        
         // Template Editor Functions
         let currentTemplate = null;
         let templateEditor = null;
@@ -525,6 +527,7 @@
 
         // Load templates on page load
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, initializing template editor...');
             loadTemplateList();
         });
 </script>
