@@ -1,85 +1,67 @@
-# XSpace Downloader Support Knowledge Base
+# XSpace Downloader Support KB
 
-## Common Issues and Solutions
+## Download Issues
+- Space not downloading: Check valid URL, public/permission access, retry
+- Stuck/slow download: Large files take time, check queue position, 30min+ contact support
+- Corrupted file: Network interruption, retry download
+- Missing segments: Original space recording gaps, check source
+- Download failed: Check space availability, URL format, network connection
 
-### Download Issues
+## Account/Auth
+- Login failed: Verify email/password, reset password, clear cache
+- Account locked: Check email for notice, possible TOS violation
+- Verification email: Check spam, wait 10min, resend
+- Session expired: Re-login required
+- Wrong email: Contact support with proof
 
-**Problem: Space won't download**
-- Check if the space URL is valid and accessible
-- Ensure the space is public or you have proper permissions
-- Verify your internet connection is stable
-- Try refreshing the page and attempting the download again
+## Audio/Transcription
+- Poor audio: Source quality limitation, cannot enhance
+- No audio: Check original space, possible speaker issue
+- Transcription failed: Audio too quiet/noisy, non-English content
+- Transcription slow: Queue based, large files take longer
+- Wrong language: Currently English only
 
-**Problem: Download stuck or very slow**
-- Large spaces may take significant time to process
-- Check the queue to see if there are many downloads ahead of yours
-- Try downloading during off-peak hours
-- Contact support if download has been stuck for over 30 minutes
+## Payment/Subscription
+- Payment declined: Check card details, funds, try different card
+- Subscription inactive: Wait 10min, logout/login, check email
+- Refund request: Within 7 days unused, contact support
+- Plan upgrade: Immediate effect, prorated billing
+- Cancel subscription: Self-service in account settings
 
-**Problem: Downloaded file is corrupted or incomplete**
-- This usually indicates a network interruption during download
-- Try downloading the space again
-- Check if the original space is still available
-- Contact support if the issue persists
+## Technical
+- Site slow/down: Check internet, clear cache, try different browser
+- Error messages: Note exact text, refresh page, report if persists
+- Mobile issues: Use desktop for best experience
+- API errors: Rate limited, wait before retry
+- Storage full: Delete old downloads, upgrade plan
 
-### Account Issues
+## Queue/Processing
+- Queue position high: Peak hours busy, premium users priority
+- Processing stuck: 30min+ likely failed, retry
+- Multiple downloads: Sequential processing, not parallel
+- Download history: Check account page
+- Re-download: Available for 7 days
 
-**Problem: Cannot log in**
-- Verify your email and password are correct
-- Try resetting your password using the "Forgot Password" link
-- Clear your browser cache and cookies
-- Disable browser extensions that might interfere
+## File/Format
+- Wrong format: MP3/M4A only, no video
+- File size: Depends on space length/quality
+- Metadata missing: Not all spaces have complete data
+- Filename issues: Auto-sanitized for compatibility
 
-**Problem: Account locked or suspended**
-- Check your email for suspension notifications
-- Contact support if you believe this is an error
-- Ensure you haven't violated our terms of service
+## Limits
+- Daily limit reached: Resets midnight UTC, upgrade for more
+- File size limit: 3hr spaces max free, 6hr premium
+- Storage limit: 10GB free, 100GB premium
+- API rate limit: 60/hour free, 600/hour premium
 
-### Audio/Video Quality Issues
+## Common Errors
+- 404: Space deleted/private
+- 403: No permission/subscription expired
+- 500: Server error, retry later
+- 429: Rate limited, slow down
+- Network timeout: Connection issue
 
-**Problem: Poor audio quality in downloaded files**
-- Audio quality depends on the original space recording
-- We download at the highest quality available from the source
-- Some spaces may have inherent audio quality issues
-- Contact support if you believe there's a technical issue
-
-**Problem: Missing audio segments**
-- This may occur if the original space had connection issues
-- We can only download what was properly recorded in the original space
-- Check if the original space has the same gaps
-
-### Payment and Subscription Issues
-
-**Problem: Payment failed**
-- Verify your payment method details are correct
-- Check if your card has sufficient funds
-- Try using a different payment method
-- Contact your bank if the issue persists
-
-**Problem: Subscription not activated**
-- Check your email for confirmation
-- Allow up to 10 minutes for activation
-- Try logging out and back in
-- Contact support if still not activated after 30 minutes
-
-### Technical Issues
-
-**Problem: Website not loading or very slow**
-- Check your internet connection
-- Try clearing browser cache
-- Try using a different browser
-- Check if the issue persists on mobile vs desktop
-
-**Problem: Error messages during use**
-- Note the exact error message text
-- Try refreshing the page
-- Clear browser cache and cookies
-- Contact support with the specific error message
-
-## Contact Information
-
-For issues not covered in this knowledge base, our human support team will review your ticket and respond as quickly as possible. Critical issues affecting service availability are prioritized and routed to our admin team.
-
-## Service Status
-
-If you're experiencing widespread issues, check our status page or recent announcements for any known service disruptions.
+## Priority Guidelines
+- Normal: Questions, minor issues, how-to
+- High: Service degraded, payment issues, data problems
+- Critical: Complete outage, data loss, security breach
