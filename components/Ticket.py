@@ -322,11 +322,11 @@ Respond in JSON format:
     def add_response(self, ticket_id: int, staff_id: int, response_text: str) -> Dict[str, Any]:
         """Add a staff response to a ticket"""
         try:
-            # Verify staff status
-            self.cursor.execute("SELECT is_staff FROM users WHERE id = %s", (staff_id,))
+            # Verify staff or admin status
+            self.cursor.execute("SELECT is_staff, is_admin FROM users WHERE id = %s", (staff_id,))
             user = self.cursor.fetchone()
             
-            if not user or not user['is_staff']:
+            if not user or not (user['is_staff'] or user['is_admin']):
                 return {"success": False, "error": "Unauthorized"}
             
             # Get current ticket

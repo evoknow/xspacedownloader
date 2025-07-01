@@ -409,13 +409,25 @@
         
         // Responses
         const responsesDiv = document.getElementById('modalResponses');
-        if (ticket.response && Array.isArray(ticket.response)) {
-            responsesDiv.innerHTML = ticket.response.map(resp => `
-                <div class="ticket-response">
-                    <strong>${new Date(resp.timestamp).toLocaleString()}</strong><br>
-                    ${resp.response}
-                </div>
-            `).join('');
+        console.log('Ticket response data:', ticket.response);
+        
+        if (ticket.response && Array.isArray(ticket.response) && ticket.response.length > 0) {
+            responsesDiv.innerHTML = ticket.response.map(resp => {
+                console.log('Processing response:', resp);
+                
+                // Handle the format {timestamp: response_text}
+                const timestamp = Object.keys(resp)[0];
+                const responseText = resp[timestamp];
+                
+                console.log('Timestamp:', timestamp, 'Response:', responseText);
+                
+                return `
+                    <div class="ticket-response">
+                        <strong>${new Date(timestamp).toLocaleString()}</strong><br>
+                        ${responseText || 'No response text'}
+                    </div>
+                `;
+            }).join('');
         } else {
             responsesDiv.innerHTML = '<p class="text-muted">No responses yet</p>';
         }
