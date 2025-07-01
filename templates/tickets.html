@@ -376,22 +376,8 @@
                     <div class="mb-3">
                         <label for="issueDetail" class="form-label">Issue Details</label>
                         <textarea id="issueDetail" name="issue_detail" class="form-control"></textarea>
-                    </div>
-                    <div class="mb-3">
-                        <label for="issuePriority" class="form-label">Priority</label>
-                        <select id="issuePriority" name="priority" class="form-select" required>
-                            <option value="0">Normal</option>
-                            <option value="1">Medium</option>
-                            <option value="2">High</option>
-                            <option value="3">Critical</option>
-                        </select>
                         <div class="form-text">
-                            <small>
-                                <strong>Normal:</strong> General questions or non-urgent issues<br>
-                                <strong>Medium:</strong> Issues affecting functionality but not blocking<br>
-                                <strong>High:</strong> Issues preventing normal use of the service<br>
-                                <strong>Critical:</strong> Service completely down or data loss
-                            </small>
+                            <small>Please provide as much detail as possible. Our AI will analyze your issue and determine the appropriate priority level.</small>
                         </div>
                     </div>
                 </div>
@@ -489,7 +475,6 @@ $(document).ready(function() {
         const formData = new FormData();
         formData.append('issue_title', $('#issueTitle').val());
         formData.append('issue_detail', $('#issueDetail').summernote('code'));
-        formData.append('priority', $('#issuePriority').val());
         
         $.ajax({
             url: '{{ url_for("create_ticket") }}',

@@ -34,7 +34,7 @@ class Ticket:
         if self.conn:
             self.conn.close()
 
-    def create_ticket(self, user_id: int, issue_title: str, issue_detail: str, priority: int = 0) -> Dict[str, Any]:
+    def create_ticket(self, user_id: int, issue_title: str, issue_detail: str) -> Dict[str, Any]:
         """Create a new support ticket"""
         try:
             # Check if user is staff or admin (can create multiple tickets)
@@ -57,11 +57,14 @@ class Ticket:
                 if result['count'] > 0:
                     return {"success": False, "error": "You already have an open ticket. Please add additional information to your existing ticket instead of creating a new one."}
             
-            # Use provided priority (already set as parameter)
+            # Get AI priority and response based on Support.md
+            ai_response = self.get_ai_priority_and_response(issue_title, issue_detail)
+            priority = ai_response.get('priority', 0)
+            initial_response = ai_response.get('response', '')
             
             # Create ticket
             now = datetime.datetime.now()
-            response_json = json.dumps([])  # No automatic AI response
+            response_json = json.dumps([{now.isoformat(): initial_response}]) if initial_response else json.dumps([])
             
             self.cursor.execute("""
                 INSERT INTO tickets (user_id, issue_title, issue_detail, priority, opened_at, 
@@ -93,14 +96,21 @@ class Ticket:
     def get_ai_priority_and_response(self, issue_title: str, issue_detail: str) -> Dict[str, Any]:
         """Get AI-determined priority and potential response"""
         try:
-            # Read knowledge base
+            # Read Support.md knowledge base
             kb_content = ""
-            kb_path = "/var/www/production/xspacedownload.com/website/xspacedownloader/KB.md"
+            kb_path = "/var/www/production/xspacedownload.com/website/xspacedownloader/Support.md"
             if os.path.exists(kb_path):
                 with open(kb_path, 'r') as f:
                     kb_content = f.read()
             
-            prompt = f"""As the support router AI for X Space Downloader with knowledge of the system per given knowledge data, identify the following issue's priority (0 - normal, 1 - medium, 2 - high, 3 - critical) and a potential response. If you have low confidence in responding to the issue based on the knowledge base information, just tell user that the issue will be reviewed by a human expert and responded as soon as possible. But if you are confident that you know the answer, please provide the answer.
+            prompt = f"""As the support AI for XSpace Downloader, analyze this support ticket and determine the priority and provide an appropriate response based on the knowledge base.
+
+Priority Scale:
+- 0 = Normal (general questions, minor issues)
+- 1 = High (functionality problems, service issues)  
+- 2 = Critical (service down, data loss, security issues)
+
+If you can provide a helpful answer based on the knowledge base, do so. If you cannot confidently answer from the knowledge base, respond that a human support team member will review and respond shortly.
 
 Issue Title: {issue_title}
 Issue Details: {issue_detail}
@@ -110,7 +120,7 @@ Knowledge Base:
 
 Respond in JSON format:
 {{
-    "priority": <0-3>,
+    "priority": <0-2>,
     "response": "<your response to the user>",
     "confidence": "<high/medium/low>"
 }}"""
@@ -389,13 +399,13 @@ Respond in JSON format:
         """Send email notification for new ticket"""
         try:
             # Get staff emails
-            if priority == 3:  # Critical - notify admins only
+            if priority == 2:  # Critical - notify admins only
                 self.cursor.execute("""
                     SELECT email, display_name 
                     FROM users 
                     WHERE is_admin = 1
                 """)
-            else:  # Normal to high - notify staff only
+            else:  # Normal (0) and High (1) - notify staff only
                 self.cursor.execute("""
                     SELECT email, display_name 
                     FROM users 
