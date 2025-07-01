@@ -1256,16 +1256,21 @@ def create_ticket():
         
         issue_title = request.form.get('issue_title', '').strip()
         issue_detail = request.form.get('issue_detail', '').strip()
+        priority = int(request.form.get('priority', 0))  # Get priority from form
         
         if not issue_title or not issue_detail:
             return jsonify({'success': False, 'error': 'Title and details are required'}), 400
+        
+        # Validate priority
+        if priority not in [0, 1, 2, 3]:
+            priority = 0  # Default to normal if invalid
         
         with open('db_config.json', 'r') as f:
             config = json.load(f)
         db_config = config['mysql']
         ticket = Ticket(db_config)
         
-        result = ticket.create_ticket(user_id, issue_title, issue_detail)
+        result = ticket.create_ticket(user_id, issue_title, issue_detail, priority)
         ticket.close()
         
         if result['success']:

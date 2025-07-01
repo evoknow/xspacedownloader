@@ -34,7 +34,7 @@ class Ticket:
         if self.conn:
             self.conn.close()
 
-    def create_ticket(self, user_id: int, issue_title: str, issue_detail: str) -> Dict[str, Any]:
+    def create_ticket(self, user_id: int, issue_title: str, issue_detail: str, priority: int = 0) -> Dict[str, Any]:
         """Create a new support ticket"""
         try:
             # Check if user is staff or admin (can create multiple tickets)
@@ -57,14 +57,11 @@ class Ticket:
                 if result['count'] > 0:
                     return {"success": False, "error": "You already have an open ticket. Please add additional information to your existing ticket instead of creating a new one."}
             
-            # Get AI priority and response
-            ai_response = self.get_ai_priority_and_response(issue_title, issue_detail)
-            priority = ai_response.get('priority', 0)
-            initial_response = ai_response.get('response', '')
+            # Use provided priority (already set as parameter)
             
             # Create ticket
             now = datetime.datetime.now()
-            response_json = json.dumps([{now.isoformat(): initial_response}]) if initial_response else json.dumps([])
+            response_json = json.dumps([])  # No automatic AI response
             
             self.cursor.execute("""
                 INSERT INTO tickets (user_id, issue_title, issue_detail, priority, opened_at, 
@@ -76,9 +73,11 @@ class Ticket:
             self.conn.commit()
             ticket_id = self.cursor.lastrowid
             
-            # Send email notifications for medium to critical priority
-            if priority >= 1:
-                self.send_new_ticket_notification(ticket_id, user_id, issue_title, priority)
+            # Send user confirmation email
+            self.send_user_ticket_confirmation(ticket_id, user_id, issue_title)
+            
+            # Send staff notification based on priority
+            self.send_new_ticket_notification(ticket_id, user_id, issue_title, priority)
             
             return {
                 "success": True, 
@@ -390,13 +389,13 @@ Respond in JSON format:
         """Send email notification for new ticket"""
         try:
             # Get staff emails
-            if priority == 3:  # Critical - notify staff and admins
+            if priority == 3:  # Critical - notify admins only
                 self.cursor.execute("""
                     SELECT email, display_name 
                     FROM users 
-                    WHERE is_staff = 1 OR is_admin = 1
+                    WHERE is_admin = 1
                 """)
-            else:  # Normal to high - notify only staff
+            else:  # Normal to high - notify staff only
                 self.cursor.execute("""
                     SELECT email, display_name 
                     FROM users 
@@ -427,6 +426,35 @@ Respond in JSON format:
                 
         except Exception as e:
             print(f"Error sending new ticket notification: {e}")
+
+    def send_user_ticket_confirmation(self, ticket_id: int, user_id: int, issue_title: str):
+        """Send confirmation email to user who created the ticket"""
+        try:
+            # Get user info
+            self.cursor.execute("SELECT email, display_name FROM users WHERE id = %s", (user_id,))
+            user = self.cursor.fetchone()
+            
+            if not user:
+                return
+            
+            subject = f"Support Ticket Created: {issue_title}"
+            body = f"""
+            <h3>Your Support Ticket Has Been Created</h3>
+            <p>Hello {user['display_name'] or user['email']},</p>
+            <p>Your support ticket has been successfully created and will be reviewed by our support team.</p>
+            <p><strong>Ticket #:</strong> {ticket_id}</p>
+            <p><strong>Subject:</strong> {issue_title}</p>
+            <p><a href="https://xspacedownload.com/tickets?id={ticket_id}">View Your Ticket</a></p>
+            <p>You will receive an email notification when we respond to your ticket.</p>
+            <p>Thank you for using XSpace Downloader!</p>
+            """
+            
+            email = Email(self.db_config)
+            email.send_email(user['email'], subject, body)
+            email.close()
+            
+        except Exception as e:
+            print(f"Error sending user ticket confirmation: {e}")
 
     def send_response_notification(self, ticket_id: int, user_id: int):
         """Send email notification when ticket is responded to"""
