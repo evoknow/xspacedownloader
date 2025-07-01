@@ -175,9 +175,9 @@
                                         <th class="sort" data-sort="priority">Priority</th>
                                         <th class="sort" data-sort="status">Status</th>
                                         <th class="sort" data-sort="issue_title">Subject</th>
-                                        <th class="sort" data-sort="username">User</th>
+                                        <th class="sort" data-sort="user_email">User</th>
                                         <th class="sort" data-sort="opened_at">Created</th>
-                                        <th class="sort" data-sort="staff_username">Staff</th>
+                                        <th class="sort" data-sort="staff_email">Staff</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
@@ -340,9 +340,9 @@
                             ${ticket.issue_title}
                         </div>
                     </td>
-                    <td class="username">${ticket.username || 'Unknown'}</td>
+                    <td class="user_email">${ticket.user_email || 'Unknown'}</td>
                     <td class="opened_at">${createdDate}</td>
-                    <td class="staff_username">${ticket.staff_username || '-'}</td>
+                    <td class="staff_email">${ticket.staff_email || '-'}</td>
                     <td>
                         <button class="btn btn-sm btn-outline-primary" 
                                 onclick="event.stopPropagation(); openTicketModal(${ticket.id})">
@@ -358,7 +358,7 @@
             ticketsList.reIndex();
         } else {
             const options = {
-                valueNames: ['id', 'priority', 'status', 'issue_title', 'username', 'opened_at', 'staff_username'],
+                valueNames: ['id', 'priority', 'status', 'issue_title', 'user_email', 'opened_at', 'staff_email'],
                 pagination: true,
                 page: 25
             };
@@ -391,7 +391,7 @@
         // Populate modal
         document.getElementById('modalTicketId').textContent = ticket.id;
         document.getElementById('modalTicketTitle').textContent = ticket.issue_title;
-        document.getElementById('modalUserInfo').textContent = `${ticket.username} (${ticket.email})`;
+        document.getElementById('modalUserInfo').textContent = `${ticket.user_email} (${ticket.email})`;
         document.getElementById('modalPriority').innerHTML = 
             `<span class="priority-${ticket.priority_label.toLowerCase()}">${ticket.priority_label}</span>`;
         document.getElementById('modalStatus').innerHTML = 
@@ -400,7 +400,7 @@
             new Date(ticket.opened_at).toLocaleString();
         document.getElementById('modalUpdated').textContent = 
             ticket.last_updated_by_staff ? new Date(ticket.last_updated_by_staff).toLocaleString() : 'Never';
-        document.getElementById('modalStaff').textContent = ticket.staff_username || 'Unassigned';
+        document.getElementById('modalStaff').textContent = ticket.staff_email || 'Unassigned';
         
         // Issue detail
         const issueDetail = ticket.issue_detail || {};

@@ -8309,8 +8309,8 @@ def admin_api_tickets():
         # Build query based on status filter
         if status_filter == 'open':
             query = """
-                SELECT t.*, u.username, u.email, 
-                       COALESCE(s.username, '') as staff_username,
+                SELECT t.*, u.email as user_email, u.email, 
+                       COALESCE(s.email, '') as staff_email,
                        CASE 
                            WHEN t.priority = 3 THEN 'Critical'
                            WHEN t.priority = 2 THEN 'High'
@@ -8325,8 +8325,8 @@ def admin_api_tickets():
             """
         elif status_filter == 'closed':
             query = """
-                SELECT t.*, u.username, u.email,
-                       COALESCE(s.username, '') as staff_username,
+                SELECT t.*, u.email as user_email, u.email,
+                       COALESCE(s.email, '') as staff_email,
                        CASE 
                            WHEN t.priority = 3 THEN 'Critical'
                            WHEN t.priority = 2 THEN 'High'
@@ -8342,8 +8342,8 @@ def admin_api_tickets():
             """
         else:  # all
             query = """
-                SELECT t.*, u.username, u.email,
-                       COALESCE(s.username, '') as staff_username,
+                SELECT t.*, u.email as user_email, u.email,
+                       COALESCE(s.email, '') as staff_email,
                        CASE 
                            WHEN t.priority = 3 THEN 'Critical'
                            WHEN t.priority = 2 THEN 'High'
