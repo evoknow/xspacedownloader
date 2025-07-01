@@ -1,0 +1,528 @@
+{% extends "base.html" %}
+
+{% block title %}Ticket Management - XSpace Downloader Admin{% endblock %}
+
+{% block head %}
+<!-- List.js for pagination and search -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<style>
+    /* List.js styling */
+    .search {
+        width: 100%;
+        padding: 0.375rem 0.75rem;
+        margin-bottom: 1rem;
+        font-size: 1rem;
+        border: 1px solid var(--bs-border-color);
+        border-radius: 0.25rem;
+        background: var(--bs-body-bg);
+        color: var(--bs-body-color);
+    }
+
+    .pagination {
+        display: flex;
+        justify-content: center;
+        margin-top: 1rem;
+    }
+
+    .pagination li {
+        display: inline-block;
+        margin: 0 2px;
+    }
+
+    .pagination li a {
+        display: block;
+        padding: 0.375rem 0.75rem;
+        color: var(--bs-primary);
+        text-decoration: none;
+        border: 1px solid var(--bs-border-color);
+        border-radius: 0.25rem;
+        background: var(--bs-body-bg);
+    }
+
+    .pagination li.active a {
+        background-color: var(--bs-primary);
+        color: white;
+        border-color: var(--bs-primary);
+    }
+
+    .pagination li a:hover {
+        background-color: var(--bs-secondary-bg);
+    }
+
+    /* Ticket styling */
+    #ticketsList .sort {
+        cursor: pointer;
+        user-select: none;
+    }
+
+    #ticketsList .sort:hover {
+        background-color: var(--bs-secondary-bg);
+    }
+
+    .priority-critical { color: #dc3545; font-weight: bold; }
+    .priority-high { color: #fd7e14; font-weight: bold; }
+    .priority-medium { color: #ffc107; font-weight: bold; }
+    .priority-normal { color: var(--bs-secondary); }
+
+    .status-open { color: #198754; }
+    .status-responded { color: #0d6efd; }
+    .status-closed { color: var(--bs-secondary); }
+
+    .ticket-row {
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+
+    .ticket-row:hover {
+        background-color: var(--bs-secondary-bg);
+    }
+
+    .ticket-detail {
+        max-width: 300px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .admin-nav {
+        background: var(--bs-primary) !important;
+        border-bottom: 1px solid var(--bs-border-color);
+        margin-bottom: 2rem;
+    }
+    
+    .admin-nav .nav-link {
+        color: white !important;
+    }
+    
+    .admin-nav .nav-link:hover {
+        color: var(--bs-primary-text-emphasis) !important;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 0.375rem;
+    }
+
+    .ticket-response {
+        background: var(--bs-secondary-bg);
+        border-left: 3px solid var(--bs-primary);
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 0.375rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Admin Navigation -->
+<div class="admin-nav py-2 mb-4">
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center">
+                <a href="/admin" class="nav-link me-3">
+                    <i class="bi bi-arrow-left"></i> Back to Admin Dashboard
+                </a>
+                <span class="text-white-50">|</span>
+                <span class="nav-link text-white ms-3">
+                    <i class="bi bi-ticket-perforated"></i> Ticket Management
+                </span>
+            </div>
+            <div class="text-white-50 small">
+                Staff & Admin Tools
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Content -->
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h4 class="mb-0"><i class="bi bi-ticket-perforated"></i> Support Tickets</h4>
+                            <small class="text-muted">Manage customer support tickets</small>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <select id="statusFilter" class="form-select form-select-sm" onchange="filterTickets()">
+                                <option value="all">All Tickets</option>
+                                <option value="open" selected>Open Tickets</option>
+                                <option value="closed">Closed Tickets</option>
+                            </select>
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadTickets()">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Search and Stats -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <input class="search form-control" placeholder="Search tickets...">
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <span id="ticketStats" class="text-muted">Loading tickets...</span>
+                        </div>
+                    </div>
+
+                    <!-- Tickets Table -->
+                    <div id="ticketsList">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th class="sort" data-sort="id">#</th>
+                                        <th class="sort" data-sort="priority">Priority</th>
+                                        <th class="sort" data-sort="status">Status</th>
+                                        <th class="sort" data-sort="issue_title">Subject</th>
+                                        <th class="sort" data-sort="username">User</th>
+                                        <th class="sort" data-sort="opened_at">Created</th>
+                                        <th class="sort" data-sort="staff_username">Staff</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="list">
+                                    <!-- Tickets will be populated here -->
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Pagination -->
+                        <ul class="pagination"></ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Ticket Detail Modal -->
+<div class="modal fade" id="ticketModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-ticket-perforated"></i>
+                    Ticket #<span id="modalTicketId"></span> - <span id="modalTicketTitle"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Ticket Info -->
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <strong>User:</strong> <span id="modalUserInfo"></span><br>
+                        <strong>Priority:</strong> <span id="modalPriority"></span><br>
+                        <strong>Status:</strong> <span id="modalStatus"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Created:</strong> <span id="modalCreated"></span><br>
+                        <strong>Last Updated:</strong> <span id="modalUpdated"></span><br>
+                        <strong>Staff:</strong> <span id="modalStaff"></span>
+                    </div>
+                </div>
+
+                <!-- Issue Detail -->
+                <div class="mb-3">
+                    <h6>Issue Description:</h6>
+                    <div id="modalIssueDetail" class="p-3 bg-light rounded"></div>
+                </div>
+
+                <!-- Responses -->
+                <div class="mb-3">
+                    <h6>Responses:</h6>
+                    <div id="modalResponses"></div>
+                </div>
+
+                <!-- Add Response -->
+                <div class="mb-3">
+                    <h6>Add Response:</h6>
+                    <textarea id="responseText" class="form-control" rows="4" placeholder="Enter your response..."></textarea>
+                </div>
+
+                <!-- Status Update -->
+                <div class="mb-3">
+                    <h6>Update Status:</h6>
+                    <select id="newStatus" class="form-select">
+                        <option value="0">Open</option>
+                        <option value="1">Responded</option>
+                        <option value="2">Closed</option>
+                        <option value="-6">Archived</option>
+                        <option value="-9">Deleted by Staff</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-success" onclick="submitResponse()">
+                    <i class="bi bi-reply"></i> Send Response
+                </button>
+                <button type="button" class="btn btn-primary" onclick="updateStatus()">
+                    <i class="bi bi-arrow-repeat"></i> Update Status
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    console.log('Admin Tickets script loaded');
+    
+    let ticketsList;
+    let currentTickets = [];
+    let currentTicket = null;
+
+    async function loadTickets() {
+        console.log('Loading tickets...');
+        try {
+            const statusFilter = document.getElementById('statusFilter').value;
+            const response = await fetch(`/admin/api/tickets?status=${statusFilter}`, {
+                credentials: 'same-origin'
+            });
+            
+            if (!response.ok) {
+                if (response.status === 403) {
+                    throw new Error('Access denied. Staff or admin access required.');
+                }
+                throw new Error('Failed to load tickets');
+            }
+            
+            const data = await response.json();
+            console.log('Tickets data:', data);
+            
+            currentTickets = data.tickets;
+            displayTickets(data.tickets);
+            
+            // Update stats
+            document.getElementById('ticketStats').textContent = 
+                `Showing ${data.tickets.length} tickets`;
+            
+        } catch (error) {
+            console.error('Error loading tickets:', error);
+            document.getElementById('ticketStats').textContent = `Error: ${error.message}`;
+        }
+    }
+
+    function displayTickets(tickets) {
+        const tbody = document.querySelector('#ticketsList tbody');
+        
+        if (!tickets || tickets.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="8" class="text-center text-muted py-4">
+                        <i class="bi bi-inbox fs-1"></i>
+                        <p class="mt-2">No tickets found</p>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = tickets.map(ticket => {
+            const priorityClass = `priority-${ticket.priority_label.toLowerCase()}`;
+            const statusText = getStatusText(ticket.status);
+            const statusClass = `status-${statusText.toLowerCase().replace(' ', '-')}`;
+            const createdDate = new Date(ticket.opened_at).toLocaleDateString();
+            
+            return `
+                <tr class="ticket-row" onclick="openTicketModal(${ticket.id})">
+                    <td class="id">${ticket.id}</td>
+                    <td class="priority">
+                        <span class="${priorityClass}">${ticket.priority_label}</span>
+                    </td>
+                    <td class="status">
+                        <span class="${statusClass}">${statusText}</span>
+                    </td>
+                    <td class="issue_title">
+                        <div class="ticket-detail" title="${ticket.issue_title}">
+                            ${ticket.issue_title}
+                        </div>
+                    </td>
+                    <td class="username">${ticket.username || 'Unknown'}</td>
+                    <td class="opened_at">${createdDate}</td>
+                    <td class="staff_username">${ticket.staff_username || '-'}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary" 
+                                onclick="event.stopPropagation(); openTicketModal(${ticket.id})">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        // Initialize or reinitialize List.js
+        if (ticketsList) {
+            ticketsList.reIndex();
+        } else {
+            const options = {
+                valueNames: ['id', 'priority', 'status', 'issue_title', 'username', 'opened_at', 'staff_username'],
+                pagination: true,
+                page: 25
+            };
+            ticketsList = new List('ticketsList', options);
+        }
+    }
+
+    function getStatusText(status) {
+        const statusMap = {
+            0: 'Open',
+            1: 'Responded',
+            2: 'Closed',
+            '-1': 'Deleted by Owner',
+            '-6': 'Archived',
+            '-9': 'Deleted by Staff'
+        };
+        return statusMap[status] || 'Unknown';
+    }
+
+    function filterTickets() {
+        loadTickets(); // Reload with new filter
+    }
+
+    function openTicketModal(ticketId) {
+        const ticket = currentTickets.find(t => t.id === ticketId);
+        if (!ticket) return;
+        
+        currentTicket = ticket;
+        
+        // Populate modal
+        document.getElementById('modalTicketId').textContent = ticket.id;
+        document.getElementById('modalTicketTitle').textContent = ticket.issue_title;
+        document.getElementById('modalUserInfo').textContent = `${ticket.username} (${ticket.email})`;
+        document.getElementById('modalPriority').innerHTML = 
+            `<span class="priority-${ticket.priority_label.toLowerCase()}">${ticket.priority_label}</span>`;
+        document.getElementById('modalStatus').innerHTML = 
+            `<span class="status-${getStatusText(ticket.status).toLowerCase().replace(' ', '-')}">${getStatusText(ticket.status)}</span>`;
+        document.getElementById('modalCreated').textContent = 
+            new Date(ticket.opened_at).toLocaleString();
+        document.getElementById('modalUpdated').textContent = 
+            ticket.last_updated_by_staff ? new Date(ticket.last_updated_by_staff).toLocaleString() : 'Never';
+        document.getElementById('modalStaff').textContent = ticket.staff_username || 'Unassigned';
+        
+        // Issue detail
+        const issueDetail = ticket.issue_detail || {};
+        document.getElementById('modalIssueDetail').innerHTML = 
+            typeof issueDetail === 'string' ? issueDetail : (issueDetail.detail || 'No details provided');
+        
+        // Responses
+        const responsesDiv = document.getElementById('modalResponses');
+        if (ticket.response && Array.isArray(ticket.response)) {
+            responsesDiv.innerHTML = ticket.response.map(resp => `
+                <div class="ticket-response">
+                    <strong>${new Date(resp.timestamp).toLocaleString()}</strong><br>
+                    ${resp.response}
+                </div>
+            `).join('');
+        } else {
+            responsesDiv.innerHTML = '<p class="text-muted">No responses yet</p>';
+        }
+        
+        // Set current status in dropdown
+        document.getElementById('newStatus').value = ticket.status;
+        
+        // Clear response text
+        document.getElementById('responseText').value = '';
+        
+        // Show modal
+        new bootstrap.Modal(document.getElementById('ticketModal')).show();
+    }
+
+    async function submitResponse() {
+        const responseText = document.getElementById('responseText').value.trim();
+        
+        if (!responseText) {
+            alert('Please enter a response');
+            return;
+        }
+        
+        if (!currentTicket) {
+            alert('No ticket selected');
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/admin/api/tickets/${currentTicket.id}/respond`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ response: responseText }),
+                credentials: 'same-origin'
+            });
+            
+            const result = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to submit response');
+            }
+            
+            alert('Response submitted successfully');
+            
+            // Clear response text
+            document.getElementById('responseText').value = '';
+            
+            // Reload tickets to show updated data
+            loadTickets();
+            
+            // Close modal
+            bootstrap.Modal.getInstance(document.getElementById('ticketModal')).hide();
+            
+        } catch (error) {
+            console.error('Error submitting response:', error);
+            alert(`Error: ${error.message}`);
+        }
+    }
+
+    async function updateStatus() {
+        const newStatus = parseInt(document.getElementById('newStatus').value);
+        
+        if (!currentTicket) {
+            alert('No ticket selected');
+            return;
+        }
+        
+        if (newStatus === currentTicket.status) {
+            alert('Status is already set to this value');
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/admin/api/tickets/${currentTicket.id}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ status: newStatus }),
+                credentials: 'same-origin'
+            });
+            
+            const result = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to update status');
+            }
+            
+            alert(result.message);
+            
+            // Reload tickets to show updated data
+            loadTickets();
+            
+            // Close modal
+            bootstrap.Modal.getInstance(document.getElementById('ticketModal')).hide();
+            
+        } catch (error) {
+            console.error('Error updating status:', error);
+            alert(`Error: ${error.message}`);
+        }
+    }
+
+    // Load tickets on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('DOM loaded, initializing ticket management...');
+        loadTickets();
+    });
+</script>
+{% endblock %}

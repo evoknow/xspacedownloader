@@ -5752,6 +5752,19 @@ def admin_template_preview():
         return f"Error previewing template: {str(e)}", 500
 
 # Dedicated admin pages
+@app.route('/admin/tickets')
+def admin_tickets():
+    """Admin tickets page - for staff and admin to manage support tickets."""
+    user_id = session.get('user_id')
+    is_admin = session.get('is_admin', False)
+    is_staff = session.get('is_staff', False)
+    
+    if not user_id or not (is_admin or is_staff):
+        flash('Staff or admin access required.', 'error')
+        return redirect(url_for('index'))
+    
+    return render_template('admin_tickets.html')
+
 @app.route('/admin/logs')
 def admin_logs():
     """Admin logs page - dedicated page for viewing system logs."""
@@ -8270,6 +8283,207 @@ def admin_clear_template_cache():
         
     except Exception as e:
         logger.error(f"Error clearing template cache: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+# Ticket Management API Routes (for staff and admin)
+@app.route('/admin/api/tickets', methods=['GET'])
+def admin_api_tickets():
+    """Get tickets list for admin/staff management."""
+    user_id = session.get('user_id')
+    is_admin = session.get('is_admin', False)
+    is_staff = session.get('is_staff', False)
+    
+    if not user_id or not (is_admin or is_staff):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        status_filter = request.args.get('status', 'all')
+        
+        with open('db_config.json', 'r') as f:
+            config = json.load(f)
+        db_config = config['mysql']
+        
+        from components.Ticket import Ticket
+        ticket_manager = Ticket(db_config)
+        
+        # Build query based on status filter
+        if status_filter == 'open':
+            query = """
+                SELECT t.*, u.username, u.email, 
+                       COALESCE(s.username, '') as staff_username,
+                       CASE 
+                           WHEN t.priority = 3 THEN 'Critical'
+                           WHEN t.priority = 2 THEN 'High'
+                           WHEN t.priority = 1 THEN 'Medium'
+                           ELSE 'Normal'
+                       END as priority_label
+                FROM tickets t
+                LEFT JOIN users u ON t.user_id = u.id
+                LEFT JOIN users s ON t.responded_by_staff_id = s.id
+                WHERE t.status IN (0, 1)
+                ORDER BY t.priority DESC, t.opened_at DESC
+            """
+        elif status_filter == 'closed':
+            query = """
+                SELECT t.*, u.username, u.email,
+                       COALESCE(s.username, '') as staff_username,
+                       CASE 
+                           WHEN t.priority = 3 THEN 'Critical'
+                           WHEN t.priority = 2 THEN 'High'
+                           WHEN t.priority = 1 THEN 'Medium'
+                           ELSE 'Normal'
+                       END as priority_label
+                FROM tickets t
+                LEFT JOIN users u ON t.user_id = u.id
+                LEFT JOIN users s ON t.responded_by_staff_id = s.id
+                WHERE t.status = 2
+                ORDER BY t.last_updated_by_staff DESC
+                LIMIT 100
+            """
+        else:  # all
+            query = """
+                SELECT t.*, u.username, u.email,
+                       COALESCE(s.username, '') as staff_username,
+                       CASE 
+                           WHEN t.priority = 3 THEN 'Critical'
+                           WHEN t.priority = 2 THEN 'High'
+                           WHEN t.priority = 1 THEN 'Medium'
+                           ELSE 'Normal'
+                       END as priority_label
+                FROM tickets t
+                LEFT JOIN users u ON t.user_id = u.id
+                LEFT JOIN users s ON t.responded_by_staff_id = s.id
+                WHERE t.status >= 0
+                ORDER BY t.opened_at DESC
+                LIMIT 200
+            """
+        
+        ticket_manager.cursor.execute(query)
+        tickets = ticket_manager.cursor.fetchall()
+        
+        # Process tickets for JSON serialization
+        for ticket in tickets:
+            # Convert datetime objects to ISO format
+            for field in ['opened_at', 'last_updated_by_owner', 'response_date', 'last_updated_by_staff']:
+                if ticket.get(field) and hasattr(ticket[field], 'isoformat'):
+                    ticket[field] = ticket[field].isoformat()
+            
+            # Parse JSON fields
+            if ticket.get('issue_detail'):
+                try:
+                    ticket['issue_detail'] = json.loads(ticket['issue_detail']) if isinstance(ticket['issue_detail'], str) else ticket['issue_detail']
+                except:
+                    ticket['issue_detail'] = {'detail': ticket['issue_detail']}
+            
+            if ticket.get('response'):
+                try:
+                    ticket['response'] = json.loads(ticket['response']) if isinstance(ticket['response'], str) else ticket['response']
+                except:
+                    ticket['response'] = []
+        
+        ticket_manager.close()
+        
+        return jsonify({
+            'tickets': tickets,
+            'total': len(tickets)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching tickets for admin: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/tickets/<int:ticket_id>/respond', methods=['POST'])
+def admin_api_ticket_respond(ticket_id):
+    """Admin/staff respond to a ticket."""
+    user_id = session.get('user_id')
+    is_admin = session.get('is_admin', False)
+    is_staff = session.get('is_staff', False)
+    
+    if not user_id or not (is_admin or is_staff):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        data = request.get_json()
+        response_text = data.get('response', '').strip()
+        
+        if not response_text:
+            return jsonify({'error': 'Response text is required'}), 400
+        
+        with open('db_config.json', 'r') as f:
+            config = json.load(f)
+        db_config = config['mysql']
+        
+        from components.Ticket import Ticket
+        ticket_manager = Ticket(db_config)
+        
+        result = ticket_manager.add_response(ticket_id, user_id, response_text)
+        ticket_manager.close()
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error responding to ticket: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/api/tickets/<int:ticket_id>/status', methods=['PUT'])
+def admin_api_ticket_status(ticket_id):
+    """Update ticket status (admin/staff only)."""
+    user_id = session.get('user_id')
+    is_admin = session.get('is_admin', False)
+    is_staff = session.get('is_staff', False)
+    
+    if not user_id or not (is_admin or is_staff):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        data = request.get_json()
+        new_status = data.get('status')
+        
+        if new_status is None:
+            return jsonify({'error': 'Status is required'}), 400
+        
+        # Validate status values
+        valid_statuses = {
+            0: 'open',
+            1: 'responded', 
+            2: 'closed',
+            -1: 'deleted by owner',
+            -9: 'deleted by staff',
+            -6: 'archived'
+        }
+        
+        if new_status not in valid_statuses:
+            return jsonify({'error': 'Invalid status value'}), 400
+        
+        with open('db_config.json', 'r') as f:
+            config = json.load(f)
+        db_config = config['mysql']
+        
+        from components.Ticket import Ticket
+        ticket_manager = Ticket(db_config)
+        
+        # Update ticket status
+        ticket_manager.cursor.execute("""
+            UPDATE tickets 
+            SET status = %s, last_updated_by_staff = NOW()
+            WHERE id = %s
+        """, (new_status, ticket_id))
+        
+        ticket_manager.conn.commit()
+        
+        # Add a system response if closing ticket
+        if new_status == 2:  # closed
+            ticket_manager.add_response(ticket_id, user_id, "[System: Ticket closed by staff]")
+        
+        ticket_manager.close()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Ticket status updated to {valid_statuses[new_status]}'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error updating ticket status: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 # Stripe Configuration Routes
